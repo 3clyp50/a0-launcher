@@ -27,8 +27,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build macOS (DMG and ZIP)
-        run: npm run make:mac
+      - name: Build macOS (DMG and ZIP for arm64 and x64)
+        run: |
+          npm run make:mac -- --arch=arm64
+          npm run make:mac -- --arch=x64
         env:
           # Add these secrets for code signing in production
           # APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -56,8 +58,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows (Squirrel)
-        run: npm run make:win
+      - name: Build Windows (Squirrel for x64 and arm64)
+        run: |
+          npm run make:win -- --arch=x64
+          npm run make:win -- --arch=arm64
         env:
           DEBUG: electron-forge:*
 
@@ -86,8 +90,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rpm
 
-      - name: Build Linux (DEB and RPM)
-        run: npm run make:linux
+      - name: Build Linux (DEB and RPM for x64 and arm64)
+        run: |
+          npm run make:linux -- --arch=x64
+          npm run make:linux -- --arch=arm64
         env:
           DEBUG: electron-forge:*
 
@@ -116,6 +122,38 @@ jobs:
       - name: List all files recursively
         run: find artifacts -type f
 
+<<<<<<< Updated upstream
+=======
+      - name: Rename artifacts for consistent naming
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "Renaming artifacts for version: $VERSION"
+
+          mkdir -p release-files
+
+          # macOS files
+          find artifacts/macos-build -path "*darwin-arm64/*.dmg" -exec cp {} "release-files/a0-launcher-${VERSION}-macos-arm64.dmg" \;
+          find artifacts/macos-build -path "*darwin-arm64/*.zip" -exec cp {} "release-files/a0-launcher-${VERSION}-macos-arm64.zip" \;
+          find artifacts/macos-build -path "*darwin-x64/*.dmg" -exec cp {} "release-files/a0-launcher-${VERSION}-macos-x64.dmg" \;
+          find artifacts/macos-build -path "*darwin-x64/*.zip" -exec cp {} "release-files/a0-launcher-${VERSION}-macos-x64.zip" \;
+
+          # Windows files
+          find artifacts/windows-build -path "*squirrel.windows/x64/*.exe" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-x64-setup.exe" \;
+          find artifacts/windows-build -path "*squirrel.windows/x64/*.nupkg" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-x64.nupkg" \;
+          find artifacts/windows-build -path "*squirrel.windows/arm64/*.exe" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-arm64-setup.exe" \;
+          find artifacts/windows-build -path "*squirrel.windows/arm64/*.nupkg" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-arm64.nupkg" \;
+
+          # Linux files
+          find artifacts/linux-build -path "*deb/x64/*.deb" -exec cp {} "release-files/a0-launcher-${VERSION}-linux-x64.deb" \;
+          find artifacts/linux-build -path "*deb/arm64/*.deb" -exec cp {} "release-files/a0-launcher-${VERSION}-linux-arm64.deb" \;
+          find artifacts/linux-build -path "*rpm/x64/*.rpm" -exec cp {} "release-files/a0-launcher-${VERSION}-linux-x64.rpm" \;
+          find artifacts/linux-build -path "*rpm/arm64/*.rpm" -exec cp {} "release-files/a0-launcher-${VERSION}-linux-arm64.rpm" \;
+
+          echo "Release files:"
+          ls -la release-files/
+
+>>>>>>> Stashed changes
       - name: Upload executables to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

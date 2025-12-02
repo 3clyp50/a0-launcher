@@ -24,6 +24,12 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Setting version to $VERSION"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
       - name: Install dependencies
         run: npm ci
 
@@ -55,6 +61,13 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Setting version to $VERSION"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
       - name: Install dependencies
         run: npm ci
 
@@ -81,6 +94,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Setting version to $VERSION"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
         run: npm ci
@@ -141,6 +160,7 @@ jobs:
           find artifacts/windows-build -path "*squirrel.windows/x64/*.nupkg" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-x64.nupkg" \;
           find artifacts/windows-build -path "*squirrel.windows/arm64/*.exe" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-arm64-setup.exe" \;
           find artifacts/windows-build -path "*squirrel.windows/arm64/*.nupkg" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-arm64.nupkg" \;
+          find artifacts/windows-build -name "RELEASES" -exec cp {} "release-files/RELEASES" \;
 
           # Linux files
           find artifacts/linux-build -path "*deb/x64/*.deb" -exec cp {} "release-files/a0-launcher-${VERSION}-linux-x64.deb" \;
@@ -164,8 +184,8 @@ jobs:
             gh release create "$TAG" --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
           fi
 
-          # Upload all artifacts to the release (handles spaces in filenames)
-          find artifacts -type f -print0 | while IFS= read -r -d '' file; do
+          # Upload renamed files to the release
+          for file in release-files/*; do
             echo "Uploading: $file"
             gh release upload "$TAG" "$file" --clobber --repo "$GITHUB_REPOSITORY"
           done

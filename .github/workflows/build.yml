@@ -228,18 +228,47 @@ jobs:
 
           mkdir -p release-files
 
-          # macOS files (arm64)
-          find artifacts/macos-build -name "*.dmg" -exec cp {} "release-files/a0-launcher-${VERSION}-macos-arm64.dmg" \;
-          find artifacts/macos-build -name "*.zip" -exec cp {} "release-files/a0-launcher-${VERSION}-macos-arm64.zip" \;
+          function process_files {
+            local pattern=$1
+            local ext=$2
+            local os=$3
+            local search_path=$4
+            
+            find "$search_path" -name "$pattern" | while read -r src; do
+              echo "Processing $src"
+              local arch=""
+              if [[ "$src" == *"arm64"* ]] || [[ "$src" == *"aarch64"* ]]; then
+                arch="arm64"
+              elif [[ "$src" == *"x64"* ]] || [[ "$src" == *"amd64"* ]] || [[ "$src" == *"x86_64"* ]]; then
+                arch="x64"
+              fi
 
-          # Windows files (x64)
-          find artifacts/windows-build -name "*.exe" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-x64-setup.exe" \;
-          find artifacts/windows-build -name "*.nupkg" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-x64.nupkg" \;
-          find artifacts/windows-build -name "RELEASES" -exec cp {} "release-files/RELEASES" \;
+              if [[ -n "$arch" ]]; then
+                local suffix=""
+                if [[ "$os" == "windows" ]] && [[ "$ext" == ".exe" ]]; then
+                  suffix="-setup"
+                fi
+                
+                local dest="release-files/a0-launcher-${VERSION}-${os}-${arch}${suffix}${ext}"
+                echo "Copying $src to $dest"
+                cp "$src" "$dest"
+              else
+                echo "Skipping $src (unknown architecture)"
+              fi
+            done
+          }
 
-          # Linux files (x64)
-          find artifacts/linux-build -name "*.deb" -exec cp {} "release-files/a0-launcher-${VERSION}-linux-x64.deb" \;
-          find artifacts/linux-build -name "*.rpm" -exec cp {} "release-files/a0-launcher-${VERSION}-linux-x64.rpm" \;
+          # macOS files
+          process_files "*.dmg" ".dmg" "macos" "artifacts/macos-build"
+          process_files "*.zip" ".zip" "macos" "artifacts/macos-build"
+
+          # Windows files
+          process_files "*.exe" ".exe" "windows" "artifacts/windows-build"
+          process_files "*.nupkg" ".nupkg" "windows" "artifacts/windows-build"
+
+          # Linux files
+          process_files "*.deb" ".deb" "linux" "artifacts/linux-build"
+          process_files "*.rpm" ".rpm" "linux" "artifacts/linux-build"
 
           echo "Release files:"
           ls -la release-files/

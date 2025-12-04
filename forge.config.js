@@ -1,5 +1,9 @@
 const path = require("node:path");
 
+const shouldNotarize = ["true", "1"].includes(
+  (process.env.NOTARIZE || "").toLowerCase()
+);
+
 module.exports = {
   packagerConfig: {
     name: "A0 Launcher",
@@ -15,7 +19,7 @@ module.exports = {
       "entitlements-inherit": "entitlements.mac.plist",
       "signature-flags": "library",
     },
-    osxNotarize: process.env.APPLE_ID
+    osxNotarize: shouldNotarize
       ? {
           tool: "notarytool",
           appleId: process.env.APPLE_ID,

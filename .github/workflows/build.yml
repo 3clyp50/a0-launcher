@@ -143,16 +143,16 @@ jobs:
 
           mkdir -p release-files
 
-          # macOS files
+          # macOS files (arm64)
           find artifacts/macos-build -name "*.dmg" -exec cp {} "release-files/a0-launcher-${VERSION}-macos-arm64.dmg" \;
           find artifacts/macos-build -name "*.zip" -exec cp {} "release-files/a0-launcher-${VERSION}-macos-arm64.zip" \;
 
-          # Windows files
+          # Windows files (x64)
           find artifacts/windows-build -name "*.exe" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-x64-setup.exe" \;
           find artifacts/windows-build -name "*.nupkg" -exec cp {} "release-files/a0-launcher-${VERSION}-windows-x64.nupkg" \;
           find artifacts/windows-build -name "RELEASES" -exec cp {} "release-files/RELEASES" \;
 
-          # Linux files
+          # Linux files (x64)
           find artifacts/linux-build -name "*.deb" -exec cp {} "release-files/a0-launcher-${VERSION}-linux-x64.deb" \;
           find artifacts/linux-build -name "*.rpm" -exec cp {} "release-files/a0-launcher-${VERSION}-linux-x64.rpm" \;
 

@@ -17,6 +17,7 @@ const CONTENT_DIR = path.join(app.getPath('userData'), 'app_content');
 const META_FILE = path.join(app.getPath('userData'), 'content_meta.json');
 
 let mainWindow;
+let contentInitialized = false;
 
 /**
  * Fetch the latest release info from GitHub
@@ -243,11 +244,6 @@ function createWindow() {
     }
   });
 
-  // Show window when ready
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
-
   // Load loading screen first
   mainWindow.loadFile(path.join(__dirname, 'loading.html'));
 }
@@ -268,6 +264,10 @@ ipcMain.handle('get-content-version', async () => {
 app.whenReady().then(async () => {
   createWindow();
 
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
+
   // Wait a moment for loading screen to render
   await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -275,6 +275,7 @@ app.whenReady().then(async () => {
   const success = await initializeAppContent();
 
   if (success) {
+    contentInitialized = true;
     // Small delay for visual feedback
     await new Promise(resolve => setTimeout(resolve, 800));
     await loadAppContent();
@@ -287,8 +288,43 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('activate', () => {
+app.on('activate', async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+
+    if (contentInitialized) {
+      // Content already initialized - load directly without update check
+      mainWindow.once('ready-to-show', async () => {
+        mainWindow.show();
+        // Verify content still exists before loading
+        const hasContent = await checkExistingContent();
+        if (hasContent) {
+          await loadAppContent();
+        } else {
+          // Content was deleted - reinitialize
+          contentInitialized = false;
+          const success = await initializeAppContent();
+          if (success) {
+            contentInitialized = true;
+            await new Promise(resolve => setTimeout(resolve, 800));
+            await loadAppContent();
+          }
+        }
+      });
+    } else {
+      // First activation or previous init failed - run full initialization
+      mainWindow.once('ready-to-show', () => {
+        mainWindow.show();
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const success = await initializeAppContent();
+
+      if (success) {
+        contentInitialized = true;
+        await new Promise(resolve => setTimeout(resolve, 800));
+        await loadAppContent();
+      }
+    }
   }
 });

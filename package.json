@@ -1,6 +1,6 @@
 {
   "name": "a0-launcher",
-  "version": "1.0.0",
+  "version": "1.2.2",
   "description": "Agent Zero Launcher - Desktop application shell",
   "main": "shell/main.js",
   "scripts": {
@@ -24,5 +24,14 @@
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1"
+  },
+  "build": {
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
   }
 }

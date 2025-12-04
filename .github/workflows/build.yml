@@ -24,6 +24,38 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Import macOS code signing certificate
+        run: |
+          # Decode the base64-encoded .p12 from secret
+          echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
+
+          # Create a dedicated keychain for the build
+          security create-keychain -p "" build.keychain
+
+          # Import the certificate into the keychain
+          security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSPHRASE" -T /usr/bin/codesign
+
+          # Make sure the keychain is available and default
+          security list-keychains -s build.keychain login.keychain
+          security default-keychain -s build.keychain
+
+          # Unlock keychain (empty password we used above)
+          security unlock-keychain -p "" build.keychain
+
+          # Allow codesign / Xcode tools to use the key without prompting
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+
+          # Optional: list identities so we see the cert is there
+          security find-identity -p codesigning -v
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSPHRASE: ${{ secrets.MACOS_CERT_PASSPHRASE }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CI: "true"
+          DEBUG: electron-forge:*
+
       - name: Set version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -38,17 +70,15 @@ jobs:
           npm run make:mac -- --arch=arm64
           npm run make:mac -- --arch=x64
         env:
-          # Add these secrets for code signing in production
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           DEBUG: electron-forge:*
+          # Later for notarization you’d also pass APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID here
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
           path: out/make/**/*
+
 
   build-windows:
     runs-on: windows-latest

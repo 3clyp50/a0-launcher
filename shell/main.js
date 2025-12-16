@@ -246,6 +246,16 @@ function createWindow() {
 
   // Load loading screen first
   mainWindow.loadFile(path.join(__dirname, 'loading.html'));
+
+  // Show window when ready
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
+
+  // Cleanup when window is closed
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 }
 
 // IPC Handlers
@@ -263,10 +273,6 @@ ipcMain.handle('get-content-version', async () => {
 // App lifecycle
 app.whenReady().then(async () => {
   createWindow();
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
 
   // Wait a moment for loading screen to render
   await new Promise(resolve => setTimeout(resolve, 500));
@@ -294,29 +300,22 @@ app.on('activate', async () => {
 
     if (contentInitialized) {
       // Content already initialized - load directly without update check
-      mainWindow.once('ready-to-show', async () => {
-        mainWindow.show();
-        // Verify content still exists before loading
-        const hasContent = await checkExistingContent();
-        if (hasContent) {
+      // Verify content still exists before loading
+      const hasContent = await checkExistingContent();
+      if (hasContent) {
+        await loadAppContent();
+      } else {
+        // Content was deleted - reinitialize
+        contentInitialized = false;
+        const success = await initializeAppContent();
+        if (success) {
+          contentInitialized = true;
+          await new Promise(resolve => setTimeout(resolve, 800));
           await loadAppContent();
-        } else {
-          // Content was deleted - reinitialize
-          contentInitialized = false;
-          const success = await initializeAppContent();
-          if (success) {
-            contentInitialized = true;
-            await new Promise(resolve => setTimeout(resolve, 800));
-            await loadAppContent();
-          }
         }
-      });
+      }
     } else {
       // First activation or previous init failed - run full initialization
-      mainWindow.once('ready-to-show', () => {
-        mainWindow.show();
-      });
-
       await new Promise(resolve => setTimeout(resolve, 500));
       const success = await initializeAppContent();
 

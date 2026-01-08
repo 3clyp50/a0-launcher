@@ -1,0 +1,99 @@
+/* Launcher-only styles (host app chrome/layout) */
+
+.launcher-page {
+  height: 100%;
+  width: min(960px, calc(100% - (var(--spacing-lg) * 2)));
+  margin: 0 auto;
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.launcher-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.launcher-title {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.1;
+  color: var(--color-text);
+}
+
+.launcher-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.launcher-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xs) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.launcher-meta-label {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.launcher-meta-value {
+  color: var(--color-text);
+  font-family: var(--font-family-code);
+  font-size: 0.85rem;
+}
+
+.launcher-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.launcher-card {
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  border-radius: 12px;
+  padding: var(--spacing-lg);
+}
+
+.launcher-card-title {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: 1.2rem;
+  color: var(--color-text);
+}
+
+.launcher-card-subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+}
+
+.launcher-buttons {
+  margin-top: var(--spacing-md);
+  gap: var(--spacing-sm);
+}
+
+.launcher-hello {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.launcher-hello-text {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.launcher-version {
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-code);
+  font-size: 0.85rem;
+}
+
+

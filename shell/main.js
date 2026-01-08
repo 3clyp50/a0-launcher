@@ -48,7 +48,9 @@ async function fetchLatestRelease() {
 async function readLocalMeta() {
   try {
     const data = await fs.readFile(META_FILE, 'utf8');
-    return JSON.parse(data);
+    // Be tolerant of UTF-8 BOM (common on Windows tooling).
+    const sanitized = data.replace(/^\uFEFF/, '');
+    return JSON.parse(sanitized);
   } catch (error) {
     if (error.code === 'ENOENT') {
       console.log('No local meta file found, will download content');
@@ -97,7 +99,31 @@ async function downloadContent(downloadUrl) {
     const dir = path.dirname(fullPath);
 
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(fullPath, content, 'utf8');
+
+    // Backward compatible:
+    // - v1 format: files[path] = "utf8 string"
+    // - v2+ format: files[path] = { encoding: "utf8"|"base64", data: "..." }
+    if (typeof content === 'string') {
+      await fs.writeFile(fullPath, content, 'utf8');
+      continue;
+    }
+
+    if (content && typeof content === 'object') {
+      const encoding = content.encoding;
+      const data = content.data;
+
+      if (encoding === 'utf8' && typeof data === 'string') {
+        await fs.writeFile(fullPath, data, 'utf8');
+        continue;
+      }
+
+      if (encoding === 'base64' && typeof data === 'string') {
+        await fs.writeFile(fullPath, Buffer.from(data, 'base64'));
+        continue;
+      }
+    }
+
+    throw new Error(`Invalid content entry for "${filePath}"`);
   }
 
   console.log(`Extracted ${Object.keys(contentJson.files).length} files`);
@@ -258,6 +284,23 @@ ipcMain.handle('get-content-version', async () => {
   } catch {
     return 'unknown';
   }
+});
+
+ipcMain.handle('read-content-file', async (_event, relativePath) => {
+  if (typeof relativePath !== 'string' || relativePath.length === 0) {
+    throw new Error('Invalid relativePath');
+  }
+
+  const contentRoot = path.resolve(CONTENT_DIR);
+  const fullPath = path.resolve(CONTENT_DIR, relativePath);
+
+  // Protect against path traversal: `fullPath` must remain within `CONTENT_DIR`.
+  const rel = path.relative(contentRoot, fullPath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('Path traversal rejected');
+  }
+
+  return await fs.readFile(fullPath, 'utf8');
 });
 
 // App lifecycle

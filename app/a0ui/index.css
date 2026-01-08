@@ -1,0 +1,724 @@
+/* Note: Network fonts are intentionally not used in the launcher content bundle. */
+
+/* Add box-sizing globally for better cross-browser consistency */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Dark mode */
+  --color-background-dark: #131313;
+  --color-text-dark: #d4d4d4;
+  --color-primary-dark: #737a81;
+  --color-secondary-dark: #656565;
+  --color-accent-dark: #cf6679;
+  --color-message-bg-dark: #2d2d2d;
+  --color-highlight-dark: #2b5ab9;
+  --color-message-text-dark: #e0e0e0;
+  --color-panel-dark: #1a1a1a;
+  --color-border-dark: #444444a8;
+  --color-input-dark: #131313;
+  --color-input-focus-dark: #101010;
+
+  /* Light mode */
+  --color-background-light: #fafafa;
+  --color-text-light: #333333;
+  --color-primary-light: #384653;
+  --color-secondary-light: #e8eaf6;
+  --color-accent-light: #b00020;
+  --color-message-bg-light: #ffffff;
+  --color-highlight-light: #2563eb;
+  --color-message-text-light: #333333;
+  --color-panel-light: #f0f0f0;
+  --color-border-light: #bdbdbdcf;
+  --color-input-light: #e4e4e4;
+  --color-input-focus-light: #dadada;
+
+  /* Default to dark mode */
+  --color-background: var(--color-background-dark);
+  --color-text: var(--color-text-dark);
+  --color-primary: var(--color-primary-dark);
+  --color-secondary: var(--color-secondary-dark);
+  --color-accent: var(--color-accent-dark);
+  --color-message-bg: var(--color-message-bg-dark);
+  --color-highlight: var(--color-highlight-dark);
+  --color-message-text: var(--color-message-text-dark);
+  --color-panel: var(--color-panel-dark);
+  --color-border: var(--color-border-dark);
+  --color-input: var(--color-input-dark);
+  --color-input-focus: var(--color-input-focus-dark);
+  --color-background-hover: color-mix(in srgb, var(--color-border) 50%, transparent);
+
+  /* Spacing variables */
+  --spacing-xxs: 0.15rem;
+  --spacing-xs: 0.3125rem;
+  --spacing-sm: 0.625rem;
+  --spacing-md: 1.25rem;
+  --spacing-lg: 2rem;
+
+  /* Font sizes */
+  --font-size-small: 0.8rem;
+  --font-size-smaller: 0.9rem;
+  --font-size-normal: 1rem;
+  --font-size-large: 1.2rem;
+
+  /* Font families */
+  --font-family-main: "Rubik", Arial, Helvetica, sans-serif;
+  --font-family-code: "Roboto Mono", monospace;
+
+  /* UI helpers (some ported components reference these) */
+  --color-text-secondary: #a0a0a0;
+  --color-error: #ff6b6b;
+  --color-warning: #f7c948;
+  --color-success: #51cf66;
+
+  /* Other variables */
+  --border-radius: 1.125rem;
+  --transition-speed: 0.3s;
+  --svg-filter: brightness(0) saturate(100%) var(--color-primary-filter);
+  --color-primary-filter: invert(73%) sepia(17%) saturate(360%)
+    hue-rotate(177deg) brightness(87%) contrast(85%);
+}
+
+/* Light mode class */
+.light-mode {
+  --color-background: var(--color-background-light);
+  --color-text: var(--color-text-light);
+  --color-primary: var(--color-primary-light);
+  --color-secondary: var(--color-secondary-light);
+  --color-accent: var(--color-accent-light);
+  --color-message-bg: var(--color-message-bg-light);
+  --color-message-text: var(--color-message-text-light);
+  --color-panel: var(--color-panel-light);
+  --color-border: var(--color-border-light);
+  --color-input: var(--color-input-light);
+  --color-input-focus: var(--color-input-focus-light);
+  --color-background-hover: color-mix(in srgb, var(--color-border) 50%, transparent);
+}
+
+/* Reset and Base Styles */
+body,
+html {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-family-main);
+  width: 100%;
+  height: 100%;
+  min-width: 320px !important;
+  min-height: 370px !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: fixed;
+  -webkit-font-smoothing: antialiased; /* Improve font rendering */
+  -moz-osx-font-smoothing: grayscale; /* Improve font rendering */
+}
+
+body {
+  overscroll-behavior: none;
+  -webkit-overscroll-behavior: none;
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+body,
+#chat-input,
+.message,
+.config-button,
+.switch-label {
+  -webkit-transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+  color: var(--color-text);
+}
+
+/* Bootstrap-like tooltips */
+.tooltip {
+  position: absolute;
+  /* Above custom modals (base z-index: 3000 in `webui/js/modals.js`) */
+  z-index: 5000;
+  display: block;
+  margin: 0;
+  font-family: var(--font-family-main);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.2;
+  text-align: left;
+  text-decoration: none;
+  text-shadow: none;
+  text-transform: none;
+  letter-spacing: normal;
+  word-break: normal;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.08s ease-in-out;
+}
+
+.tooltip.show {
+  opacity: 1;
+}
+
+.tooltip .tooltip-inner {
+  max-width: 240px;
+  padding: 0.35rem 0.6rem;
+  color: var(--color-text);
+  background-color: var(--color-secondary);
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  font-size: 0.75rem;
+}
+
+.tooltip .tooltip-arrow {
+  position: absolute;
+  width: 0.8rem;
+  height: 0.4rem;
+}
+
+.tooltip .tooltip-arrow::before {
+  content: "";
+  position: absolute;
+  border-color: transparent;
+  border-style: solid;
+}
+
+.bs-tooltip-top .tooltip-arrow {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.bs-tooltip-top .tooltip-arrow::before {
+  border-width: 0.4rem 0.4rem 0;
+  border-top-color: var(--color-secondary);
+  top: 0;
+}
+
+.bs-tooltip-bottom .tooltip-arrow {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.bs-tooltip-bottom .tooltip-arrow::before {
+  border-width: 0 0.4rem 0.4rem;
+  border-bottom-color: var(--color-secondary);
+  top: 0;
+}
+
+.bs-tooltip-start .tooltip-arrow,
+.bs-tooltip-left .tooltip-arrow {
+  right: 0;
+  top: 50%;
+  width: 0.4rem;
+  height: 0.8rem;
+  transform: translateY(-50%);
+}
+
+.bs-tooltip-start .tooltip-arrow::before,
+.bs-tooltip-left .tooltip-arrow::before {
+  border-width: 0.4rem 0 0.4rem 0.4rem;
+  border-left-color: var(--color-secondary);
+  left: 0;
+}
+
+.bs-tooltip-end .tooltip-arrow,
+.bs-tooltip-right .tooltip-arrow {
+  left: 0;
+  top: 50%;
+  width: 0.4rem;
+  height: 0.8rem;
+  transform: translateY(-50%);
+}
+
+.bs-tooltip-end .tooltip-arrow::before,
+.bs-tooltip-right .tooltip-arrow::before {
+  border-width: 0.4rem 0.4rem 0.4rem 0;
+  border-right-color: var(--color-secondary);
+  right: 0;
+}
+
+img {
+  user-drag: none;      /* Safari & old Chrome */
+  -webkit-user-drag: none;
+  user-select: none;    /* Prevent selection for good measure */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  pointer-events: auto; /* Allow clicks, just no drag */
+}
+
+/* Layout */
+.container {
+  display: -webkit-flex;
+  display: flex;
+  height: 100%;
+}
+
+.panel {
+  display: -webkit-flex;
+  display: flex;
+  height: 100%;
+  overflow: auto;
+  -webkit-scroll-behavior: smooth;
+  scroll-behavior: smooth;
+}
+
+/* Typography */
+/* h2,
+h3 {
+  color: var(--color-primary);
+} */
+
+/* h2 {
+  margin-bottom: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
+h3 {
+  margin-bottom: var(--spacing-sm);
+}
+
+h4 {
+  margin: auto 0;
+} */
+
+/* Toggle Switch */
+.switch {
+  display: inline-block;
+  height: 1.15rem;
+  position: relative;
+  width: 2.2rem;
+}
+
+.switch input {
+  float: right;
+  height: 0;
+  opacity: 0;
+  width: 0;
+}
+
+.slider {
+  background-color: #272727;
+  border: 1px solid #535353;
+  border-radius: 1.15rem;
+  bottom: 0;
+  cursor: pointer;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  -webkit-transition: 0.4s ease-in-out;
+  transition: 0.4s ease-in-out;
+}
+
+.slider:before {
+  background-color: #b6b6b6;
+  border-radius: 50%;
+  bottom: 0.134rem;
+  content: "";
+  height: 0.8rem;
+  left: 0.15rem;
+  position: absolute;
+  -webkit-transition: 0.4s ease-in-out;
+  transition: 0.4s ease-in-out;
+  width: 0.8rem;
+}
+
+input:checked + .slider {
+  background-color: #3a3a3a;
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(1rem);
+  transform: translateX(1rem);
+}
+
+.status-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.status-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.connected-circle,
+.disconnected-circle {
+  -webkit-transition: all 0.3s ease;
+  transition: all 0.3s ease;
+}
+
+.connected-circle {
+  animation: heartbeat 1.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.connected {
+  color: #00c340;
+}
+
+.disconnected {
+  color: #e40138;
+}
+
+.font-bold {
+  font-weight: bold;
+}
+
+
+/* Media Queries */
+
+@media (max-height: 600px) {
+  /* consistent font sizing */
+  html {
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@media screen and (orientation: landscape) {
+  /* lock font size during rotation */
+  html {
+    -webkit-text-size-adjust: none;
+    text-size-adjust: none;
+  }
+}
+
+/* Link styling */
+a {
+  color: inherit;
+  /* text-decoration: none; */
+}
+
+a:visited {
+  color: inherit;
+}
+
+a:hover {
+  color: inherit;
+}
+
+a:active {
+  color: inherit;
+}
+
+
+.light-mode .connected {
+  color: #4caf50;
+}
+
+.light-mode .disconnected {
+  color: #f44336;
+}
+
+.light-mode .slider {
+  background-color: #f1f1f1;
+  border: 1px solid #dddddd;
+}
+
+.light-mode .slider:before {
+  background-color: #838383;
+}
+
+.light-mode input:checked + .slider {
+  background-color: #e6e6e6;
+}
+
+
+/* Alpine transition classes */
+.transition {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.duration-300 {
+  transition-duration: 300ms;
+}
+
+.opacity-0 {
+  opacity: 0;
+}
+
+.opacity-100 {
+  opacity: 1;
+}
+
+/* Alpine cloak to prevent FOUC */
+[x-cloak] {
+  display: none !important;
+}
+
+nav ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  padding: 0;
+  margin: 0 0 1rem 0;
+  list-style: none;
+}
+
+/* Add specific styling for the nav element itself to ensure spacing */
+nav {
+  margin-bottom: 1rem;
+}
+
+nav ul li a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background-color: var(--color-bg-secondary);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: background-color 0.2s ease;
+}
+
+nav ul li a:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+nav ul li a img {
+  width: 50px;
+  height: 50px;
+  margin-bottom: 0.5rem;
+  filter: var(--svg-filter);
+}
+
+.section {
+  margin-bottom: 3rem;
+  animation: fadeIn 0.3s ease;
+  width: 100%;
+}
+
+.section-title {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--color-primary);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.5rem;
+}
+
+.section-description {
+  margin-bottom: 1.5rem;
+  color: var(--color-text-secondary);
+}
+
+.icon {
+  vertical-align: middle;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--spacing-sm));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@-webkit-keyframes fadeIn {
+  /* Safari and older Chrome */
+  from {
+    opacity: 0;
+    -webkit-transform: translateY(var(--spacing-sm));
+    transform: translateY(var(--spacing-sm));
+  }
+  to {
+    opacity: 1;
+    -webkit-transform: translateY(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes heartbeat {
+  0% {
+    transform: scale(1);
+  }
+  14% {
+    transform: scale(1.1);
+  }
+  28% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.08);
+  }
+  70% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Bootstrap Collapse */
+.collapse:not(.show) {
+  display: none !important;
+}
+.collapsing {
+  height: 0;
+  overflow: hidden;
+  transition: height .35s ease;
+}
+
+/* Arrow rotation based on Bootstrap's .collapsed class */
+[data-bs-toggle="collapse"] .arrow-icon {
+  transform: rotate(90deg);
+  transition: transform .15s ease;
+}
+[data-bs-toggle="collapse"].collapsed .arrow-icon {
+  transform: rotate(0deg);
+}
+
+/* ========================================
+   Global Dropdown Component Styles
+   ======================================== */
+
+/* Dropdown container - position relative for absolute menu */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+/* Dropdown trigger button */
+.dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  padding: var(--spacing-xs);
+  transition: all var(--transition-speed) ease;
+}
+
+.dropdown-trigger:hover {
+  opacity: 1;
+}
+
+.dropdown-trigger:active {
+  opacity: 0.5;
+}
+
+/* Dropdown menu */
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 180px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background-color: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  z-index: 1010;
+  padding: var(--spacing-xs) 0;
+  margin-top: var(--spacing-xs);
+}
+
+.dropdown-menu.left {
+  left: 0;
+  right: auto;
+}
+
+/* Dropdown menu items */
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-family: var(--font-family-main);
+  font-size: var(--font-size-small);
+  text-align: left;
+  opacity: 0.8;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.dropdown-item:hover {
+  background-color: var(--color-background-hover);
+  opacity: 1;
+}
+
+.dropdown-item:active {
+  opacity: 0.7;
+}
+
+.dropdown-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.dropdown-item svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.dropdown-item .material-symbols-outlined {
+  font-size: 18px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+/* Dropdown separator */
+.dropdown-separator {
+  height: 1px;
+  background-color: var(--color-border);
+  margin: var(--spacing-xs) 0;
+}
+
+/* Dropdown header/label */
+.dropdown-header {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: 0.7rem;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+/* Light mode adjustments */
+.light-mode .dropdown-menu {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.light-mode .dropdown-item:hover { background-color: var(--color-background-hover); }

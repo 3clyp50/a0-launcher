@@ -2,73 +2,69 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
-    <title>A0 Launcher</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:;">
+  <title>A0 Launcher</title>
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            color: #e4e4e4;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
+  <!-- Import map to preserve A0-style absolute imports (e.g. /js/*, /components/*) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "/js/": "./a0ui/js/",
+        "/components/": "./components/",
+        "/vendor/": "./a0ui/vendor/",
+        "/css/": "./a0ui/css/",
+        "/public/": "./public/"
+      }
+    }
+  </script>
 
-        .container {
-            text-align: center;
-            padding: 40px;
-        }
+  <!-- Agent Zero styles subset -->
+  <link rel="stylesheet" href="./a0ui/index.css">
+  <link rel="stylesheet" href="./a0ui/css/buttons.css">
+  <link rel="stylesheet" href="./a0ui/css/modals.css">
+  <link rel="stylesheet" href="./launcher/launcher.css">
 
-        h1 {
-            font-size: 48px;
-            font-weight: 700;
-            margin-bottom: 16px;
-            background: linear-gradient(90deg, #4dabf7, #748ffc);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
+  <!-- Material Symbols -->
+  <link rel="stylesheet" href="./a0ui/vendor/google/google-icons.css">
 
-        p {
-            font-size: 18px;
-            color: #a0a0a0;
-            margin-bottom: 8px;
-        }
-
-        .version {
-            font-size: 14px;
-            color: #666;
-            margin-top: 24px;
-        }
-    </style>
+  <!-- Ace editor (for future ported modals) -->
+  <script defer src="./a0ui/vendor/ace-min/ace.js"></script>
+  <link rel="stylesheet" href="./a0ui/vendor/ace/ace.min.css">
 </head>
 
 <body>
-    <div class="container">
-        <h1>Hello World!</h1>
-        <p>A0 Launcher is running successfully.</p>
-        <p>This content was downloaded from GitHub.</p>
-        <p class="version" id="version"></p>
+  <div class="launcher-page" x-data>
+    <div class="container launcher-hello">
+      <h1 class="launcher-title">Hello World!</h1>
+      <p class="launcher-hello-text">A0 Launcher is running successfully.</p>
+      <p class="launcher-hello-text">This content was downloaded from GitHub.</p>
     </div>
-    <script>
-        (async () => {
-            const version = await window.electronAPI?.getContentVersion?.();
-            if (version) {
-                document.getElementById('version').textContent = `Content version: ${version}`;
-            }
-        })();
-    </script>
+
+    <main class="launcher-main">
+      <section class="launcher-card">
+        <h2 class="launcher-card-title">Component system smoke tests</h2>
+        <p class="launcher-card-subtitle">
+          These buttons validate styles, modals, Alpine stores, and the component loader.
+        </p>
+
+        <div class="buttons-left launcher-buttons">
+          <a class="button confirm" href="/components/modals/test/test-modal.html" data-modal-content>
+            Open Test Modal
+          </a>
+          <a class="button" href="/components/modals/test/nested-modal.html" data-modal-content>
+            Open Nested Modal
+          </a>
+        </div>
+      </section>
+
+      <div class="version launcher-version" id="version">…</div>
+    </main>
+  </div>
+
+  <script type="module" src="./a0ui/js/initFw.js"></script>
+  <script type="module" src="./launcher/launcher.js"></script>
 </body>
 
 </html>

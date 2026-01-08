@@ -1,0 +1,47 @@
+<html>
+<head>
+  <title>Test Widget</title>
+</head>
+<body>
+  <div x-data>
+    <template x-if="$store.testModal">
+      <div class="test-widget-root">
+        <div class="test-widget-title">Nested component loaded via &lt;x-component&gt;</div>
+        <div class="test-widget-row">
+          <span class="test-widget-label">Count</span>
+          <span class="test-widget-value" x-text="$store.testModal.count"></span>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <style>
+    .test-widget-root {
+      border: 1px dashed var(--color-border);
+      border-radius: 8px;
+      padding: var(--spacing-md);
+      background: color-mix(in srgb, var(--color-panel) 70%, transparent);
+    }
+
+    .test-widget-title {
+      font-weight: 600;
+      margin-bottom: var(--spacing-sm);
+      color: var(--color-text);
+    }
+
+    .test-widget-row {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--spacing-md);
+      font-family: var(--font-family-code);
+      font-size: 0.9rem;
+    }
+
+    .test-widget-label {
+      color: var(--color-text-secondary);
+    }
+  </style>
+</body>
+</html>
+
+

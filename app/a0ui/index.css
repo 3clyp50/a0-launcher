@@ -1,5 +1,53 @@
 /* Note: Network fonts are intentionally not used in the launcher content bundle. */
 
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('vendor/google/rubik/rubik-400.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('vendor/google/rubik/rubik-500.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('vendor/google/rubik/rubik-700.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('vendor/google/roboto-mono/roboto-mono-400.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('vendor/google/roboto-mono/roboto-mono-500.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('vendor/google/roboto-mono/roboto-mono-700.ttf') format('truetype');
+}
+
 /* Add box-sizing globally for better cross-browser consistency */
 *,
 *::before,
@@ -65,9 +113,9 @@
   --font-size-large: 1.2rem;
 
   /* Font families */
-  --font-family-main: "Rubik", Arial, Helvetica, sans-serif;
+  --font-family-main: "Rubik", -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, "Helvetica Neue", Arial, sans-serif;
   --font-family-code: "Roboto Mono", monospace;
-
+  
   /* UI helpers (some ported components reference these) */
   --color-text-secondary: #a0a0a0;
   --color-error: #ff6b6b;

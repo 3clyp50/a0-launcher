@@ -247,7 +247,7 @@ some classes like modal-header are shared between the old and the new system */
   cursor: pointer;
   border: none;
   font-size: 0.875rem;
-  font-family: "Rubik", Arial, Helvetica, sans-serif;
+  font-family: var(--font-family-main);
 }
 .btn.slim {
   padding: 0.2em 0.4em;

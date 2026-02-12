@@ -1,5 +1,5 @@
 // Import the component loader and page utilities
-import { importComponent } from "/js/components.js";
+import { importComponent } from "./components.js";
 
 // Modal functionality
 const modalStack = [];

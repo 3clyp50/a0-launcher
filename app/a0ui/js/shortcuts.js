@@ -4,7 +4,7 @@
 // wrappers (chat context, notifications, API helpers). The launcher intentionally
 // keeps this minimal to preserve portability without dragging in A0-only stores.
 
-import * as modals from "/js/modals.js";
+import * as modals from "./modals.js";
 
 export function openModal(modalPath) {
   return modals.openModal(modalPath);

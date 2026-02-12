@@ -1004,13 +1004,24 @@ app.whenReady().then(async () => {
     const normalizedRoot = path.resolve(contentRoot);
     const normalizedFile = path.resolve(filePath);
     if (!normalizedFile.startsWith(normalizedRoot)) {
+      console.log(`[a0app] BLOCKED (traversal): ${request.url} -> ${normalizedFile}`);
       return new Response('Forbidden', { status: 403 });
     }
 
-    return net.fetch(pathToFileURL(normalizedFile).toString());
+    const fileUrl = pathToFileURL(normalizedFile).toString();
+    console.log(`[a0app] ${request.url} -> ${fileUrl}`);
+    return net.fetch(fileUrl);
   });
   createWindow();
   createTray();
+
+  // DEBUG: capture renderer-side errors in terminal
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.log(`[did-fail-load] code=${code} desc=${desc} url=${url}`);
+  });
+  mainWindow.webContents.on('console-message', (_e, level, message) => {
+    if (level >= 2) console.log(`[renderer-error] ${message}`);
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

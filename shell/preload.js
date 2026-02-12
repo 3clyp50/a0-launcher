@@ -12,36 +12,40 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getShellIconDataUrl: () => ipcRenderer.invoke('get-shell-icon-data-url')
 });
 
-contextBridge.exposeInMainWorld('serviceVersionsAPI', {
-  getState: () => ipcRenderer.invoke('service-versions:getState'),
-  refresh: () => ipcRenderer.invoke('service-versions:refresh'),
-  installOrSync: (tag) => ipcRenderer.invoke('service-versions:install', { tag }),
-  startActive: () => ipcRenderer.invoke('service-versions:startActive'),
-  stopActive: () => ipcRenderer.invoke('service-versions:stopActive'),
-  setRetentionPolicy: (keepCount) => ipcRenderer.invoke('service-versions:setRetentionPolicy', { keepCount }),
+contextBridge.exposeInMainWorld('dockerManagerAPI', {
+  getState: () => ipcRenderer.invoke('docker-manager:getState'),
+  refresh: () => ipcRenderer.invoke('docker-manager:refresh'),
+  installOrSync: (tag) => ipcRenderer.invoke('docker-manager:install', { tag }),
+  startActive: () => ipcRenderer.invoke('docker-manager:startActive'),
+  stopActive: () => ipcRenderer.invoke('docker-manager:stopActive'),
+  setRetentionPolicy: (keepCount) => ipcRenderer.invoke('docker-manager:setRetentionPolicy', { keepCount }),
   setPortPreferences: (prefs) => {
     const p = prefs && typeof prefs === 'object' ? prefs : {};
-    return ipcRenderer.invoke('service-versions:setPortPreferences', { ui: p.ui, ssh: p.ssh });
+    return ipcRenderer.invoke('docker-manager:setPortPreferences', { ui: p.ui, ssh: p.ssh });
   },
   deleteRetainedInstance: (containerId) =>
-    ipcRenderer.invoke('service-versions:deleteRetainedInstance', { containerId }),
-  updateToLatest: (dataLossAck) => ipcRenderer.invoke('service-versions:updateToLatest', { dataLossAck }),
-  activateVersion: (tag, dataLossAck) => ipcRenderer.invoke('service-versions:activate', { tag, dataLossAck }),
+    ipcRenderer.invoke('docker-manager:deleteRetainedInstance', { containerId }),
+  updateToLatest: (dataLossAck) => ipcRenderer.invoke('docker-manager:updateToLatest', { dataLossAck }),
+  activateVersion: (tag, dataLossAck) => ipcRenderer.invoke('docker-manager:activate', { tag, dataLossAck }),
   activateRetainedInstance: (containerId, dataLossAck) =>
-    ipcRenderer.invoke('service-versions:activateRetainedInstance', { containerId, dataLossAck }),
-  cancel: (opId) => ipcRenderer.invoke('service-versions:cancel', { opId }),
-  openUi: () => ipcRenderer.invoke('service-versions:openUi'),
-  openHomepage: () => ipcRenderer.invoke('service-versions:openHomepage'),
+    ipcRenderer.invoke('docker-manager:activateRetainedInstance', { containerId, dataLossAck }),
+  cancel: (opId) => ipcRenderer.invoke('docker-manager:cancel', { opId }),
+  getInventory: () => ipcRenderer.invoke('docker-manager:getInventory'),
+  removeVolume: (volumeName) => ipcRenderer.invoke('docker-manager:removeVolume', { volumeName }),
+  pruneVolumes: () => ipcRenderer.invoke('docker-manager:pruneVolumes'),
+  installDocker: () => ipcRenderer.invoke('docker-manager:installDocker'),
+  openUi: () => ipcRenderer.invoke('docker-manager:openUi'),
+  openHomepage: () => ipcRenderer.invoke('docker-manager:openHomepage'),
   onStateChange: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, state) => callback(state);
-    ipcRenderer.on('service-versions:state', listener);
-    return () => ipcRenderer.removeListener('service-versions:state', listener);
+    ipcRenderer.on('docker-manager:state', listener);
+    return () => ipcRenderer.removeListener('docker-manager:state', listener);
   },
   onProgress: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, progress) => callback(progress);
-    ipcRenderer.on('service-versions:progress', listener);
-    return () => ipcRenderer.removeListener('service-versions:progress', listener);
+    ipcRenderer.on('docker-manager:progress', listener);
+    return () => ipcRenderer.removeListener('docker-manager:progress', listener);
   }
 });

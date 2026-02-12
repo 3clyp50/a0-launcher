@@ -8,126 +8,6 @@ const componentCache = {};
 // Lock map to prevent multiple simultaneous imports of the same component
 const importLocks = new Map();
 
-function isUrlLike(specifier) {
-  return /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(specifier);
-}
-
-function splitQueryHash(path) {
-  const match = path.match(/^([^?#]+)([?#].*)?$/);
-  return {
-    path: match?.[1] ?? path,
-    suffix: match?.[2] ?? "",
-  };
-}
-
-function getDirname(posixPath) {
-  const normalized = posixPath.replaceAll("\\", "/");
-  const idx = normalized.lastIndexOf("/");
-  if (idx === -1) return "";
-  return normalized.slice(0, idx + 1);
-}
-
-function resolvePosixPath(baseDir, relativePath) {
-  const base = baseDir.replaceAll("\\", "/");
-  const rel = relativePath.replaceAll("\\", "/");
-
-  const baseParts = base.split("/").filter(Boolean);
-  const relParts = rel.split("/").filter((p) => p.length > 0 && p !== ".");
-
-  for (const part of relParts) {
-    if (part === "..") baseParts.pop();
-    else baseParts.push(part);
-  }
-
-  return baseParts.join("/");
-}
-
-function toImportSpecifier(componentUrl, src) {
-  if (!src) return src;
-  if (isUrlLike(src)) return src;
-  if (src.startsWith("/")) return src;
-
-  const { path, suffix } = splitQueryHash(src);
-  const resolved = resolvePosixPath(getDirname(componentUrl), path);
-  return `/${resolved}${suffix}`;
-}
-
-function rewriteInlineModuleSpecifiers(code, componentUrl) {
-  const baseDir = getDirname(componentUrl);
-
-  const docBase = document.baseURI;
-
-  const mapRootAliasToRelativePath = (rootSpecifier) => {
-    // We keep A0-style "root" specifiers in component code (e.g. /js/*, /components/*),
-    // but when executing inline module scripts via Blob URLs we must convert them into
-    // absolute URLs (Blob modules cannot resolve `/...` paths).
-    //
-    // Everything here maps to the content root (same directory as index.html).
-    if (rootSpecifier.startsWith("/js/")) return `a0ui/js/${rootSpecifier.slice("/js/".length)}`;
-    if (rootSpecifier.startsWith("/css/")) return `a0ui/css/${rootSpecifier.slice("/css/".length)}`;
-    if (rootSpecifier.startsWith("/vendor/")) return `a0ui/vendor/${rootSpecifier.slice("/vendor/".length)}`;
-    if (rootSpecifier.startsWith("/components/")) return `components/${rootSpecifier.slice("/components/".length)}`;
-    if (rootSpecifier.startsWith("/public/")) return `public/${rootSpecifier.slice("/public/".length)}`;
-
-    // Fallback: treat as content-root relative.
-    return rootSpecifier.replace(/^\/+/, "");
-  };
-
-  const rewrite = (specifier) => {
-    if (!specifier) return specifier;
-    if (isUrlLike(specifier)) return specifier;
-
-    // Root specifiers like /components/... or /js/...
-    if (specifier.startsWith("/")) {
-      const { path, suffix } = splitQueryHash(specifier);
-      const relPath = mapRootAliasToRelativePath(path);
-      return `${new URL(relPath, docBase).href}${suffix}`;
-    }
-
-    // Relative specifiers: resolve against the component's directory
-    if (specifier.startsWith(".")) {
-      const { path, suffix } = splitQueryHash(specifier);
-      const resolved = resolvePosixPath(baseDir, path);
-      return `${new URL(resolved, docBase).href}${suffix}`;
-    }
-
-    // Bare specifier (leave as-is)
-    return specifier;
-  };
-
-  // Static imports/exports (covers `import "x"`, `import ... from "x"`, `export ... from "x"`).
-  code = code.replace(
-    /\b(import|export)\s+(?:[^'"]*?\s+from\s+)?["']([^"']+)["']/g,
-    (match, _keyword, spec) => match.replace(spec, rewrite(spec))
-  );
-
-  // Dynamic import("x")
-  code = code.replace(
-    /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
-    (match, spec) => match.replace(spec, rewrite(spec))
-  );
-
-  return code;
-}
-
-async function readTextAsset(relativePath) {
-  // Attempt fetch first (works in http/https contexts).
-  try {
-    const response = await fetch(relativePath);
-    if (response.ok) return await response.text();
-  } catch {
-    // ignore and fall back to Electron bridge
-  }
-
-  // Electron file:// contexts often block fetch() for local files.
-  const api = globalThis.electronAPI;
-  if (api?.readContentFile) {
-    return await api.readContentFile(relativePath);
-  }
-
-  throw new Error(`Failed to load asset: ${relativePath}`);
-}
-
 export async function importComponent(path, targetElement) {
   // Create a unique key for this import based on the target element
   const lockKey = targetElement.id || targetElement.getAttribute('data-component-id') || targetElement;
@@ -158,7 +38,13 @@ export async function importComponent(path, targetElement) {
     if (componentCache[componentUrl]) {
       html = componentCache[componentUrl];
     } else {
-      html = await readTextAsset(componentUrl);
+      const response = await fetch(componentUrl);
+      if (!response.ok) {
+        throw new Error(
+          `Error loading component ${path}: ${response.statusText}`
+        );
+      }
+      html = await response.text();
       // store in cache
       componentCache[componentUrl] = html;
     }
@@ -180,15 +66,17 @@ export async function importComponent(path, targetElement) {
           node.type === "module" || node.getAttribute("type") === "module";
 
         if (isModule) {
-          const rawSrc = node.getAttribute("src");
-          if (rawSrc) {
+          if (node.src) {
             // For <script type="module" src="..." use dynamic import
-            const specifier = toImportSpecifier(componentUrl, rawSrc);
+            const resolvedUrl = new URL(
+              node.src,
+              globalThis.location.origin
+            ).toString();
 
             // Check if module is already in cache
-            if (!componentCache[specifier]) {
-              const modulePromise = import(specifier);
-              componentCache[specifier] = modulePromise;
+            if (!componentCache[resolvedUrl]) {
+              const modulePromise = import(resolvedUrl);
+              componentCache[resolvedUrl] = modulePromise;
               loadPromises.push(modulePromise);
             }
           } else {
@@ -199,11 +87,20 @@ export async function importComponent(path, targetElement) {
 
             // For inline module scripts, use cache or create blob
             if (!componentCache[virtualUrl]) {
-              // Blob modules can't resolve relative imports. Rewrite them to root specifiers
-              // (e.g. ./store.js -> file:///.../components/.../store.js), so they work from Blob URLs.
-              let content = rewriteInlineModuleSpecifiers(
-                node.textContent,
-                componentUrl
+              // Transform relative import paths to absolute URLs
+              let content = node.textContent.replace(
+                /import\s+([^'"]+)\s+from\s+["']([^"']+)["']/g,
+                (match, bindings, importPath) => {
+                  // Convert relative OR root-based (e.g. /src/...) to absolute URLs
+                  if (!/^https?:\/\//.test(importPath)) {
+                    const absoluteUrl = new URL(
+                      importPath,
+                      globalThis.location.origin
+                    ).href;
+                    return `import ${bindings} from "${absoluteUrl}"`;
+                  }
+                  return match;
+                }
               );
 
               // Add sourceURL to the content
@@ -272,14 +169,6 @@ export async function importComponent(path, targetElement) {
     const loadingEl = targetElement.querySelector(':scope > .loading');
     if (loadingEl) {
       targetElement.removeChild(loadingEl);
-    }
-
-    // Ensure Alpine initializes newly injected DOM.
-    // Relying only on Alpine's MutationObserver can be flaky under file:// + dynamic component loading.
-    try {
-      globalThis.Alpine?.initTree?.(targetElement);
-    } catch (err) {
-      console.warn("Alpine initTree failed for component:", componentUrl, err);
     }
 
     // // Load any nested components

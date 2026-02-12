@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const { app } = require('electron');
 
 function baseDir() {
-  return path.join(app.getPath('userData'), 'service_versions');
+  return path.join(app.getPath('userData'), 'docker_manager');
 }
 
 function cacheDir() {

@@ -588,6 +588,42 @@ export class DockerodeDocker extends DockerInterface {
     }
   }
 
+  async listVolumes() {
+    try {
+      const res = await Promise.resolve(this.docker.listVolumes());
+      const volumes = Array.isArray(res?.Volumes) ? res.Volumes : [];
+      return volumes.map((v) => ({
+        name: typeof v?.Name === 'string' ? v.Name : '',
+        driver: typeof v?.Driver === 'string' ? v.Driver : '',
+        mountpoint: typeof v?.Mountpoint === 'string' ? v.Mountpoint : '',
+        scope: typeof v?.Scope === 'string' ? v.Scope : '',
+        createdAt: typeof v?.CreatedAt === 'string' ? v.CreatedAt : null,
+        labels: v?.Labels && typeof v.Labels === 'object' ? v.Labels : {}
+      }));
+    } catch (error) {
+      throw normalizeDockerError(error, { op: 'listVolumes', env: this.#envSummary() });
+    }
+  }
+
+  async removeVolume(volumeName) {
+    const name = (volumeName || '').trim();
+    if (!name) throw makeDockerInterfaceError('INVALID_INPUT', 'volumeName is required');
+    try {
+      const volume = this.docker.getVolume(name);
+      await Promise.resolve(volume.remove());
+    } catch (error) {
+      throw normalizeDockerError(error, { op: 'removeVolume', volumeName: name, env: this.#envSummary() });
+    }
+  }
+
+  async pruneVolumes() {
+    try {
+      return await Promise.resolve(this.docker.pruneVolumes());
+    } catch (error) {
+      throw normalizeDockerError(error, { op: 'pruneVolumes', env: this.#envSummary() });
+    }
+  }
+
   async createContainer(createOptions) {
     if (!createOptions || typeof createOptions !== 'object') {
       throw makeDockerInterfaceError('INVALID_INPUT', 'createOptions must be an object');

@@ -1,316 +1,575 @@
 # A0 Launcher - AGENTS.md
 
-[Generated from codebase reconnaissance on 2025-12-18]
+> Handoff document for AI coding agents working on this repo.
+> Last updated: 2026-02-12.
 
 ## Quick Reference
-- **Tech Stack**: JavaScript (CommonJS) | Electron 33.x (Electron Forge 7.6.x) | Node.js 20+ | GitHub Actions
-- **Dependency highlights**: `electron@^33.2.0`, `@electron-forge/*@^7.6.0`, `electron-squirrel-startup@^1.0.1`
+
+- **Tech Stack**: JavaScript (CommonJS shell, ES modules content) | Electron 33.x (Forge 7.6.x) | Node.js 20+ | Alpine.js | GitHub Actions
+- **Key dependencies**: `electron@^33.2.0`, `dockerode@^4.0.9`, `semver@^7.7.3`, `electron-squirrel-startup@^1.0.1`
 - **Dev Run**: `npm start` (GUI required)
-- **Build (local)**: `npm run make` (or `npm run make:<os>`)
-- **Fork E2E Content Repo Override**: `A0_LAUNCHER_GITHUB_REPO="owner/repo" npm start`
-- **Local Dev Content (skip GitHub Releases)**:
-  - `A0_LAUNCHER_USE_LOCAL_CONTENT=1 npm start` (use CWD if it contains `app/index.html` + `package.json`)
-  - `A0_LAUNCHER_LOCAL_REPO="/abs/or/relative/path" npm start` (override repo dir; takes precedence)
-- **Docs**: `README.md`, `.specify/memory/constitution.md`, `specs/`
+- **Local Content**: `A0_LAUNCHER_USE_LOCAL_CONTENT=1 npm start`
+- **Build**: `npm run make` (or `npm run make:<os>`)
+- **Syntax check**: `node --check shell/main.js`
+- **No test runner**: there is no `npm test` yet. Use `node --check` for syntax validation.
+- **Governance**: `.specify/memory/constitution.md`
 
 ---
 
 ## Table of Contents
-1. [Project Overview](#project-overview)
-2. [Core Commands](#core-commands)
-3. [Project Structure](#project-structure)
-4. [Development Patterns and Conventions](#development-patterns-and-conventions)
-5. [Safety and Permissions](#safety-and-permissions)
-6. [Code Examples (Good and Avoid)](#code-examples-good-and-avoid)
-7. [Git Workflow and CI](#git-workflow-and-ci)
-8. [Troubleshooting](#troubleshooting)
+
+1. [Architecture](#architecture)
+2. [Project Structure](#project-structure)
+3. [Naming Conventions](#naming-conventions)
+4. [Shell Layer Detail](#shell-layer-detail)
+5. [Content Layer Detail](#content-layer-detail)
+6. [IPC Contract](#ipc-contract)
+7. [A0 UI Core](#a0-ui-core)
+8. [Docker Manager (Feature Layer)](#docker-manager-feature-layer)
+9. [Custom Protocol](#custom-protocol)
+10. [Content Bundling and Delivery](#content-bundling-and-delivery)
+11. [Development Workflow](#development-workflow)
+12. [Safety and Permissions](#safety-and-permissions)
+13. [Code Style](#code-style)
+14. [Git Workflow and CI](#git-workflow-and-ci)
+15. [Troubleshooting](#troubleshooting)
+16. [Current State and Next Steps](#current-state-and-next-steps)
 
 ---
 
-## Project Overview
+## Architecture
 
-A0 Launcher is an Electron desktop shell that downloads UI content (`content.json`) from GitHub Releases at runtime and renders it locally. This enables shipping a stable executable while updating the UI/content independently via releases.
+```text
+┌──────────────────────────────────────────────────────────┐
+│  Shell  (Electron main process — CommonJS)               │
+│  shell/main.js                                           │
+│  shell/preload.js                                        │
+│                                                          │
+│  ┌──────────────────────┐  ┌───────────────────────────┐ │
+│  │ docker_adapter/      │  │ docker_manager/            │ │
+│  │ Low-level Docker     │  │ Feature orchestration      │ │
+│  │ client (dockerode)   │  │ (state, ops, volumes, IPC) │ │
+│  │                      │  │                            │ │
+│  │ DockerInterface.mjs  │  │ index.js (exports)         │ │
+│  │ impl/                │  │ state_store.js             │ │
+│  │   DockerodeDocker    │  │ releases_client.js         │ │
+│  │   DockerHubRegistry  │  │ retention.js               │ │
+│  │   DockerodeLogProc.  │  │ errors.js                  │ │
+│  └──────────────────────┘  └───────────────────────────┘ │
+│                                                          │
+│  a0app:// protocol handler (serves app/ from disk)       │
+│  System tray · Window management · GitHub Releases DL    │
+└──────────────┬───────────────────────────────────────────┘
+               │  IPC channels: docker-manager:*
+               │  Push events:  docker-manager:state
+               │                docker-manager:progress
+┌──────────────▼───────────────────────────────────────────┐
+│  Content  (app/ — ES modules, served via a0app://)       │
+│                                                          │
+│  index.html          Page shell + <x-component> refs     │
+│  docker_manager.js   Thin orchestrator (store + events)  │
+│  docker_manager.css  A0-token layout styles              │
+│                                                          │
+│  ┌─────────────────┐  ┌───────────────────────────────┐  │
+│  │ a0ui/           │  │ components/docker-manager/    │  │
+│  │ A0 UI Core      │  │                               │  │
+│  │ (vanilla Agent  │  │ docker-manager-store.js       │  │
+│  │  Zero v0.9.8)   │  │                               │  │
+│  │                 │  │ status-header/                │  │
+│  │ index.css       │  │   index.html + .js            │  │
+│  │ css/            │  │ onboarding/                   │  │
+│  │ js/             │  │   index.html + .js            │  │
+│  │ vendor/         │  │ official-versions/            │  │
+│  │   alpine/       │  │   index.html + .js            │  │
+│  │   ace-min/      │  │ local-testing/                │  │
+│  │   ace/          │  │   index.html + .js            │  │
+│  │   google/       │  │ retained-instances/           │  │
+│  └─────────────────┘  │   index.html + .js            │  │
+│                       │ storage-summary/              │  │
+│                       │   index.html + .js            │  │
+│                       │ help/                         │  │
+│                       │   index.html                  │  │
+│                       └───────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+```
 
-**Type**: Electron desktop app (packaged shell + downloadable content)
-**Status**: Active development
-**Primary languages**: JavaScript (CommonJS), HTML/CSS, YAML, Bash
+### Key design decisions
 
-Key constraints (non-negotiables) live in `.specify/memory/constitution.md`:
-- Electron security isolation (treat downloaded content as untrusted)
-- Shell/content contract (`content.json` schema)
-- Release semver semantics (MAJOR builds executables; MINOR/PATCH reuse artifacts)
-
----
-
-## Core Commands
-
-### Development
-- Install deps (recommended for CI/repro): `npm ci`
-- Install deps (developer convenience): `npm install`
-- Run dev mode (Electron GUI): `npm start`
-
-### Build / Packaging
-- Package (no installers): `npm run package`
-- Make installers (current OS): `npm run make`
-- Make installers (explicit platform):
-  - macOS: `npm run make:mac`
-  - Windows: `npm run make:win`
-  - Linux: `npm run make:linux`
-
-### macOS: Unsigned vs Signed/Notarized
-- Unsigned local build (recommended for forks/dev): `SKIP_SIGNING=1 npm run make:mac`
-- Signed + notarized (release-grade):
-  - Requires secrets: `MACOS_CERT_P12`, `MACOS_CERT_PASSPHRASE`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`
-  - Control notarization:
-    - Default: notarize when Apple credentials are present
-    - Force on: `NOTARIZE=1 npm run make:mac`
-
-### File-scoped "fast checks" (preferred)
-There is no repo-standard JS test runner or linter script yet. Use these for fast feedback:
-- Syntax check a file: `node --check shell/main.js`
-- Syntax check a script: `node --check scripts/write-build-info.js`
-- Validate Forge config loads: `node -e "require('./forge.config.js'); console.log('forge.config.js: OK')"`
-
-### Testing
-- **JavaScript tests**: No `npm test` script is currently defined in `package.json`.
-- **SpecKit tooling tests**: exist under `.specify/tests/` (Python) but are not part of npm scripts.
+- **Shell vs Content separation**: the built executable does NOT include `app/` files. Content is downloaded from GitHub Releases at runtime (`content.json`).
+- **Custom protocol**: `a0app://` replaces `file://` so `fetch()` and module imports work correctly.
+- **A0 UI Core is vanilla**: `app/a0ui/` contains unmodified copies from Agent Zero v0.9.8 (except local font bundling). It is intended to become a shared git submodule.
+- **Component architecture**: each Docker manager section is a folder under `app/components/docker-manager/` with co-located `index.html` + JS controller. No separate CSS files — custom styles go in `<style>` tags within the HTML.
+- **Alpine store per feature**: `docker-manager-store.js` holds shared reactive state. Section JS files listen for `dm:state` custom events and render imperatively.
+- **Docker adapter vs manager**: `shell/docker_adapter/` is the reusable low-level client; `shell/docker_manager/` is the launcher-specific business/feature layer.
 
 ---
 
 ## Project Structure
 
-```
-/
+```text
+a0-launcher/
 ├── AGENTS.md                          # You are here
-├── README.md                          # Human-facing overview + fork/testing + signing
-├── package.json                       # npm scripts + Electron deps
-├── package-lock.json                  # Lockfile (CI should use npm ci)
-├── forge.config.js                    # Electron Forge config (makers, signing/notarization)
-├── app/                               # Source UI content (bundled into content.json by CI)
-│   └── index.html
-├── shell/
-│   ├── main.js                        # Electron main process (update/download/extract/load)
-│   ├── preload.js                     # contextBridge surface (renderer API)
-│   ├── loading.html                   # Loading UI shown before content loads
-│   └── assets/                        # Icons + mac entitlements
+├── README.md                          # Human-facing overview
+├── package.json                       # npm scripts + dependencies
+├── forge.config.js                    # Electron Forge (makers, signing)
+│
+├── app/                               # Content layer (bundled by CI, served via a0app://)
+│   ├── index.html                     # Page shell with <x-component> tags
+│   ├── docker_manager.js              # Thin orchestrator (store init, refresh, events)
+│   ├── docker_manager.css             # Layout styles using A0 CSS tokens
+│   ├── a0ui/                          # A0 UI Core (vanilla Agent Zero framework)
+│   │   ├── index.css                  # Theme (local @font-face)
+│   │   ├── css/                       # buttons.css, modals.css
+│   │   ├── js/                        # initFw.js, components.js, modals.js, AlpineStore.js, ...
+│   │   └── vendor/                    # alpine/, ace-min/, ace/, google/ (fonts + icons)
+│   └── components/
+│       └── docker-manager/            # Launcher Docker manager sections
+│           ├── docker-manager-store.js    # Shared Alpine store
+│           ├── status-header/         # Header + banner + progress
+│           ├── onboarding/            # Docker detection + install CTA
+│           ├── official-versions/     # Image listing
+│           ├── local-testing/         # Container listing
+│           ├── retained-instances/    # Volume management
+│           ├── storage-summary/       # Counts summary
+│           └── help/                  # Help text
+│
+├── shell/                             # Shell layer (packaged into executable)
+│   ├── main.js                        # Electron main process
+│   ├── preload.js                     # contextBridge (renderer API surface)
+│   ├── loading.html                   # Loading screen
+│   ├── assets/                        # Icons + mac entitlements
+│   ├── docker_adapter/                # Low-level Docker client
+│   │   ├── DockerInterface.mjs        # Abstract interface + singleton + env detection
+│   │   ├── getDocker.js               # CJS bridge to ESM DockerInterface
+│   │   ├── LOG_PROCESSOR.md           # Log processor documentation
+│   │   └── impl/
+│   │       ├── DockerodeDocker.mjs    # Dockerode implementation
+│   │       ├── DockerHubRegistry.mjs  # Docker Hub API client
+│   │       └── DockerodeLogProcessor.mjs  # Container log streaming
+│   └── docker_manager/               # Feature/business orchestration
+│       ├── index.js                   # Main exports (state, operations, volumes)
+│       ├── state_store.js             # Persistent state (userData/docker_manager/)
+│       ├── releases_client.js         # GitHub Releases catalog
+│       ├── retention.js               # Container retention policy
+│       └── errors.js                  # Error normalization
+│
 ├── scripts/
-│   ├── write-build-info.js            # Generates shell/build-info.json from git remote/env
-│   └── bootstrap-macos.sh             # Ephemeral macOS VM bootstrap (unsigned build/dev)
+│   ├── write-build-info.js            # Generates shell/build-info.json
+│   └── bootstrap-macos.sh            # Ephemeral macOS bootstrap
+│
 ├── .github/workflows/
-│   ├── bundle-content.yml             # Bundles app/ -> content.json and uploads
-│   └── build.yml                      # Builds executables; reuses artifacts for minor/patch
-├── specs/                              # SpecKit artifacts (may include not-yet-implemented work)
-│   └── 001-docker-version-management/  # Example feature spec + contracts
-├── .specify/                           # SpecKit memory/templates/scripts
-└── .cursor/                            # Cursor commands and auto-generated rules
+│   ├── bundle-content.yml             # Bundles app/ -> content.json
+│   └── build.yml                      # Builds executables
+│
+├── docs/
+│   ├── running-ui.md                  # Detailed architecture + dev workflow
+│   └── faq-integration.md            # Integration FAQ + naming conventions
+│
+├── specs/                             # SpecKit feature specs
+└── .specify/                          # SpecKit memory/templates
 ```
-
-Key files worth opening first:
-- `shell/main.js`: update and content lifecycle, Electron security settings
-- `shell/preload.js`: renderer API surface (must stay minimal)
-- `.github/workflows/build.yml`: release vs fork/dev build behavior
-- `.github/workflows/bundle-content.yml`: `content.json` bundling assumptions (text-only)
-- `.specify/memory/constitution.md`: project "non-negotiables"
 
 ---
 
-## Development Patterns and Conventions
+## Naming Conventions
 
-### Runtime Architecture (Shell vs Content)
-- **Shell (`shell/`)**: Electron main process, packaging, update/download logic.
-- **Content (`app/`)**: downloaded and rendered UI content. It is treated as untrusted.
+| Layer             | Convention                    | Examples                             |
+|-------------------|-------------------------------|--------------------------------------|
+| Alpine stores     | `*-store.js`                  | `docker-manager-store.js`            |
+| Component folders | section name as folder        | `onboarding/`, `status-header/`      |
+| Component entry   | `index.html` per folder       | `onboarding/index.html`              |
+| Component JS      | section name `.js`            | `onboarding.js`, `status-header.js`  |
+| Custom CSS        | `<style>` tag in HTML         | (no separate `.css` per component)   |
+| IPC channels      | `docker-manager:` prefix      | `docker-manager:getState`            |
+| Preload API       | `window.dockerManagerAPI`     |                                      |
+| App actions       | `window.dockerManagerActions` |                                      |
+| Custom events     | `dm:state`                    |                                      |
+| Shell modules     | snake_case folders            | `docker_adapter/`, `docker_manager/` |
 
-### Electron Security Baseline
-Keep these defaults in `BrowserWindow`:
-- `contextIsolation: true`
-- `sandbox: true`
-- `nodeIntegration: false`
-- All renderer-to-main capabilities go through a whitelisted `contextBridge` API in `shell/preload.js`
+---
 
-### Content Contract: `content.json` (text-only)
-- Bundling reads all files in `app/` as UTF-8 strings.
-- Extraction writes files as UTF-8 strings to a userData cache directory.
-- Adding binary assets requires updating BOTH:
-  - `.github/workflows/bundle-content.yml` (bundler)
-  - `shell/main.js` (extractor)
+## Shell Layer Detail
 
-Current implicit schema (see constitution and bundler):
+### `shell/main.js`
+
+The Electron main process. Responsibilities:
+
+- Window management (BrowserWindow, tray, quit behavior)
+- GitHub Releases content downloading + caching
+- `a0app://` protocol registration
+- IPC handler registration for all `docker-manager:*` channels
+- Docker Desktop installer download (Windows/macOS)
+
+### `shell/preload.js`
+
+Exposes two API surfaces to the renderer via `contextBridge`:
+
+- `window.electronAPI` -- app version, content version, shell icon, status/error events
+- `window.dockerManagerAPI` -- all Docker management operations + subscriptions
+
+### `shell/docker_adapter/`
+
+Low-level Docker client layer. Wraps `dockerode` behind an abstract `DockerInterface`:
+
+- **`DockerInterface.mjs`**: abstract base with singleton factory (`DockerInterface.get()`), environment detection, host parsing
+- **`DockerodeDocker.mjs`**: concrete implementation (images, containers, volumes, pulls, logs)
+- **`DockerHubRegistry.mjs`**: Docker Hub v2 API (tags, digests, layer sizes)
+- **`DockerodeLogProcessor.mjs`**: container log streaming with TTY/mux detection, backpressure, abort
+
+### `shell/docker_manager/`
+
+Feature/business layer (launcher-specific orchestration):
+
+- **`index.js`**: main module exports — state building, refresh, install/sync, start/stop, update, activate, rollback, retention, volumes, inventory
+- **`state_store.js`**: persistent JSON state in `userData/docker_manager/`
+- **`releases_client.js`**: GitHub Releases catalog with offline fallback
+- **`retention.js`**: container retention policy enforcement
+- **`errors.js`**: error normalization for IPC responses
+
+---
+
+## Content Layer Detail
+
+### `app/index.html`
+
+Page shell that loads:
+
+1. A0 UI Core (CSS + JS from `a0ui/`)
+2. Docker manager styles (`docker_manager.css`)
+3. Framework init (`a0ui/js/initFw.js` — loads Alpine, registers directives)
+4. Section components via `<x-component path="components/docker-manager/...">` tags
+5. Orchestrator module (`docker_manager.js`)
+
+### `app/docker_manager.js`
+
+Thin module orchestrator (~225 lines). It:
+
+- Imports the shared Alpine store (`docker-manager-store.js`)
+- Loads app/content metadata and header logo
+- Calls `dockerManagerAPI.getInventory()` + `dockerManagerAPI.getState()` on boot
+- Populates the store and emits `dm:state` custom events
+- Exposes `window.dockerManagerActions` (refresh, openUi, openHomepage, removeVolume, pruneVolumes, openDockerDownload)
+- Subscribes to push events (`docker-manager:state`, `docker-manager:progress`)
+
+### `app/docker_manager.css`
+
+Layout styles using A0 CSS custom properties (`var(--color-*)`, `var(--color-border)`, etc.). All classes use the `sv-` prefix (legacy — can be renamed to `dm-` in a future pass).
+
+### Section folders (`app/components/docker-manager/`)
+
+Each section has:
+
+- `index.html` — markup loaded by `<x-component>`, includes a `<script type="module">` tag pointing to the co-located JS
+- `*.js` — imperative controller that listens for `dm:state` events and renders into the section's DOM by ID
+
+Current sections:
+
+| Folder                | Purpose                                                                        |
+|-----------------------|--------------------------------------------------------------------------------|
+| `status-header/`      | Title, meta, action buttons (Refresh/Open UI/Homepage), banner, progress panel |
+| `onboarding/`         | Docker detection + "Download Docker" CTA                                       |
+| `official-versions/`  | Local image listing                                                            |
+| `local-testing/`      | Container listing with state                                                   |
+| `retained-instances/` | Volume listing + remove + prune                                                |
+| `storage-summary/`    | Counts (images, containers, volumes)                                           |
+| `help/`               | Static help text                                                               |
+
+---
+
+## IPC Contract
+
+All channels use the `docker-manager:` prefix.
+
+### Request/response (invoke)
+
+| Channel                                     | Direction        | Purpose                                            |
+|---------------------------------------------|------------------|----------------------------------------------------|
+| `docker-manager:getState`                   | renderer -> main | Get current Docker manager state                   |
+| `docker-manager:refresh`                    | renderer -> main | Force refresh state                                |
+| `docker-manager:getInventory`               | renderer -> main | Get Docker inventory (images, containers, volumes) |
+| `docker-manager:install`                    | renderer -> main | Install/sync a Docker image by tag                 |
+| `docker-manager:startActive`                | renderer -> main | Start the active container                         |
+| `docker-manager:stopActive`                 | renderer -> main | Stop the active container                          |
+| `docker-manager:setRetentionPolicy`         | renderer -> main | Set container retention count                      |
+| `docker-manager:setPortPreferences`         | renderer -> main | Set UI/SSH port preferences                        |
+| `docker-manager:deleteRetainedInstance`     | renderer -> main | Delete a retained container                        |
+| `docker-manager:updateToLatest`             | renderer -> main | Update to latest official version                  |
+| `docker-manager:activate`                   | renderer -> main | Activate a specific version                        |
+| `docker-manager:activateRetainedInstance`   | renderer -> main | Rollback to a retained instance                    |
+| `docker-manager:cancel`                     | renderer -> main | Cancel a running operation                         |
+| `docker-manager:removeVolume`               | renderer -> main | Remove a Docker volume by name                     |
+| `docker-manager:pruneVolumes`               | renderer -> main | Prune dangling volumes                             |
+| `docker-manager:installDocker`              | renderer -> main | Download + open Docker Desktop installer           |
+| `docker-manager:openUi`                     | renderer -> main | Open Agent Zero UI in browser                      |
+| `docker-manager:openHomepage`               | renderer -> main | Open agent-zero.ai                                 |
+
+### Push events (send)
+
+| Channel                    | Direction        | Purpose                   |
+|----------------------------|------------------|---------------------------|
+| `docker-manager:state`     | main -> renderer | State change notification |
+| `docker-manager:progress`  | main -> renderer | Operation progress update |
+
+---
+
+## A0 UI Core
+
+The A0 UI Core (`app/a0ui/`) contains vanilla copies of the Agent Zero WebUI framework (v0.9.8):
+
+### JS modules (`app/a0ui/js/`)
+
+- `initFw.js` -- framework bootstrap (imports Alpine, registers directives)
+- `components.js` -- `<x-component>` loader with caching + inline module execution
+- `modals.js` -- modal stack management
+- `AlpineStore.js` -- `createStore()` helper for Alpine reactive stores
+- `initializer.js` -- DOM-ready initialization
+- `confirmClick.js` -- `$confirmClick` Alpine magic helper
+- `device.js` -- touch vs pointer detection
+- `shortcuts.js` -- keyboard shortcut registration
+- `sleep.js` -- async sleep utility
+
+### Vendor (`app/a0ui/vendor/`)
+
+- `alpine/` -- Alpine.js (+ collapse plugin)
+- `ace-min/` -- Ace editor (all modes/themes/snippets for portability)
+- `ace/` -- Ace CSS + curated modes
+- `google/` -- Material Symbols font + Rubik + Roboto Mono (local `.ttf` files)
+
+### Deviation from upstream
+
+The only intentional deviation from Agent Zero v0.9.8 is replacing the Google Fonts CDN `@import` in `index.css` with local `@font-face` declarations for offline/Electron use.
+
+---
+
+## Docker Manager (Feature Layer)
+
+### Current scope (minimal)
+
+The launcher's Docker manager currently focuses on:
+
+1. **Onboarding** -- detect Docker availability; if missing, offer download/install
+2. **Image detection** -- list local Docker images matching the backend repo
+3. **Container listing** -- list containers with state/status
+4. **Volume management** -- list, remove, prune Docker volumes
+5. **Inventory summary** -- counts of images, containers, volumes
+
+### Backend Docker operations (available but not all wired to UI yet)
+
+The `shell/docker_manager/` module also exposes:
+
+- Install/sync images
+- Start/stop active instance
+- Update to latest version
+- Activate/rollback versions
+- Retention policy management
+- Port preferences
+- Progress tracking with cancel
+
+These are fully functional at the IPC level and can be wired to UI sections as needed.
+
+### Docker auto-install
+
+The shell can download Docker Desktop installers:
+
+- **Windows**: downloads `.exe` to Downloads folder and opens it
+- **macOS**: downloads `.dmg` and opens it (detects arm64 vs amd64)
+- **Linux**: opens Docker Engine install documentation in browser
+
+Triggered via `docker-manager:installDocker` IPC channel.
+
+---
+
+## Custom Protocol
+
+The `a0app://` protocol is registered in `shell/main.js`:
+
+```js
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'a0app',
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true }
+}]);
+
+protocol.handle('a0app', (request) => {
+  const url = new URL(request.url);
+  const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, '');
+  const filePath = path.join(contentRoot, relativePath);
+  // Path traversal protection
+  if (!path.resolve(filePath).startsWith(path.resolve(contentRoot))) {
+    return new Response('Forbidden', { status: 403 });
+  }
+  return net.fetch(pathToFileURL(filePath).toString());
+});
+```
+
+This stays in the shell layer only. The A0 UI Core does not know about it.
+
+---
+
+## Content Bundling and Delivery
+
+### Bundle format (`content.json`)
+
+CI bundles `app/` files into a JSON file with binary support:
+
 ```json
 {
-  "bundled_at": "ISO-8601 timestamp",
-  "file_count": 123,
+  "bundle_format_version": 2,
   "files": {
-    "relative/path.ext": "file contents as UTF-8 string"
+    "relative/path.js": { "encoding": "utf8", "data": "..." },
+    "relative/path.ttf": { "encoding": "base64", "data": "..." }
   }
 }
 ```
 
-### Fork End-to-End Testing (Content Source Selection)
-The shell downloads from the GitHub repo defined by:
-1. `A0_LAUNCHER_GITHUB_REPO` env var (format: `owner/repo`)
-2. `shell/build-info.json` (generated by `scripts/write-build-info.js`)
-3. Fallback default: `agent0ai/a0-launcher`
+### Delivery flow
 
-`shell/build-info.json` is generated on `npm start`, `npm run make*`, and `npm run package` (and is gitignored).
+1. `npm start` -> shell checks GitHub Releases API for latest
+2. Compares timestamps with local `content_meta.json`
+3. Downloads `content.json` if newer
+4. Extracts files to `userData/app_content/`
+5. Loads `a0app://content/index.html`
 
-### Code Style
-No single enforced formatter config is present. Existing code mixes:
-- single quotes in `shell/*.js`
-- double quotes + trailing commas in `forge.config.js` and `scripts/*.js`
+---
 
-Rule of thumb: keep changes stylistically consistent within the file you touch; avoid drive-by reformatting.
+## Development Workflow
+
+### Commands
+
+| Command               | Purpose                       |
+|-----------------------|-------------------------------|
+| `npm install`         | Install dependencies          |
+| `npm start`           | Run in dev mode (GUI)         |
+| `npm run make`        | Build installers (current OS) |
+| `npm run make:mac`    | Build macOS installer         |
+| `npm run make:win`    | Build Windows installer       |
+| `npm run make:linux`  | Build Linux installer         |
+| `node --check <file>` | Syntax check a file           |
+
+### Environment variables
+
+| Variable                              | Purpose                              |
+|---------------------------------------|--------------------------------------|
+| `A0_LAUNCHER_USE_LOCAL_CONTENT=1`     | Use CWD `app/` as content source     |
+| `A0_LAUNCHER_LOCAL_REPO=<path>`       | Use specific repo as content source  |
+| `A0_LAUNCHER_GITHUB_REPO=owner/repo`  | Override GitHub content source       |
+| `A0_BACKEND_IMAGE_REPO=ns/name`       | Override Docker image repo           |
+| `A0_BACKEND_GITHUB_REPO=owner/repo`   | Override backend releases catalog    |
+| `SKIP_SIGNING=1`                      | Skip macOS code signing              |
+| `NOTARIZE=1`                          | Force macOS notarization             |
+
+### Fast iteration loop (Windows)
+
+1. Edit files in `app/`
+2. Run the PowerShell cache seeding script (see `docs/running-ui.md`)
+3. `npm start`
+
+Or use `A0_LAUNCHER_USE_LOCAL_CONTENT=1 npm start` to skip seeding.
 
 ---
 
 ## Safety and Permissions
 
 ### Allowed without asking
-- Read/search any repository file.
-- Add/update JS/HTML in `shell/`, `app/`, `scripts/` while respecting constitution gates.
-- Run file-scoped checks: `node --check <file>`, `node -e "require(...)"`.
-- Run CI-equivalent installs in a scratch environment: `npm ci` (creates `node_modules/`).
+
+- Read/search any file
+- Edit JS/HTML/CSS in `shell/`, `app/`, `scripts/`, `docs/`
+- Run `node --check`, `node -e "require(...)"`
+- Run `npm ci` / `npm install`
 
 ### Ask before executing
-- Adding/removing dependencies (`package.json`, `package-lock.json`).
-- Editing GitHub workflows (`.github/workflows/*`) or release semantics.
-- Broadening renderer capabilities (new preload exports, new IPC surface, relaxing `contextIsolation`/`sandbox`).
-- Modifying `.specify/memory/constitution.md` (governance document).
-- Deleting files or directories.
 
-### Never do (unless explicitly instructed by a human)
-- Commit secrets (Apple creds, signing certs, tokens) or write them into `app/` content.
-- Disable Electron isolation defaults or expose `ipcRenderer` directly to untrusted content.
-- Use destructive git commands that discard work (e.g., `git reset --hard`, `git checkout --`, `git restore`).
+- Adding/removing npm dependencies
+- Editing GitHub workflows
+- Broadening renderer capabilities (new preload exports, relaxing isolation)
+- Modifying `.specify/memory/constitution.md`
+- Deleting files or directories
+
+### Never do (unless explicitly instructed)
+
+- Commit secrets or tokens
+- Disable Electron isolation or expose `ipcRenderer` directly
+- Use destructive git commands (`git reset --hard`, etc.)
 
 ---
 
-## Code Examples (Good and Avoid)
+## Code Style
 
-### GOOD: Validate untrusted inputs (repo override)
-From `shell/main.js`:
+No enforced formatter. Rules of thumb:
 
-```js
-function normalizeGithubRepo(value) {
-  const v = (value || '').trim();
-  if (!v) return '';
-  if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(v)) return v;
-  return '';
-}
-```
-
-### GOOD: Keep BrowserWindow isolation on by default
-From `shell/main.js`:
-
-```js
-mainWindow = new BrowserWindow({
-  // ...
-  webPreferences: {
-    preload: path.join(__dirname, 'preload.js'),
-    contextIsolation: true,
-    nodeIntegration: false,
-    sandbox: true
-  }
-});
-```
-
-### GOOD: Keep build metadata generation tolerant (dev should not break)
-From `scripts/write-build-info.js`:
-
-```js
-function writeBuildInfo(payload) {
-  try {
-    fs.writeFileSync(OUTPUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-    return true;
-  } catch (error) {
-    process.stderr.write(
-      `[build-info] WARNING: failed to write ${OUTPUT_FILE}: ${error?.message || String(error)}\n`,
-    );
-    return false;
-  }
-}
-```
-
-### AVOID: Adding preload event listeners without an unsubscribe strategy
-From `shell/preload.js`:
-
-```js
-onStatusUpdate: (callback) => {
-  ipcRenderer.on('update-status', (_event, message) => callback(message));
-},
-```
-
-If you add more event listeners, consider returning an unsubscribe function (or ensure the renderer calls it only once).
-
-### AVOID: Swallowing errors silently (unless intentionally non-blocking)
-From `shell/main.js`:
-
-```js
-try {
-  const raw = fsSync.readFileSync(BUILD_INFO_FILE, 'utf8');
-  const parsed = JSON.parse(raw);
-  const fromFile = normalizeGithubRepo(parsed?.githubRepo);
-  if (fromFile) return fromFile;
-} catch {
-  // ignore
-}
-```
-
-If the input is not optional, log and/or surface errors instead of ignoring them.
-
-### AVOID: Assuming app content is UTF-8 text when adding binaries
-From `.github/workflows/bundle-content.yml`:
-
-```js
-// Read file content as string (works for text files)
-files[relativePath] = fs.readFileSync(fullPath, 'utf8');
-```
-
-Do not add binary assets to `app/` unless bundling/extraction is updated accordingly.
+- Single quotes in `shell/*.js`
+- Double quotes + trailing commas in `forge.config.js` and `scripts/*.js`
+- ES modules with double quotes in `app/*.js` and component JS
+- Keep changes stylistically consistent within the file you touch
+- Avoid drive-by reformatting
 
 ---
 
 ## Git Workflow and CI
 
-### Branching and PRs
-No strict conventions are enforced in-repo (commit history mixes "Update ..." and `fix:`/`feat:`). Prefer:
-- Feature branches per change
-- PRs to main vendor repo with a clear testing section
+### CI Workflows
 
-### CI Workflows (GitHub Actions)
-- `Bundle Content` (`.github/workflows/bundle-content.yml`):
-  - On release: bundles `app/` into `content.json` and uploads to the release.
-  - On workflow_dispatch: bundles and uploads as a workflow artifact.
-- `Build Executables` (`.github/workflows/build.yml`):
-  - On release: builds executables only for MAJOR changes, otherwise reuses previous major's assets.
-  - On workflow_dispatch: always builds executables (intended for fork/dev testing) and uploads workflow artifacts.
-  - macOS signing secrets are optional in forks; the workflow builds unsigned when secrets are absent.
+- **Bundle Content** (`bundle-content.yml`): bundles `app/` into `content.json` on release
+- **Build Executables** (`build.yml`): builds platform installers on release or workflow_dispatch
 
-### Release Semantics (important)
-Follow `.specify/memory/constitution.md`:
-- MAJOR: changes that affect the packaged executable (typically `shell/`, `forge.config.js`, workflows)
-- MINOR/PATCH: content-only (`app/`) changes that do not require rebuilding the shell
+### Release Semantics
+
+Per `.specify/memory/constitution.md`:
+
+- **MAJOR**: changes affecting the packaged executable (shell, forge config, workflows)
+- **MINOR/PATCH**: content-only changes (app/) that don't require rebuilding the shell
 
 ---
 
 ## Troubleshooting
 
-### "No content available" / blank UI
-- The shell expects a GitHub Release with a `content.json` asset.
-- Verify the repo it is using:
-  - Look for "Using GitHub content repo: ..." in logs (main process)
-  - Override: `A0_LAUNCHER_GITHUB_REPO="owner/repo" npm start`
+### Blank UI / "No content available"
 
-### Offline mode behavior
-If GitHub API is unreachable, the shell will use cached content if present. If cache is missing, it will show an error.
+- Check which repo the shell is using: look for `Using GitHub content repo: ...` in logs
+- Override: `A0_LAUNCHER_GITHUB_REPO="owner/repo" npm start`
 
-### macOS build fails on a fresh machine
-- For dev/fork: use unsigned build: `SKIP_SIGNING=1 npm run make:mac`
-- For ephemeral macOS VMs: run `./scripts/bootstrap-macos.sh build` (from repo root)
-- For release-grade: you need signing and notarization secrets (see README and forge config)
+### `ERR_FILE_NOT_FOUND` in console
 
-### Linux build fails due to missing rpm tooling
-CI installs `rpm` on ubuntu before building. Local linux builds may need:
-- `sudo apt-get update && sudo apt-get install -y rpm`
+- The `a0app://` protocol strips leading slashes from pathnames. If component scripts use absolute paths like `/components/...`, they resolve correctly. If you see this error, check the path in the component HTML.
 
-### Cursor auto-generated rule mismatch
-`.cursor/rules/specify-rules.mdc` may contain auto-generated guidance (e.g., `src/`, `tests/`, `npm test`) that does not match the current repo. Prefer `package.json`, `README.md`, and `.specify/memory/constitution.md` as the source of truth.
+### `Cannot find package 'dockerode'`
+
+- Run `npm install` to ensure dependencies are installed in the working tree.
+
+### Docker not detected
+
+- Ensure Docker Desktop (or Docker Engine) is installed and the daemon is running
+- Check `shell/docker_adapter/DockerInterface.mjs` environment detection for diagnostic codes
+
+### Alpine content not rendering
+
+- Check CSP in `app/index.html` (needs `'unsafe-eval'` and `blob:`)
+- Check that `a0ui/js/initFw.js` loads successfully (browser devtools network tab)
+
+### Offline mode
+
+If GitHub API is unreachable, the shell uses cached content. If cache is missing, it shows an error.
+
+---
+
+## Current State and Next Steps
+
+### Completed
+
+- A0 UI Core extracted to `app/a0ui/` (vanilla Agent Zero v0.9.8)
+- Docker manager UI refactored into per-section component folders with co-located JS
+- Shared Alpine store (`docker-manager-store.js`)
+- `docker_manager.js` is a thin orchestrator (~225 lines)
+- Full rename: `service_versions` -> `docker_manager`, `docker` -> `docker_adapter`
+- IPC namespace: `docker-manager:*`
+- Volume management API (list, remove, prune) added to adapter + manager + IPC + UI
+- Docker Desktop auto-install (download + open) for Windows/macOS/Linux
+- Cache seeding workflow documented
+
+### Next steps
+
+- [ ] Extract `app/a0ui/` into a git submodule shared with Agent Zero main project
+- [ ] Implement richer Docker auto-install flow (monitor install completion, auto-retry detection)
+- [ ] Wire remaining Docker operations to UI (install, start/stop, update, activate, rollback)
+- [ ] Add progress visualization to status-header (download/extract bars)
+- [ ] Rename CSS class prefix from `sv-` to `dm-` for consistency
+- [ ] Add basic automated tests for shell Docker operations

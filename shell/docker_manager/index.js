@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const { app } = require('electron');
 
-const { getDocker } = require('../docker/getDocker');
+const { getDocker } = require('../docker_adapter/getDocker');
 const releasesClient = require('./releases_client');
 const stateStore = require('./state_store');
 const retention = require('./retention');
@@ -18,7 +18,7 @@ const GITHUB_REPO_ENV_VAR = 'A0_BACKEND_GITHUB_REPO';
 
 const CANONICAL_LOCAL_TAGS = Object.freeze(['local', 'development', 'main']);
 
-function logServiceVersionsError(op, error, details = {}) {
+function logDockerManagerError(op, error, details = {}) {
   const payload = { ...details };
   if (error && typeof error === 'object') {
     if (error.code) payload.code = String(error.code);
@@ -27,10 +27,10 @@ function logServiceVersionsError(op, error, details = {}) {
     if (error.cause && typeof error.cause === 'object') payload.cause = error.cause;
   }
   try {
-    console.error(`[service-versions] ${op} failed`, payload);
+    console.error(`[docker-manager] ${op} failed`, payload);
   } catch {
     try {
-      console.error(`[service-versions] ${op} failed`);
+      console.error(`[docker-manager] ${op} failed`);
     } catch {
       // ignore
     }
@@ -809,7 +809,7 @@ async function buildDerivedState(options = {}) {
   };
 }
 
-async function refreshServiceVersions(options = {}) {
+async function refreshDockerManager(options = {}) {
   const forceRefresh = !!options.forceRefresh;
   const state = await buildDerivedState({ forceRefresh });
   _cachedState = state;
@@ -817,9 +817,9 @@ async function refreshServiceVersions(options = {}) {
   return state;
 }
 
-async function getServiceVersionsState() {
+async function getDockerManagerState() {
   if (_cachedState) return _cachedState;
-  return await refreshServiceVersions({ forceRefresh: false });
+  return await refreshDockerManager({ forceRefresh: false });
 }
 
 function assertKeepCount(value) {
@@ -868,14 +868,14 @@ async function setRetentionPolicy(keepCount) {
   requireNoRunningOperation();
   const kc = assertKeepCount(keepCount);
   const policy = await stateStore.writeRetentionPolicy({ keepCount: kc });
-  await refreshServiceVersions({ forceRefresh: false });
+  await refreshDockerManager({ forceRefresh: false });
   return policy;
 }
 
 async function setPortPreferences(portPreferences) {
   requireNoRunningOperation();
   const prefs = await stateStore.writePortPreferences(portPreferences);
-  await refreshServiceVersions({ forceRefresh: false });
+  await refreshDockerManager({ forceRefresh: false });
   return prefs;
 }
 
@@ -1062,7 +1062,7 @@ async function installOrSync(tag) {
       finishOperation('failed', message);
     } finally {
       _abortControllers.delete(opId);
-      await refreshServiceVersions({ forceRefresh: false }).catch(() => {});
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
   })().catch(() => {});
 
@@ -1100,7 +1100,7 @@ async function stopActiveInstance() {
       const message = mapDockerInterfaceErrorToUiMessage(error) || 'Stop failed';
       finishOperation('failed', message);
     } finally {
-      await refreshServiceVersions({ forceRefresh: false }).catch(() => {});
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
   })().catch(() => {});
 
@@ -1157,7 +1157,7 @@ async function startActiveInstance() {
         'Start failed';
       finishOperation('failed', message);
     } finally {
-      await refreshServiceVersions({ forceRefresh: false }).catch(() => {});
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
   })().catch(() => {});
 
@@ -1203,7 +1203,7 @@ async function deleteRetainedInstance(containerId) {
         'Delete failed';
       finishOperation('failed', message);
     } finally {
-      await refreshServiceVersions({ forceRefresh: false }).catch(() => {});
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
   })().catch(() => {});
 
@@ -1337,7 +1337,7 @@ async function updateToLatest(dataLossAck) {
       finishOperation('completed', null);
       updateOperationProgress({ progress: 100, message: 'Completed' });
     } catch (error) {
-      logServiceVersionsError('updateToLatest', error, { opId });
+      logDockerManagerError('updateToLatest', error, { opId });
       // Best-effort rollback if a previous active was retained and new start failed.
       try {
         if (createdNew && createdNew.containerId) {
@@ -1367,10 +1367,10 @@ async function updateToLatest(dataLossAck) {
       finishOperation('failed', message);
     } finally {
       _abortControllers.delete(opId);
-      await refreshServiceVersions({ forceRefresh: false }).catch(() => {});
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
   })().catch((error) => {
-    logServiceVersionsError('updateToLatest.unhandled', error, { opId });
+    logDockerManagerError('updateToLatest.unhandled', error, { opId });
   });
 
   return { opId, ack };
@@ -1454,7 +1454,7 @@ async function activateRetainedInstance(containerId, dataLossAck) {
       finishOperation('completed', null);
       updateOperationProgress({ progress: 100, message: 'Completed' });
     } catch (error) {
-      logServiceVersionsError('activateRetainedInstance', error, { opId, containerId: id });
+      logDockerManagerError('activateRetainedInstance', error, { opId, containerId: id });
       // Best-effort revert: if we stopped/retained active, try to restore it.
       try {
         if (retainedFromActive && retainedFromActive.containerId) {
@@ -1473,10 +1473,10 @@ async function activateRetainedInstance(containerId, dataLossAck) {
         'Rollback failed';
       finishOperation('failed', message);
     } finally {
-      await refreshServiceVersions({ forceRefresh: false }).catch(() => {});
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
   })().catch((error) => {
-    logServiceVersionsError('activateRetainedInstance.unhandled', error, { opId, containerId: id });
+    logDockerManagerError('activateRetainedInstance.unhandled', error, { opId, containerId: id });
   });
 
   return { opId, ack };
@@ -1562,7 +1562,7 @@ async function activateVersion(tag, dataLossAck) {
       finishOperation('completed', null);
       updateOperationProgress({ progress: 100, message: 'Completed' });
     } catch (error) {
-      logServiceVersionsError('activateVersion', error, { opId, tag: t });
+      logDockerManagerError('activateVersion', error, { opId, tag: t });
       try {
         if (createdNew && createdNew.containerId) {
           await docker.deleteContainer(createdNew.containerId, { force: true });
@@ -1590,10 +1590,10 @@ async function activateVersion(tag, dataLossAck) {
         'Switch failed';
       finishOperation('failed', message);
     } finally {
-      await refreshServiceVersions({ forceRefresh: false }).catch(() => {});
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
   })().catch((error) => {
-    logServiceVersionsError('activateVersion.unhandled', error, { opId, tag: t });
+    logDockerManagerError('activateVersion.unhandled', error, { opId, tag: t });
   });
 
   return { opId, ack };
@@ -1629,6 +1629,55 @@ async function cancelOperation(opId) {
   return { canceled: true };
 }
 
+async function getDockerInventory() {
+  const imageRepo = getBackendImageRepo();
+  const docker = await getDocker({ imageRepo });
+  const env = await docker.getEnvironment();
+  if (!env?.dockerAvailable) {
+    return {
+      dockerAvailable: false,
+      environment: env || null,
+      images: [],
+      containers: [],
+      volumes: []
+    };
+  }
+
+  const [images, containers, volumes] = await Promise.all([
+    docker.listLocalImages(imageRepo),
+    docker.listContainers(imageRepo),
+    docker.listVolumes()
+  ]);
+
+  return {
+    dockerAvailable: true,
+    environment: env,
+    images: Array.isArray(images) ? images : [],
+    containers: Array.isArray(containers) ? containers : [],
+    volumes: Array.isArray(volumes) ? volumes : []
+  };
+}
+
+async function removeVolume(volumeName) {
+  const name = (volumeName || '').trim();
+  if (!name) {
+    const err = new Error('Invalid volumeName');
+    err.code = 'INVALID_VOLUME_NAME';
+    throw err;
+  }
+  const imageRepo = getBackendImageRepo();
+  const docker = await getDocker({ imageRepo });
+  await docker.removeVolume(name);
+  return { removed: true };
+}
+
+async function pruneVolumes() {
+  const imageRepo = getBackendImageRepo();
+  const docker = await getDocker({ imageRepo });
+  const result = await docker.pruneVolumes();
+  return result && typeof result === 'object' ? result : {};
+}
+
 module.exports = {
   // Config
   getBackendImageRepo,
@@ -1644,8 +1693,8 @@ module.exports = {
   assertTagAllowedForActivate,
 
   // State + events
-  getServiceVersionsState,
-  refreshServiceVersions,
+  getDockerManagerState,
+  refreshDockerManager,
   getCurrentOperation,
   events,
 
@@ -1660,6 +1709,9 @@ module.exports = {
   activateRetainedInstance,
   activateVersion,
   cancelOperation,
+  getDockerInventory,
+  removeVolume,
+  pruneVolumes,
 
   // Error helpers for IPC handlers
   toErrorResponse

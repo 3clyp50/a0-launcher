@@ -11,9 +11,9 @@ It provides:
 - pause/resume control (for UI backpressure patterns)
 
 Code:
-- `shell/docker/impl/DockerodeLogProcessor.mjs` (core stream processing)
-- `shell/docker/impl/DockerodeDocker.mjs` (implements the interface methods)
-- `shell/docker/DockerInterface.mjs` (declares the interface)
+- `shell/docker_adapter/impl/DockerodeLogProcessor.mjs` (core stream processing)
+- `shell/docker_adapter/impl/DockerodeDocker.mjs` (implements the interface methods)
+- `shell/docker_adapter/DockerInterface.mjs` (declares the interface)
 
 ## Concepts
 

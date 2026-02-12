@@ -1,0 +1,31 @@
+<body>
+  <section class="section sv-card sv-header">
+    <div class="sv-title-row">
+      <div class="sv-brand">
+        <img id="headerLogo" class="header-logo hidden" alt="">
+        <div>
+          <h1 class="section-title sv-title">Agent Zero</h1>
+          <div class="sv-meta">
+            <span id="contentVersion" class="sv-meta-item"></span>
+            <span id="appVersion" class="sv-meta-item"></span>
+          </div>
+        </div>
+      </div>
+      <div class="sv-actions">
+        <button id="openUiBtn" class="button" type="button" disabled>Open UI</button>
+        <button id="homepageBtn" class="button" type="button">Homepage</button>
+        <button id="refreshBtn" class="button confirm" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div id="banner" class="sv-banner hidden"></div>
+  </section>
+
+  <section id="progressPanel" class="section sv-card hidden">
+    <h2 class="section-title sv-section-heading">Progress</h2>
+    <div id="progressTitle" class="sv-progress-title"></div>
+    <div id="progressMessage" class="sv-progress-message"></div>
+  </section>
+
+  <script type="module" src="components/docker-manager/status-header/status-header.js"></script>
+</body>

@@ -6,9 +6,6 @@ import { registerAlpineMagic } from "./confirmClick.js";
 // initialize required elements
 await initializer.initialize();
 
-// (Optional but useful) Register collapse plugin before Alpine starts
-await import("../vendor/alpine/alpine.collapse.min.js");
-
 // import alpine library
 await import("../vendor/alpine/alpine.min.js");
 

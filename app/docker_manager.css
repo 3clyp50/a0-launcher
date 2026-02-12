@@ -1,0 +1,391 @@
+/* Launcher-specific service manager styling based on A0 tokens. */
+
+.sv-page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2.5rem;
+}
+
+.sv-main {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.sv-card {
+  margin-bottom: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+  background: var(--color-panel);
+  padding: 0.85rem;
+}
+
+.sv-header .section-title {
+  margin-bottom: 0.2rem;
+}
+
+.sv-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.sv-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.header-logo {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.4rem;
+}
+
+.sv-title {
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin: 0;
+}
+
+.sv-meta {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.sv-meta-item {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.sv-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.sv-ports {
+  margin-top: 0.65rem;
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.sv-inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.sv-input,
+.sv-select {
+  border: 1px solid var(--color-border);
+  background: var(--color-input);
+  color: var(--color-text);
+  border-radius: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+.sv-select {
+  min-width: 4.2rem;
+}
+
+.sv-input:focus,
+.sv-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.sv-banner {
+  margin-top: 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.sv-banner.info {
+  border-color: var(--color-highlight);
+  color: var(--color-text);
+}
+
+.sv-banner.error {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.sv-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.sv-card-head-row {
+  align-items: center;
+}
+
+.sv-section-heading {
+  margin: 0;
+  padding: 0;
+  border-bottom: 0;
+  font-size: 1.05rem;
+}
+
+.sv-subtitle {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.sv-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.sv-list-scroll {
+  max-height: min(24rem, 48vh);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.sv-list-scroll-compact {
+  max-height: min(16rem, 35vh);
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.65rem;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-message-bg);
+  padding: 0.6rem;
+}
+
+.item-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 500;
+}
+
+.item-meta {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin-top: 0.1rem;
+}
+
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.action-buttons {
+  display: inline-flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.button-small,
+.btn-small,
+.action-buttons .button,
+.item-actions .button,
+.item-actions .btn {
+  min-height: 1.7rem;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.75rem;
+}
+
+.btn {
+  background: var(--color-panel);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  transform: scale(1.03);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--color-highlight);
+  color: #fff;
+}
+
+.btn-danger {
+  color: var(--color-accent);
+}
+
+.badge {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.badge-latest {
+  color: var(--color-highlight);
+  border-color: var(--color-highlight);
+}
+
+.badge-testing {
+  color: var(--color-warning-text);
+  border-color: var(--color-warning-text);
+}
+
+.badge-canonical {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.status {
+  font-size: 0.72rem;
+  font-weight: 500;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+}
+
+.status-active,
+.status-installed {
+  color: #7ddc8f;
+  border-color: #7ddc8f;
+}
+
+.status-update,
+.status-available {
+  color: var(--color-highlight);
+  border-color: var(--color-highlight);
+}
+
+.status-unavailable {
+  color: var(--color-text-muted);
+}
+
+.sv-progress-title {
+  color: var(--color-text-muted);
+  margin: 0.2rem 0 0.4rem;
+}
+
+.sv-progress-block {
+  margin-bottom: 0.4rem;
+}
+
+.sv-progress-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.sv-progress-track {
+  height: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.sv-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--color-highlight);
+  transition: width 0.2s ease;
+}
+
+.sv-progress-fill.indeterminate {
+  animation: sv-indeterminate 1.4s ease infinite;
+}
+
+.sv-progress-message {
+  min-height: 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.sv-row-end {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sv-storage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.55rem;
+}
+
+.sv-storage-item {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-message-bg);
+  padding: 0.55rem;
+}
+
+.sv-storage-label {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.sv-storage-value {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.sv-help summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.sv-help-body {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.sv-onboarding-message {
+  color: var(--color-text-muted);
+  margin: 0.25rem 0 0.55rem;
+}
+
+.is-hiding {
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+@keyframes sv-indeterminate {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+@media (max-width: 840px) {
+  .item {
+    grid-template-columns: 1fr;
+  }
+
+  .item-actions {
+    justify-content: flex-start;
+  }
+}

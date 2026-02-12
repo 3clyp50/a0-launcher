@@ -275,6 +275,31 @@ export class DockerInterface {
   }
 
   /**
+   * List Docker volumes.
+   * @returns {Promise<Object[]>}
+   */
+  async listVolumes() {
+    throw new Error('DockerInterface.listVolumes is abstract');
+  }
+
+  /**
+   * Remove a Docker volume by name.
+   * @param {string} _volumeName
+   * @returns {Promise<void>}
+   */
+  async removeVolume(_volumeName) {
+    throw new Error('DockerInterface.removeVolume is abstract');
+  }
+
+  /**
+   * Prune dangling Docker volumes.
+   * @returns {Promise<Object>}
+   */
+  async pruneVolumes() {
+    throw new Error('DockerInterface.pruneVolumes is abstract');
+  }
+
+  /**
    * Create a container from parameters (DI-012).
    * @param {Object} createOptions
    * @returns {Promise<{containerId: string}>}

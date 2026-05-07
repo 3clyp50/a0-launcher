@@ -26,7 +26,16 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   deleteRetainedInstance: (containerId) =>
     ipcRenderer.invoke('docker-manager:deleteRetainedInstance', { containerId }),
   updateToLatest: (dataLossAck) => ipcRenderer.invoke('docker-manager:updateToLatest', { dataLossAck }),
-  activateVersion: (tag, dataLossAck) => ipcRenderer.invoke('docker-manager:activate', { tag, dataLossAck }),
+  activateTag: (tag, dataLossAck, options) => {
+    const opts = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:activate', {
+      tag,
+      dataLossAck,
+      instanceName: typeof opts.instanceName === 'string' ? opts.instanceName : '',
+      portMappings: typeof opts.portMappings === 'string' ? opts.portMappings : '',
+      envText: typeof opts.envText === 'string' ? opts.envText : ''
+    });
+  },
   activateRetainedInstance: (containerId, dataLossAck) =>
     ipcRenderer.invoke('docker-manager:activateRetainedInstance', { containerId, dataLossAck }),
   cancel: (opId) => ipcRenderer.invoke('docker-manager:cancel', { opId }),
@@ -35,7 +44,9 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   pruneVolumes: () => ipcRenderer.invoke('docker-manager:pruneVolumes'),
   installDocker: () => ipcRenderer.invoke('docker-manager:installDocker'),
   openUi: () => ipcRenderer.invoke('docker-manager:openUi'),
+  openContainerUi: (containerId) => ipcRenderer.invoke('docker-manager:openContainerUi', { containerId }),
   openHomepage: () => ipcRenderer.invoke('docker-manager:openHomepage'),
+  openCliTerminal: (host) => ipcRenderer.invoke('docker-manager:openCliTerminal', { host }),
   onStateChange: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, state) => callback(state);

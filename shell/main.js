@@ -3,6 +3,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
+const childProcess = require('node:child_process');
 const dockerManager = require('./docker_manager');
 
 // Handle Squirrel.Windows startup events
@@ -523,6 +524,65 @@ function isAllowedLocalUrl(value) {
   }
 }
 
+function shellSingleQuote(value) {
+  return `'${String(value || '').replace(/'/g, `'\\''`)}'`;
+}
+
+function findA0CliBinary() {
+  const local = '/home/eclypso/a0/a0-connector/.venv/bin/a0';
+  if (fsSync.existsSync(local)) return local;
+  return 'a0';
+}
+
+function openA0CliTerminal(host) {
+  const h = String(host || '').trim();
+  if (!isAllowedLocalUrl(h)) {
+    const err = new Error('Start an instance before opening the A0 CLI terminal.');
+    err.code = 'UI_UNAVAILABLE';
+    throw err;
+  }
+
+  const cli = findA0CliBinary();
+  const command = `AGENT_ZERO_HOST=${shellSingleQuote(h)} ${shellSingleQuote(cli)} --host ${shellSingleQuote(h)}; exec bash`;
+
+  if (process.platform === 'linux') {
+    const candidates = [
+      ['x-terminal-emulator', ['-e', 'bash', '-lc', command]],
+      ['gnome-terminal', ['--', 'bash', '-lc', command]],
+      ['konsole', ['-e', 'bash', '-lc', command]],
+      ['xfce4-terminal', ['-e', `bash -lc ${shellSingleQuote(command)}`]],
+      ['xterm', ['-e', 'bash', '-lc', command]]
+    ];
+
+    let lastError = null;
+    for (const [cmd, args] of candidates) {
+      try {
+        const found = childProcess.spawnSync('bash', ['-lc', `command -v ${shellSingleQuote(cmd)}`], {
+          encoding: 'utf8'
+        });
+        if (found.status !== 0) continue;
+        const child = childProcess.spawn(cmd, args, {
+          detached: true,
+          stdio: 'ignore',
+          env: { ...process.env, AGENT_ZERO_HOST: h }
+        });
+        child.unref();
+        return { opened: true, command: cmd };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    const err = new Error(lastError?.message || 'No terminal emulator was found.');
+    err.code = 'TERMINAL_UNAVAILABLE';
+    throw err;
+  }
+
+  const err = new Error('Opening the A0 CLI terminal is currently configured for Linux.');
+  err.code = 'TERMINAL_UNAVAILABLE';
+  throw err;
+}
+
 function getDockerDesktopInstallerConfig() {
   if (process.platform === 'win32') {
     return {
@@ -734,7 +794,7 @@ function sanitizeDockerManagerProgress(progress) {
   if (typeof progress.status === 'string') out.status = progress.status;
   if (typeof progress.startedAt === 'string') out.startedAt = progress.startedAt;
   if (typeof progress.finishedAt === 'string') out.finishedAt = progress.finishedAt;
-  if (typeof progress.targetVersionTag === 'string') out.targetVersionTag = progress.targetVersionTag;
+  if (typeof progress.targetTag === 'string') out.targetTag = progress.targetTag;
 
   if (Number.isFinite(Number(progress.progress))) out.progress = Number(progress.progress);
   if (Number.isFinite(Number(progress.downloadProgress))) out.downloadProgress = Number(progress.downloadProgress);
@@ -880,7 +940,12 @@ ipcMain.handle('docker-manager:activate', async (_event, body) => {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     const tag = typeof body.tag === 'string' ? body.tag : '';
     const dataLossAck = typeof body.dataLossAck === 'string' ? body.dataLossAck : '';
-    const accepted = await dockerManager.activateVersion(tag, dataLossAck);
+    const options = {
+      instanceName: typeof body.instanceName === 'string' ? body.instanceName : '',
+      portMappings: typeof body.portMappings === 'string' ? body.portMappings : '',
+      envText: typeof body.envText === 'string' ? body.envText : ''
+    };
+    const accepted = await dockerManager.activateTag(tag, dataLossAck, options);
     if (!accepted || typeof accepted.opId !== 'string') {
       return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Activate did not return an opId' });
     }
@@ -962,7 +1027,56 @@ ipcMain.handle('docker-manager:openUi', async () => {
     if (!isAllowedLocalUrl(url)) {
       return dockerManager.toErrorResponse({ code: 'UI_UNAVAILABLE', message: 'Agent Zero UI URL is not available.' });
     }
-    await shell.openExternal(url);
+
+    // Open the A0 UI inside a new Electron window (not the system browser).
+    const iconPath = path.join(__dirname, 'assets',
+      process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+    );
+    const uiWindow = new BrowserWindow({
+      width: 1280,
+      height: 900,
+      title: 'Agent Zero',
+      icon: iconPath,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+      }
+    });
+    uiWindow.loadURL(url);
+    return { opened: true };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:openContainerUi', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const url = await dockerManager.getContainerUiUrl(containerId);
+    if (!url) {
+      return dockerManager.toErrorResponse({ code: 'UI_UNAVAILABLE', message: 'Agent Zero UI is not reachable for this instance yet.' });
+    }
+    if (!isAllowedLocalUrl(url)) {
+      return dockerManager.toErrorResponse({ code: 'UI_UNAVAILABLE', message: 'Agent Zero UI URL is not available.' });
+    }
+
+    const iconPath = path.join(__dirname, 'assets',
+      process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+    );
+    const uiWindow = new BrowserWindow({
+      width: 1280,
+      height: 900,
+      title: 'Agent Zero',
+      icon: iconPath,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+      }
+    });
+    uiWindow.loadURL(url);
     return { opened: true };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
@@ -971,8 +1085,18 @@ ipcMain.handle('docker-manager:openUi', async () => {
 
 ipcMain.handle('docker-manager:openHomepage', async () => {
   try {
-    await shell.openExternal('https://agent-zero.ai/');
+    await shell.openExternal('https://www.agent-zero.ai/p/community/api-dashboard/');
     return { opened: true };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:openCliTerminal', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const host = typeof body.host === 'string' ? body.host : '';
+    return openA0CliTerminal(host);
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

@@ -572,13 +572,30 @@ export class DockerodeDocker extends DockerInterface {
 
         const names = Array.isArray(c?.Names) ? c.Names : [];
         const name = typeof names[0] === 'string' ? names[0].replace(/^\//, '') : null;
+        const labels = c?.Labels && typeof c.Labels === 'object' ? c.Labels : {};
+        const ports = Array.isArray(c?.Ports) ? c.Ports : [];
+        const uiPort = ports.find((p) =>
+          Number(p?.PrivatePort) === 80 &&
+          Number.isFinite(Number(p?.PublicPort)) &&
+          Number(p.PublicPort) > 0
+        );
         results.push({
           containerId: c?.Id || null,
           containerName: name,
+          instanceName: typeof labels['a0.launcher.instanceName'] === 'string' ? labels['a0.launcher.instanceName'] : null,
           imageRef: image,
           tag: image.slice(repo.length + 1),
           state: c?.State || null,
-          status: c?.Status || null
+          status: c?.Status || null,
+          createdAt: Number.isFinite(Number(c?.Created)) ? Number(c.Created) * 1000 : null,
+          labels,
+          ports: ports.map((p) => ({
+            privatePort: Number.isFinite(Number(p?.PrivatePort)) ? Number(p.PrivatePort) : null,
+            publicPort: Number.isFinite(Number(p?.PublicPort)) ? Number(p.PublicPort) : null,
+            type: typeof p?.Type === 'string' ? p.Type : null,
+            ip: typeof p?.IP === 'string' ? p.IP : null
+          })),
+          uiUrl: uiPort ? `http://127.0.0.1:${Number(uiPort.PublicPort)}/` : null
         });
       }
 

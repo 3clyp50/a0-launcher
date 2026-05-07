@@ -9,9 +9,14 @@ export const dockerManagerStore = createStore("dockerManager", {
   error: "",
   environment: null,
   images: [],
+  versions: [],
   containers: [],
   volumes: [],
+  retainedInstances: [],
+  storage: null,
   progress: null,
+  portPreferences: null,
+  retentionPolicy: null,
   setBanner(type, message) {
     this.banner = { type: type || "", message: message || "" };
   }

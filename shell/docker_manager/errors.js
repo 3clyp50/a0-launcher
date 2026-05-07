@@ -41,6 +41,10 @@ function mapDockerInterfaceErrorToUiMessage(error) {
       return 'Invalid retention setting.';
     case 'INVALID_PORT_PREFERENCES':
       return 'Invalid port settings. Use three different ports (1-65535).';
+    case 'INVALID_PORT_MAPPINGS':
+      return 'Invalid port mapping. Use host:container, for example 3000:80, or 0:80 to let Docker choose a local port.';
+    case 'INVALID_ENV_VARS':
+      return 'Invalid environment variables. Use KEY=value lines.';
     case 'INVALID_DATA_LOSS_ACK':
       return 'Please confirm the warning to continue.';
     case 'NOT_INSTALLED':
@@ -52,7 +56,7 @@ function mapDockerInterfaceErrorToUiMessage(error) {
     case 'CANNOT_DELETE_ACTIVE':
       return 'You cannot delete the active instance.';
     case 'NO_RELEASES':
-      return 'No official versions are available right now.';
+      return 'No official releases are available right now.';
     case 'NO_ACTIVE_INSTANCE':
       return 'No active instance is available.';
     case 'CREATE_FAILED':

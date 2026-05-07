@@ -403,7 +403,7 @@ function requireNoRunningOperation() {
   }
 }
 
-function beginOperation(type, targetVersionTag) {
+function beginOperation(type, targetTag) {
   requireNoRunningOperation();
   const opId = `op_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
   _currentOperation = {
@@ -412,7 +412,7 @@ function beginOperation(type, targetVersionTag) {
     status: 'running',
     startedAt: nowIso(),
     finishedAt: null,
-    targetVersionTag: targetVersionTag || null,
+    targetTag: targetTag || null,
     progress: null,
     downloadProgress: null,
     extractProgress: null,
@@ -471,7 +471,7 @@ async function buildDerivedState(options = {}) {
   const offline = !!releasesResult?.offline;
   const lastSyncedAt = releasesResult?.lastSyncedAt || null;
 
-  // Trim dead official versions: allow gaps, but once we see 2 missing in a row,
+  // Trim dead official releases: allow gaps, but once we see 2 missing in a row,
   // assume we've reached the tail where older tags are no longer available on Docker Hub.
   const remoteTagList = Array.isArray(remoteTags) ? remoteTags : [];
   const remoteTagSet = remoteTagList.length ? new Set(remoteTagList) : null;
@@ -616,7 +616,7 @@ async function buildDerivedState(options = {}) {
     await stateStore.writeInstallabilityCache({ ...cache, entries, updatedAt: nowIso() });
   }
 
-  const versions = [];
+  const releaseEntries = [];
 
   // First-class preview/testing entry (not derived from GitHub Releases).
   {
@@ -629,7 +629,7 @@ async function buildDerivedState(options = {}) {
     const differsFromPublished = !!(localDigest && publishedDigest && localDigest !== publishedDigest);
     const matchHint = differsFromPublished ? 'Differs from published preview' : null;
     const digestHint = differsFromPublished ? buildDigestHint(publishedDigest, localDigest) : null;
-    versions.push({
+    releaseEntries.push({
       id: tag,
       displayVersion: 'Testing',
       channelBadges: ['testing'],
@@ -669,7 +669,7 @@ async function buildDerivedState(options = {}) {
     const badges = [];
     if (latestReleaseTag && tag === latestReleaseTag) badges.push('latest');
 
-    versions.push({
+    releaseEntries.push({
       id: tag,
       displayVersion: tag.startsWith('v') ? tag.slice(1) : tag,
       channelBadges: badges.length ? badges : undefined,
@@ -758,7 +758,7 @@ async function buildDerivedState(options = {}) {
       }
     }
 
-    versions.push({
+    releaseEntries.push({
       id: tag,
       displayVersion: tag,
       category: 'local_build',
@@ -781,9 +781,9 @@ async function buildDerivedState(options = {}) {
   }
 
   // If an operation is running, reflect it on the target row as "installing".
-  if (_currentOperation && _currentOperation.status === 'running' && _currentOperation.targetVersionTag) {
-    const target = _currentOperation.targetVersionTag;
-    for (const v of versions) {
+  if (_currentOperation && _currentOperation.status === 'running' && _currentOperation.targetTag) {
+    const target = _currentOperation.targetTag;
+    for (const v of releaseEntries) {
       if (v.id === target) {
         v.availability = 'installing';
       }
@@ -798,7 +798,7 @@ async function buildDerivedState(options = {}) {
   };
 
   return {
-    versions,
+    versions: releaseEntries,
     retainedInstances,
     retentionPolicy,
     portPreferences,
@@ -858,6 +858,124 @@ function assertDataLossAck(value) {
   return v;
 }
 
+function sanitizeInstanceName(value, fallback = 'agent-zero') {
+  const v = (value || '').trim();
+  const cleaned = v
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/[^A-Za-z0-9_.-]+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '')
+    .slice(0, 64);
+  return cleaned || fallback;
+}
+
+function parsePortMappings(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  const source = raw || '0:80';
+  const tokens = source
+    .split(/[\s,]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  if (!tokens.length) tokens.push('0:80');
+  if (tokens.length > 12) {
+    const err = new Error('Too many port mappings');
+    err.code = 'INVALID_PORT_MAPPINGS';
+    throw err;
+  }
+
+  const mappings = [];
+  const seen = new Set();
+
+  for (const token of tokens) {
+    const parts = token.split(':');
+    if (parts.length !== 2) {
+      const err = new Error(`Invalid port mapping: ${token}`);
+      err.code = 'INVALID_PORT_MAPPINGS';
+      throw err;
+    }
+
+    const hostPort = Number(parts[0]);
+    const containerPart = String(parts[1] || '').replace(/\/tcp$/i, '');
+    const containerPort = Number(containerPart);
+
+    if (!Number.isInteger(hostPort) || hostPort < 0 || hostPort > 65535) {
+      const err = new Error(`Invalid host port in mapping: ${token}`);
+      err.code = 'INVALID_PORT_MAPPINGS';
+      throw err;
+    }
+    if (!Number.isInteger(containerPort) || containerPort <= 0 || containerPort > 65535) {
+      const err = new Error(`Invalid container port in mapping: ${token}`);
+      err.code = 'INVALID_PORT_MAPPINGS';
+      throw err;
+    }
+
+    const key = `${containerPort}/tcp`;
+    if (seen.has(key)) {
+      const err = new Error(`Duplicate container port mapping: ${containerPort}`);
+      err.code = 'INVALID_PORT_MAPPINGS';
+      throw err;
+    }
+    seen.add(key);
+    mappings.push({ hostPort, containerPort, key });
+  }
+
+  return mappings;
+}
+
+function parseEnvText(value) {
+  const raw = typeof value === 'string' ? value : '';
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 80) {
+    const err = new Error('Too many environment variables');
+    err.code = 'INVALID_ENV_VARS';
+    throw err;
+  }
+
+  const env = [];
+  const seen = new Set();
+  for (const line of lines) {
+    if (line.startsWith('#')) continue;
+    const idx = line.indexOf('=');
+    if (idx <= 0) {
+      const err = new Error(`Invalid environment variable: ${line}`);
+      err.code = 'INVALID_ENV_VARS';
+      throw err;
+    }
+    const key = line.slice(0, idx).trim();
+    const val = line.slice(idx + 1);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      const err = new Error(`Invalid environment variable name: ${key}`);
+      err.code = 'INVALID_ENV_VARS';
+      throw err;
+    }
+    if (seen.has(key)) {
+      const err = new Error(`Duplicate environment variable: ${key}`);
+      err.code = 'INVALID_ENV_VARS';
+      throw err;
+    }
+    if (line.length > 4096) {
+      const err = new Error(`Environment variable is too long: ${key}`);
+      err.code = 'INVALID_ENV_VARS';
+      throw err;
+    }
+    seen.add(key);
+    env.push(`${key}=${val}`);
+  }
+  return env;
+}
+
+function normalizeActivationOptions(options = {}, tag = '') {
+  const raw = options && typeof options === 'object' ? options : {};
+  const fallbackName = sanitizeInstanceName(`agent-zero-${tag || 'instance'}`);
+  const hasPortMappings = typeof raw.portMappings === 'string' && raw.portMappings.trim();
+  return {
+    instanceName: sanitizeInstanceName(raw.instanceName, fallbackName),
+    portMappings: hasPortMappings ? parsePortMappings(raw.portMappings) : null,
+    env: parseEnvText(raw.envText)
+  };
+}
+
 function effectiveRetentionCount(policy) {
   const keepCount = Number.isFinite(Number(policy?.keepCount)) ? Number(policy.keepCount) : 1;
   // Safety baseline: keep at least one previous instance for rollback.
@@ -879,7 +997,7 @@ async function setPortPreferences(portPreferences) {
   return prefs;
 }
 
-async function createAndStartActiveContainer(docker, imageRepo, tag, portPreferences) {
+async function createAndStartActiveContainer(docker, imageRepo, tag, portPreferences, activationOptions = null) {
   const activeName = retention.getActiveContainerName(imageRepo);
   const imageRef = imageRefForTag(imageRepo, tag);
 
@@ -898,15 +1016,23 @@ async function createAndStartActiveContainer(docker, imageRepo, tag, portPrefere
   const hostPortUi = toPort(prefs?.ui, 8880);
   const hostPortSsh = toPort(prefs?.ssh, 55022);
 
-  const exposedPorts = {
-    '80/tcp': {},
-    '22/tcp': {}
-  };
+  const mappings = Array.isArray(activationOptions?.portMappings) && activationOptions.portMappings.length
+    ? activationOptions.portMappings
+    : [
+        { hostPort: hostPortUi, containerPort: 80, key: '80/tcp' },
+        { hostPort: hostPortSsh, containerPort: 22, key: '22/tcp' }
+      ];
 
-  const portBindings = {
-    '80/tcp': [{ HostIp: '127.0.0.1', HostPort: String(hostPortUi) }],
-    '22/tcp': [{ HostIp: '127.0.0.1', HostPort: String(hostPortSsh) }]
-  };
+  const exposedPorts = {};
+  const portBindings = {};
+  for (const mapping of mappings) {
+    const key = mapping.key || `${mapping.containerPort}/tcp`;
+    exposedPorts[key] = {};
+    portBindings[key] = [{ HostIp: '127.0.0.1', HostPort: String(mapping.hostPort) }];
+  }
+
+  const instanceName = sanitizeInstanceName(activationOptions?.instanceName, sanitizeInstanceName(`agent-zero-${tag}`));
+  const portMapLabel = mappings.map((m) => `${m.hostPort}:${m.containerPort}`).join(',');
 
   const createOptions = {
     name: activeName,
@@ -916,13 +1042,19 @@ async function createAndStartActiveContainer(docker, imageRepo, tag, portPrefere
       'a0.launcher.managed': 'true',
       'a0.launcher.role': 'active',
       'a0.launcher.versionTag': tag,
-      'a0.launcher.port.ui': String(hostPortUi),
-      'a0.launcher.port.ssh': String(hostPortSsh)
+      'a0.launcher.instanceName': instanceName,
+      'a0.launcher.port.map': portMapLabel,
+      'a0.launcher.port.ui': String(mappings.find((m) => Number(m.containerPort) === 80)?.hostPort ?? hostPortUi),
+      'a0.launcher.port.ssh': String(mappings.find((m) => Number(m.containerPort) === 22)?.hostPort ?? '')
     },
     HostConfig: {
       PortBindings: portBindings
     }
   };
+
+  if (Array.isArray(activationOptions?.env) && activationOptions.env.length) {
+    createOptions.Env = activationOptions.env;
+  }
 
   const created = await docker.createContainer(createOptions);
   const containerId = created?.containerId;
@@ -1240,12 +1372,12 @@ async function updateToLatest(dataLossAck) {
       const releases = Array.isArray(releasesResult?.releases) ? releasesResult.releases : [];
       const latest = releases.length ? releases[0].tag : '';
       if (!latest) {
-        const err = new Error('No official versions available');
+        const err = new Error('No official releases available');
         err.code = 'NO_RELEASES';
         throw err;
       }
 
-      _currentOperation = { ..._currentOperation, targetVersionTag: latest };
+      _currentOperation = { ..._currentOperation, targetTag: latest };
       events.emit('progress', { ..._currentOperation });
 
       // Verify installability before any destructive step.
@@ -1408,7 +1540,7 @@ async function activateRetainedInstance(containerId, dataLossAck) {
         throw err;
       }
 
-      _currentOperation = { ..._currentOperation, targetVersionTag: target.tag || null };
+      _currentOperation = { ..._currentOperation, targetTag: target.tag || null };
       events.emit('progress', { ..._currentOperation });
 
       if (active && active.containerId) {
@@ -1482,10 +1614,11 @@ async function activateRetainedInstance(containerId, dataLossAck) {
   return { opId, ack };
 }
 
-async function activateVersion(tag, dataLossAck) {
+async function activateTag(tag, dataLossAck, options = {}) {
   const imageRepo = getBackendImageRepo();
   const t = assertTagAllowedForActivate(tag);
   const ack = assertDataLossAck(dataLossAck);
+  const activationOptions = normalizeActivationOptions(options, t);
 
   requireNoRunningOperation();
   const opId = beginOperation('activate', t);
@@ -1537,7 +1670,7 @@ async function activateVersion(tag, dataLossAck) {
       }
 
       updateOperationProgress({ message: 'Starting selected version', progress: null });
-      createdNew = await createAndStartActiveContainer(docker, imageRepo, t, portPreferences);
+      createdNew = await createAndStartActiveContainer(docker, imageRepo, t, portPreferences, activationOptions);
 
       updateOperationProgress({ message: 'Starting selected version (waiting for UI)', progress: null });
       if (createdNew && createdNew.containerId) {
@@ -1562,7 +1695,7 @@ async function activateVersion(tag, dataLossAck) {
       finishOperation('completed', null);
       updateOperationProgress({ progress: 100, message: 'Completed' });
     } catch (error) {
-      logDockerManagerError('activateVersion', error, { opId, tag: t });
+      logDockerManagerError('activateTag', error, { opId, tag: t });
       try {
         if (createdNew && createdNew.containerId) {
           await docker.deleteContainer(createdNew.containerId, { force: true });
@@ -1593,7 +1726,7 @@ async function activateVersion(tag, dataLossAck) {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
   })().catch((error) => {
-    logDockerManagerError('activateVersion.unhandled', error, { opId, tag: t });
+    logDockerManagerError('activateTag.unhandled', error, { opId, tag: t });
   });
 
   return { opId, ack };
@@ -1633,28 +1766,36 @@ async function getDockerInventory() {
   const imageRepo = getBackendImageRepo();
   const docker = await getDocker({ imageRepo });
   const env = await docker.getEnvironment();
-  if (!env?.dockerAvailable) {
-    return {
-      dockerAvailable: false,
-      environment: env || null,
-      images: [],
-      containers: [],
-      volumes: []
-    };
+
+  // Even when the ping-based env detection reports unavailable, attempt listing
+  // so that Docker setups where ping fails but operations work are not blocked.
+  let images = [];
+  let containers = [];
+  let volumes = [];
+  let listingSucceeded = false;
+
+  try {
+    const results = await Promise.all([
+      docker.listLocalImages(imageRepo),
+      docker.listContainers(imageRepo),
+      docker.listVolumes()
+    ]);
+    images = Array.isArray(results[0]) ? results[0] : [];
+    containers = Array.isArray(results[1]) ? results[1] : [];
+    volumes = Array.isArray(results[2]) ? results[2] : [];
+    listingSucceeded = images.length > 0 || containers.length > 0 || volumes.length > 0;
+  } catch {
+    // Listing failed - Docker is genuinely unavailable.
   }
 
-  const [images, containers, volumes] = await Promise.all([
-    docker.listLocalImages(imageRepo),
-    docker.listContainers(imageRepo),
-    docker.listVolumes()
-  ]);
+  const dockerAvailable = !!(env?.dockerAvailable || listingSucceeded);
 
   return {
-    dockerAvailable: true,
-    environment: env,
-    images: Array.isArray(images) ? images : [],
-    containers: Array.isArray(containers) ? containers : [],
-    volumes: Array.isArray(volumes) ? volumes : []
+    dockerAvailable,
+    environment: env || null,
+    images,
+    containers,
+    volumes
   };
 }
 
@@ -1676,6 +1817,21 @@ async function pruneVolumes() {
   const docker = await getDocker({ imageRepo });
   const result = await docker.pruneVolumes();
   return result && typeof result === 'object' ? result : {};
+}
+
+async function getContainerUiUrl(containerId) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+  const docker = await getDocker({ imageRepo });
+  const inspect = await docker.inspectContainer(id);
+  const candidate = bestEffortUiUrlFromInspect(inspect);
+  if (!candidate) return null;
+
+  const hp = parseHostPortFromLocalUrl(candidate);
+  if (!hp) return null;
+
+  const ok = await isHttpPortReachable(hp.host, hp.port, 500);
+  return ok ? candidate : null;
 }
 
 module.exports = {
@@ -1707,11 +1863,12 @@ module.exports = {
   deleteRetainedInstance,
   updateToLatest,
   activateRetainedInstance,
-  activateVersion,
+  activateTag,
   cancelOperation,
   getDockerInventory,
   removeVolume,
   pruneVolumes,
+  getContainerUiUrl,
 
   // Error helpers for IPC handlers
   toErrorResponse

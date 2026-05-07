@@ -4,7 +4,10 @@ function render(state) {
   const images = byId("storageUsed");
   const containers = byId("storageFree");
   const volumes = byId("storageEstimate");
-  if (images) images.textContent = String((state?.images || []).length || 0);
+  const installs = Array.isArray(state?.versions) && state.versions.length
+    ? state.versions.filter((v) => v?.availability && v.availability !== "available").length
+    : (state?.images || []).length || 0;
+  if (images) images.textContent = String(installs);
   if (containers) containers.textContent = String((state?.containers || []).length || 0);
   if (volumes) volumes.textContent = String((state?.volumes || []).length || 0);
 }

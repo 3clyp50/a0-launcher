@@ -28,17 +28,33 @@
 </head>
 
 <body class="dark-mode device-pointer" x-data>
-  <div class="sv-page">
-    <x-component path="components/docker-manager/status-header/index.html"></x-component>
-    <x-component path="components/docker-manager/onboarding/index.html"></x-component>
-    <main class="sv-main">
-      <x-component path="components/docker-manager/official-versions/index.html"></x-component>
-      <x-component path="components/docker-manager/local-testing/index.html"></x-component>
-      <x-component path="components/docker-manager/retained-instances/index.html"></x-component>
-      <x-component path="components/docker-manager/storage-summary/index.html"></x-component>
-      <x-component path="components/docker-manager/help/index.html"></x-component>
-    </main>
+  <div class="dm-page">
+    <div class="dm-header">
+      <x-component path="components/docker-manager/status-header/index.html"></x-component>
+      <x-component path="components/docker-manager/onboarding/index.html"></x-component>
+    </div>
+    <div class="dm-layout">
+      <x-component path="components/docker-manager/sidebar/index.html"></x-component>
+      <main class="dm-main">
+        <div class="dm-tab-content active" data-tab="installs">
+          <x-component path="components/docker-manager/official-versions/index.html"></x-component>
+          <x-component path="components/docker-manager/help/index.html"></x-component>
+        </div>
+        <div class="dm-tab-content" data-tab="sessions">
+          <x-component path="components/docker-manager/local-testing/index.html"></x-component>
+        </div>
+        <div class="dm-tab-content" data-tab="storage">
+          <x-component path="components/docker-manager/retained-instances/index.html"></x-component>
+          <x-component path="components/docker-manager/storage-summary/index.html"></x-component>
+        </div>
+        <div class="dm-tab-content" data-tab="settings">
+          <x-component path="components/docker-manager/settings/index.html"></x-component>
+        </div>
+      </main>
+    </div>
   </div>
+  <div id="dmToastStack" class="dm-toast-stack" aria-live="polite" aria-atomic="false"></div>
+  <div id="dmTerminalDock" class="dm-terminal-dock" aria-live="polite"></div>
 
   <script type="module" src="./docker_manager.js"></script>
 </body>

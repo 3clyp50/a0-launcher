@@ -7,7 +7,9 @@ function render(state) {
   const actionBtn = byId("onboardingActionBtn");
   if (!panel) return;
 
-  if (state?.dockerAvailable) {
+  const hasData = (Array.isArray(state?.images) && state.images.length > 0)
+    || (Array.isArray(state?.containers) && state.containers.length > 0);
+  if (state?.dockerAvailable || hasData) {
     panel.classList.add("hidden");
     return;
   }

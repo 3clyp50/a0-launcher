@@ -23,6 +23,14 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     const p = prefs && typeof prefs === 'object' ? prefs : {};
     return ipcRenderer.invoke('docker-manager:setPortPreferences', { ui: p.ui, ssh: p.ssh });
   },
+  addRemoteInstance: (remote) => {
+    const r = remote && typeof remote === 'object' ? remote : {};
+    return ipcRenderer.invoke('docker-manager:addRemoteInstance', {
+      name: typeof r.name === 'string' ? r.name : '',
+      url: typeof r.url === 'string' ? r.url : ''
+    });
+  },
+  deleteRemoteInstance: (id) => ipcRenderer.invoke('docker-manager:deleteRemoteInstance', { id }),
   deleteRetainedInstance: (containerId) =>
     ipcRenderer.invoke('docker-manager:deleteRetainedInstance', { containerId }),
   updateToLatest: (dataLossAck) => ipcRenderer.invoke('docker-manager:updateToLatest', { dataLossAck }),
@@ -45,6 +53,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   installDocker: () => ipcRenderer.invoke('docker-manager:installDocker'),
   openUi: () => ipcRenderer.invoke('docker-manager:openUi'),
   openContainerUi: (containerId) => ipcRenderer.invoke('docker-manager:openContainerUi', { containerId }),
+  openRemoteInstance: (id) => ipcRenderer.invoke('docker-manager:openRemoteInstance', { id }),
   openHomepage: () => ipcRenderer.invoke('docker-manager:openHomepage'),
   openCliTerminal: (host) => ipcRenderer.invoke('docker-manager:openCliTerminal', { host }),
   onStateChange: (callback) => {

@@ -95,6 +95,7 @@ function snapshot() {
     images: Array.isArray(store.images) ? store.images : [],
     versions: Array.isArray(store.versions) ? store.versions : [],
     containers: Array.isArray(store.containers) ? store.containers : [],
+    remoteInstances: Array.isArray(store.remoteInstances) ? store.remoteInstances : [],
     volumes: Array.isArray(store.volumes) ? store.volumes : [],
     retainedInstances: Array.isArray(store.retainedInstances) ? store.retainedInstances : [],
     storage: store.storage || null,
@@ -185,6 +186,7 @@ async function refresh() {
       store.uiUrl = state?.uiUrl || "";
       store.versions = Array.isArray(state?.versions) ? state.versions : [];
       store.retainedInstances = Array.isArray(state?.retainedInstances) ? state.retainedInstances : [];
+      store.remoteInstances = Array.isArray(state?.remoteInstances) ? state.remoteInstances : [];
       store.storage = state?.storage || null;
       store.portPreferences = state?.portPreferences || null;
       store.retentionPolicy = state?.retentionPolicy || null;
@@ -195,6 +197,7 @@ async function refresh() {
     store.environment = inventory?.environment || null;
     store.images = Array.isArray(inventory?.images) ? inventory.images : [];
     store.containers = Array.isArray(inventory?.containers) ? inventory.containers : [];
+    if (Array.isArray(inventory?.remoteInstances)) store.remoteInstances = inventory.remoteInstances;
     store.volumes = Array.isArray(inventory?.volumes) ? inventory.volumes : [];
   } catch (e) {
     store.error = e?.message || "Failed to load Docker inventory.";
@@ -341,6 +344,54 @@ async function openCliTerminal() {
   }
 }
 
+async function addRemoteInstance(remote = {}) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.addRemoteInstance !== "function") return false;
+  try {
+    const res = await api.addRemoteInstance(remote);
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Remote instance added.");
+    await refresh();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to add remote instance");
+    return false;
+  }
+}
+
+async function deleteRemoteInstance(id) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.deleteRemoteInstance !== "function") return false;
+  try {
+    const res = await api.deleteRemoteInstance(id);
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Remote instance removed.");
+    await refresh();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to remove remote instance");
+    return false;
+  }
+}
+
+async function openRemoteInstance(id) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.openRemoteInstance !== "function") return;
+  try {
+    const res = await api.openRemoteInstance(id);
+    if (isErrorResponse(res)) setBanner("error", res.message);
+    else if (res?.opened) window.toastFrontendInfo?.("Remote instance opened.", "Agent Zero", 2, "dm-open-remote");
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to open remote instance");
+  }
+}
+
 window.dockerManagerActions = {
   refresh,
   openUi,
@@ -352,6 +403,9 @@ window.dockerManagerActions = {
   stopActive,
   activateTag,
   openCliTerminal,
+  addRemoteInstance,
+  deleteRemoteInstance,
+  openRemoteInstance,
   async setPortPreferences(prefs) {
     const api = window.dockerManagerAPI;
     if (!api || typeof api.setPortPreferences !== "function") return false;
@@ -478,6 +532,7 @@ function initSubscriptions() {
         store.uiUrl = state?.uiUrl || "";
         store.versions = Array.isArray(state?.versions) ? state.versions : [];
         store.retainedInstances = Array.isArray(state?.retainedInstances) ? state.retainedInstances : [];
+        store.remoteInstances = Array.isArray(state?.remoteInstances) ? state.remoteInstances : [];
         store.storage = state?.storage || null;
         store.portPreferences = state?.portPreferences || null;
         store.retentionPolicy = state?.retentionPolicy || null;

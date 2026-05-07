@@ -524,6 +524,36 @@ function isAllowedLocalUrl(value) {
   }
 }
 
+function isAllowedHttpUrl(value) {
+  try {
+    const u = new URL(String(value));
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    if (u.username || u.password) return false;
+    return !!u.hostname;
+  } catch {
+    return false;
+  }
+}
+
+function openAgentZeroUiWindow(url, title = 'Agent Zero') {
+  const iconPath = path.join(__dirname, 'assets',
+    process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+  );
+  const uiWindow = new BrowserWindow({
+    width: 1280,
+    height: 900,
+    title,
+    icon: iconPath,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  uiWindow.loadURL(url);
+  return uiWindow;
+}
+
 function shellSingleQuote(value) {
   return `'${String(value || '').replace(/'/g, `'\\''`)}'`;
 }
@@ -638,6 +668,7 @@ async function installDockerDesktop() {
 function sanitizeDockerManagerState(state) {
   const versionsIn = Array.isArray(state?.versions) ? state.versions : [];
   const retainedIn = Array.isArray(state?.retainedInstances) ? state.retainedInstances : [];
+  const remoteIn = Array.isArray(state?.remoteInstances) ? state.remoteInstances : [];
   const policyIn = isPlainObject(state?.retentionPolicy) ? state.retentionPolicy : {};
   const portsIn = isPlainObject(state?.portPreferences) ? state.portPreferences : {};
 
@@ -730,9 +761,23 @@ function sanitizeDockerManagerState(state) {
   const keepCount = Number.isFinite(Number(policyIn.keepCount)) ? Number(policyIn.keepCount) : 1;
   const retentionPolicy = { keepCount: Math.max(0, Math.min(20, Math.floor(keepCount))) };
 
+  const remoteInstances = [];
+  for (const r of remoteIn) {
+    if (!isPlainObject(r)) continue;
+    const id = typeof r.id === 'string' ? r.id : '';
+    const name = typeof r.name === 'string' ? r.name : '';
+    const url = typeof r.url === 'string' ? r.url : '';
+    if (!id || !name || !isAllowedHttpUrl(url)) continue;
+    const out = { id, name, url };
+    if (typeof r.createdAt === 'string') out.createdAt = r.createdAt;
+    if (typeof r.updatedAt === 'string') out.updatedAt = r.updatedAt;
+    remoteInstances.push(out);
+  }
+
   const outState = {
     versions,
     retainedInstances,
+    remoteInstances,
     retentionPolicy
   };
 
@@ -902,6 +947,29 @@ ipcMain.handle('docker-manager:setPortPreferences', async (_event, body) => {
     const ssh = body.ssh;
     const prefs = await dockerManager.setPortPreferences({ ui, ssh });
     return { ui: prefs.ui, ssh: prefs.ssh };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:addRemoteInstance', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const name = typeof body.name === 'string' ? body.name : '';
+    const url = typeof body.url === 'string' ? body.url : '';
+    const saved = await dockerManager.addRemoteInstance({ name, url });
+    const sanitized = sanitizeDockerManagerState({ remoteInstances: [saved] }).remoteInstances?.[0];
+    return sanitized || dockerManager.toErrorResponse({ code: 'INVALID_REMOTE_INSTANCE', message: 'Invalid remote instance' });
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:deleteRemoteInstance', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const id = typeof body.id === 'string' ? body.id : '';
+    return await dockerManager.deleteRemoteInstance(id);
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }
@@ -1077,6 +1145,22 @@ ipcMain.handle('docker-manager:openContainerUi', async (_event, body) => {
       }
     });
     uiWindow.loadURL(url);
+    return { opened: true };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:openRemoteInstance', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const id = typeof body.id === 'string' ? body.id : '';
+    const remote = await dockerManager.getRemoteInstance(id);
+    const url = typeof remote?.url === 'string' ? remote.url : '';
+    if (!isAllowedHttpUrl(url)) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_REMOTE_INSTANCE', message: 'Invalid remote instance' });
+    }
+    openAgentZeroUiWindow(url, remote?.name || 'Agent Zero');
     return { opened: true };
   } catch (error) {
     return dockerManager.toErrorResponse(error);

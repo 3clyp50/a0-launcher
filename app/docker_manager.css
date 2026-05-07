@@ -564,6 +564,12 @@ body, html {
   border-color: var(--color-border);
 }
 
+.status-remote {
+  color: var(--color-highlight);
+  border-color: var(--color-highlight);
+  background: color-mix(in srgb, var(--color-highlight) 10%, transparent);
+}
+
 .status-update,
 .status-available {
   color: var(--color-highlight);
@@ -874,9 +880,9 @@ body, html {
 }
 
 .dm-advanced {
-  border: 1px solid var(--dm-line-soft);
-  border-radius: 0.5rem;
-  padding: 0.7rem 0.75rem;
+  border: 0;
+  border-radius: 0;
+  padding: 0.15rem 0 0;
 }
 
 .dm-advanced summary {

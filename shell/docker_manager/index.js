@@ -455,10 +455,11 @@ async function buildDerivedState(options = {}) {
     throw err;
   }
 
-  const [retentionPolicy, portPreferences, installabilityCache, releasesResult, localImages, containers, freeBytes, remoteTags] =
+  const [retentionPolicy, portPreferences, remoteInstances, installabilityCache, releasesResult, localImages, containers, freeBytes, remoteTags] =
     await Promise.all([
       stateStore.readRetentionPolicy(),
       stateStore.readPortPreferences(),
+      stateStore.readRemoteInstances(),
       stateStore.readInstallabilityCache(),
       releasesClient.listOfficialReleases({ githubRepo, forceRefresh }),
       docker.listLocalImages(imageRepo),
@@ -800,6 +801,7 @@ async function buildDerivedState(options = {}) {
   return {
     versions: releaseEntries,
     retainedInstances,
+    remoteInstances,
     retentionPolicy,
     portPreferences,
     uiUrl,
@@ -995,6 +997,38 @@ async function setPortPreferences(portPreferences) {
   const prefs = await stateStore.writePortPreferences(portPreferences);
   await refreshDockerManager({ forceRefresh: false });
   return prefs;
+}
+
+async function addRemoteInstance(remoteInstance) {
+  const saved = await stateStore.writeRemoteInstance(remoteInstance);
+  if (_cachedState) {
+    const remoteInstances = await stateStore.readRemoteInstances();
+    _cachedState = { ..._cachedState, remoteInstances };
+    events.emit('state', _cachedState);
+  }
+  return saved;
+}
+
+async function deleteRemoteInstance(id) {
+  const result = await stateStore.deleteRemoteInstance(id);
+  if (_cachedState) {
+    const remoteInstances = await stateStore.readRemoteInstances();
+    _cachedState = { ..._cachedState, remoteInstances };
+    events.emit('state', _cachedState);
+  }
+  return result;
+}
+
+async function getRemoteInstance(id) {
+  const cleanId = String(id || '').trim();
+  const remoteInstances = await stateStore.readRemoteInstances();
+  const found = remoteInstances.find((item) => item.id === cleanId) || null;
+  if (!found) {
+    const err = new Error('Remote instance not found');
+    err.code = 'INSTANCE_NOT_FOUND';
+    throw err;
+  }
+  return found;
 }
 
 async function createAndStartActiveContainer(docker, imageRepo, tag, portPreferences, activationOptions = null) {
@@ -1764,6 +1798,7 @@ async function cancelOperation(opId) {
 
 async function getDockerInventory() {
   const imageRepo = getBackendImageRepo();
+  const remoteInstances = await stateStore.readRemoteInstances();
   const docker = await getDocker({ imageRepo });
   const env = await docker.getEnvironment();
 
@@ -1795,7 +1830,8 @@ async function getDockerInventory() {
     environment: env || null,
     images,
     containers,
-    volumes
+    volumes,
+    remoteInstances
   };
 }
 
@@ -1860,6 +1896,9 @@ module.exports = {
   stopActiveInstance,
   setRetentionPolicy,
   setPortPreferences,
+  addRemoteInstance,
+  deleteRemoteInstance,
+  getRemoteInstance,
   deleteRetainedInstance,
   updateToLatest,
   activateRetainedInstance,

@@ -151,6 +151,59 @@ async function writeLocalMeta(data) {
   await fs.writeFile(META_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
+function resolveContentBundlePath(filePath) {
+  if (typeof filePath !== 'string' || !filePath || filePath.includes('\0')) {
+    throw new Error(`Invalid bundled content path: ${filePath}`);
+  }
+
+  if (path.isAbsolute(filePath) || path.posix.isAbsolute(filePath) || path.win32.isAbsolute(filePath)) {
+    throw new Error(`Unsafe bundled content path: ${filePath}`);
+  }
+
+  const contentRoot = path.resolve(CONTENT_DIR);
+  const fullPath = path.resolve(contentRoot, filePath);
+  if (fullPath === contentRoot || !fullPath.startsWith(contentRoot + path.sep)) {
+    throw new Error(`Unsafe bundled content path: ${filePath}`);
+  }
+
+  return fullPath;
+}
+
+function decodeContentBundleEntry(filePath, entry) {
+  if (typeof entry === 'string') {
+    return { data: entry, options: 'utf8' };
+  }
+
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    throw new Error(`Invalid bundled content entry: ${filePath}`);
+  }
+
+  const { encoding, data } = entry;
+  if (typeof data !== 'string') {
+    throw new Error(`Invalid bundled content data: ${filePath}`);
+  }
+
+  if (encoding === 'utf8') {
+    return { data, options: 'utf8' };
+  }
+
+  if (encoding === 'base64') {
+    return { data: Buffer.from(data, 'base64') };
+  }
+
+  throw new Error(`Unsupported bundled content encoding "${encoding}" for ${filePath}`);
+}
+
+function assertValidContentBundle(contentJson) {
+  if (!contentJson || typeof contentJson !== 'object') {
+    throw new Error('Invalid content bundle');
+  }
+
+  if (!contentJson.files || typeof contentJson.files !== 'object' || Array.isArray(contentJson.files)) {
+    throw new Error('Invalid content bundle files');
+  }
+}
+
 /**
  * Download and extract content from the release asset
  */
@@ -169,6 +222,7 @@ async function downloadContent(downloadUrl) {
   }
 
   const contentJson = await response.json();
+  assertValidContentBundle(contentJson);
 
   // Clear existing content directory
   await fs.rm(CONTENT_DIR, { recursive: true, force: true });
@@ -177,12 +231,13 @@ async function downloadContent(downloadUrl) {
   // Write each file from the JSON bundle
   sendStatus('Extracting content...');
 
-  for (const [filePath, content] of Object.entries(contentJson.files)) {
-    const fullPath = path.join(CONTENT_DIR, filePath);
+  for (const [filePath, entry] of Object.entries(contentJson.files)) {
+    const fullPath = resolveContentBundlePath(filePath);
     const dir = path.dirname(fullPath);
+    const { data, options } = decodeContentBundleEntry(filePath, entry);
 
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(fullPath, content, 'utf8');
+    await fs.writeFile(fullPath, data, options);
   }
 
   console.log(`Extracted ${Object.keys(contentJson.files).length} files`);

@@ -30,6 +30,9 @@ This scope owns:
   `a0-launcher-<version>-<platform>-<arch>...`.
 - Content bundling checks out the release tag, walks `app/`, and uploads
   `content.json` to the same release.
+- `content.json` file entries use `{ encoding, data }`, with `utf8` for text
+  files and `base64` for binary assets. Keep this in sync with
+  `/shell/main.js` content extraction.
 - If a release tag is moved after publishing, manually confirm whether workflow
   reruns or release asset refreshes are needed; moving the ref alone does not
   guarantee all old assets were rebuilt.

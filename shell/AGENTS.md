@@ -52,6 +52,9 @@ This scope owns:
   `A0_LAUNCHER_USE_LOCAL_CONTENT`.
 - Non-local content comes from the configured GitHub Release `content.json`
   asset and is unpacked under Electron `userData`.
+- Release bundles may contain legacy string file entries or structured
+  `{ encoding, data }` entries. The loader must preserve `utf8` text and decode
+  `base64` binary assets while rejecting unsafe paths.
 - The `a0app://` custom protocol is the renderer content origin; keep URL
   resolution, fetch, and CSP compatible with that scheme.
 - `content_meta.json` owns the downloaded content version shown as `Content:`.

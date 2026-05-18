@@ -1,0 +1,83 @@
+# AGENTS
+
+## Purpose
+
+`app/components/docker-manager/` owns the renderer components that make up the
+launcher workspace.
+
+The components should stay small, state-driven, and predictable. They render the
+current Docker Manager snapshot and call named renderer actions when the user
+asks for work.
+
+## Ownership
+
+This scope owns:
+
+- `docker-manager-store.js`: mutable renderer store and default state shape.
+- `status-header/`: title, release metadata, refresh, API Dashboard, and
+  operation progress.
+- `onboarding/`: Docker availability guidance and setup actions.
+- `sidebar/`: tab navigation and `dm:nav` event publication.
+- `official-versions/`: install/version cards, activation dialog, port/env
+  overrides, data-loss acknowledgement, and update/switch actions.
+- `local-testing/`: local containers, active instance controls, remote instance
+  CRUD, and instance opening.
+- `retained-instances/`: retained rollback containers and storage-volume cleanup.
+- `storage-summary/`: storage overview metrics.
+- `settings/`: port preferences and retention policy controls.
+- `help/`: concise static help in the install tab.
+
+## State And Event Contracts
+
+- Components render from the state emitted by `app/docker_manager.js` through
+  `dm:state`.
+- Components should render once from `window.__dmLastState` if it already
+  exists, then subscribe to future updates.
+- Components should not call `window.dockerManagerAPI` directly. Use
+  `window.dockerManagerActions`.
+- Sidebar navigation publishes `dm:nav`; tab content activation remains owned by
+  the renderer coordinator, not individual tab content components.
+- Empty, loading, error, success, and disabled states must be explicit enough
+  that the user is never left wondering whether Docker or the launcher is still
+  working.
+
+## Feature Contracts
+
+- Official version cards must distinguish available, installed, active, testing,
+  local, matching digest, and differing digest states without exposing raw Docker
+  mechanics as the main story.
+- Activating a tag while another instance is active must keep the
+  backup/proceed acknowledgement.
+- Port mappings and environment text stay advanced activation inputs. They
+  should not become a required path for normal users.
+- The Instances tab owns both local Docker containers and saved remote
+  instances. Visible copy must say `Instances`, not `Sessions`.
+- Retained instances are rollback candidates; storage-volume cleanup must remain
+  clearly separate from instance start/stop actions.
+- Storage UI must say `Storage volumes` when referring to Docker volumes.
+- Settings owns persistence for preferred UI/SSH ports and retained-instance
+  count. Do not scatter those controls into install or instance cards.
+
+## Development Guidance
+
+- Keep component scripts pure enough to rerender repeatedly from state without
+  accumulating duplicate event listeners.
+- Use stable element ids inside a component only within that component's loaded
+  fragment; do not rely on ids owned by sibling components.
+- Prefer short task-oriented copy. Avoid explanatory paragraphs when a label,
+  status, or action name will do.
+- Keep destructive actions guarded by confirmation or explicit acknowledgement.
+- If a component's contract becomes large enough to need its own doc, add a
+  child `AGENTS.md` and update this file plus the root index in the same session.
+
+## Testing
+
+After component changes, run:
+
+```bash
+node --check app/docker_manager.js
+git diff --check
+```
+
+For script changes under this subtree, also run `node --check` on the edited
+component modules when they are standalone ES modules.

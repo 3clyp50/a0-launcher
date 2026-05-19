@@ -1,194 +1,216 @@
 # A0 Launcher
 
-Desktop application shell for Agent Zero. This Electron app automatically downloads and displays the latest content from GitHub releases.
+A0 Launcher is an Electron desktop app for installing, running, switching,
+inspecting, and opening Dockerized Agent Zero instances without making Docker the
+first thing a user has to understand.
 
-## Architecture
+It is intentionally small at the shell boundary: renderer code expresses user
+intent, the Electron shell owns privileged IPC, and the Docker manager owns image,
+container, release, storage-volume, and remote-instance orchestration.
 
-The app consists of two parts:
+## What It Does
 
-1. **Shell** (`shell/`) - The Electron executable that handles:
-   - Window management
-   - Checking for updates via GitHub Releases API
-   - Downloading and caching content
-   - Loading the downloaded content
+- Detects Docker Desktop or Docker Engine availability.
+- Lists Agent Zero backend releases and local Docker images.
+- Installs, updates, activates, starts, stops, and switches Agent Zero instances.
+- Keeps retained instances available for rollback.
+- Shows local containers, saved remote instances, and storage volumes.
+- Opens Agent Zero UIs from the instance where they belong.
+- Provides a bottom A0 CLI Connector for launching the `a0` CLI against a
+  running local instance.
 
-2. **Content** (`app/`) - The actual application UI:
-   - HTML, CSS, and JavaScript files
-   - Bundled into `content.json` on each release
-   - Downloaded at runtime by the shell
+## Runtime Model
 
-> **Note:** The `app/` folder exists in this repo as **source content** for the GitHub Action to bundle. The built executable does NOT include these files - it downloads them from GitHub Releases at runtime. This enables "build once, update forever" - content updates are deployed by creating new releases, not rebuilding the app.
+The launcher has two layers:
 
-## Project Governance
+1. **Shell** (`shell/`)
+   - Electron main process, preload bridge, secure windows, tray, and IPC.
+   - Downloads release content from GitHub Releases when local content is not
+     requested.
+   - Owns privileged Docker and terminal-launch behavior through
+     `shell/docker_manager/` and `shell/docker_adapter/`.
 
-Project non-negotiables live in `.specify/memory/constitution.md` (Electron security model, shell/content contract, and release semantics). When making changes to `shell/`, `forge.config.js`, or release workflows, ensure the release tag reflects the change scope (MAJOR for shell/workflow behavior changes).
+2. **Renderer content** (`app/`)
+   - Static HTML, CSS, ES modules, local Agent Zero UI assets, and
+     `<x-component>` includes.
+   - Bundled into `content.json` by GitHub Actions for release content updates.
+   - Served by the shell through the `a0app://` protocol so `fetch()`, ES module
+     imports, and relative URLs work like they would on a local web server.
 
-## Fork Testing (End-to-End)
+Packaged and normal non-local runs load `content.json` from the latest configured
+GitHub Release and cache it under Electron `userData`. Local UI work should opt
+into local content explicitly.
 
-This project can be tested end-to-end in your fork (including GitHub Releases + Actions) without rewriting code.
-
-### What "end-to-end" means here
-
-- The packaged shell (`shell/`) downloads `content.json` from GitHub Releases at runtime.
-- In your fork, you want the shell you built to download content from *your fork's* releases.
-
-### Default behavior (recommended)
-
-When you build/run from your fork, the app will default to using your fork as the content source because build scripts generate `shell/build-info.json` from your git `origin` remote.
-
-### Override behavior (when you need it)
-
-You can force the content source repo explicitly:
-
-```bash
-A0_LAUNCHER_GITHUB_REPO="your-user/a0-launcher" npm start
-```
-
-This is also useful when running a vendor-built executable but testing content from your fork.
-
-### GitHub Actions in your fork
-
-1. Enable Actions in your fork (GitHub UI: "Actions" tab).
-2. To test building executables without creating a release:
-   - Run the `Build Executables` workflow with `workflow_dispatch`.
-   - Provide an input version like `v99.0.0`.
-   - Download artifacts from the workflow run (macOS, Windows, Linux).
-   - macOS signing/notarization secrets are optional for fork testing - the workflow builds unsigned mac artifacts when secrets are absent.
-3. To test the full release pipeline:
-   - Create a GitHub Release in your fork with a tag like `v99.0.0`.
-   - `Bundle Content` uploads `content.json` to the release.
-   - `Build Executables` uploads executables to the release (major changes build fresh; minor/patch reuse previous major's assets).
-
-## Development
-
-### Service Versions (Docker Version Management)
-
-This repo includes a "Service Versions" screen (Docker-backed) that can install, update, switch, and roll back the backend service.
-
-Notes:
-- Requires Docker Desktop/Engine installed and running.
-- Optional dev overrides:
-  - `A0_BACKEND_GITHUB_REPO="owner/repo"` (override the GitHub Releases catalog source)
-  - `A0_BACKEND_IMAGE_REPO="namespace/name"` (override the image repo to pull/run)
-- The UI in `app/` is bundled into `content.json` by CI and downloaded at runtime. For end-to-end UI testing, publish a release with your `content.json` and run with `A0_LAUNCHER_GITHUB_REPO="your-user/a0-launcher"` (see "Fork Testing (End-to-End)").
-
-### Prerequisites
+## Requirements
 
 - Node.js 20+
 - npm 9+
+- Docker Desktop or Docker Engine for Docker Manager features
 
-### Setup
+## Quick Start
 
 ```bash
 npm install
-```
-
-### Run in Development
-
-```bash
 npm start
 ```
 
-### Local UI Content (No GitHub Releases)
+Plain `npm start` exercises the release-content path. That means it may show the
+latest downloaded `content.json`, not your edited local `app/` files.
 
-By default, `npm start` loads UI content by downloading `content.json` from GitHub Releases (or from cache in offline mode).
-For fast UI iteration, you can force the shell to load the local `app/` directory directly.
-
-- `A0_LAUNCHER_USE_LOCAL_CONTENT=1`: Use the current working directory (CWD) as the repo root if it looks like an A0 Launcher checkout (must contain `app/index.html` and `package.json`).
-- `A0_LAUNCHER_LOCAL_REPO=<path>`: Use a specific local repo path (absolute path, or relative to CWD). Same repo-root validation applies.
-
-Precedence:
-- If `A0_LAUNCHER_LOCAL_REPO` is set and valid, it wins.
-- Otherwise if `A0_LAUNCHER_USE_LOCAL_CONTENT=1` and CWD is valid, CWD is used.
-- Otherwise the shell falls back to downloading `content.json` from GitHub Releases.
-
-Examples:
+For local UI development, run:
 
 ```bash
-# Use the current repo checkout as UI content source
-A0_LAUNCHER_USE_LOCAL_CONTENT=1 npm start
-
-# Use a specific local checkout (absolute or relative path)
 A0_LAUNCHER_LOCAL_REPO=. npm start
-A0_LAUNCHER_LOCAL_REPO=/home/rafael/Workspace/Repos/rafael/a0-launcher npm start
 ```
 
-### Build Executables
+You can also use the current working directory when it contains `app/index.html`
+and `package.json`:
 
 ```bash
-# All platforms (on respective OS)
-npm run make
+A0_LAUNCHER_USE_LOCAL_CONTENT=1 npm start
+```
 
-# Platform specific
+Content-source precedence:
+
+1. `A0_LAUNCHER_LOCAL_REPO=<path>`
+2. `A0_LAUNCHER_USE_LOCAL_CONTENT=1`
+3. GitHub Release `content.json`
+
+To test release content from a fork or another repository:
+
+```bash
+A0_LAUNCHER_GITHUB_REPO="owner/a0-launcher" npm start
+```
+
+## Docker Manager Development
+
+Useful backend overrides:
+
+```bash
+A0_BACKEND_GITHUB_REPO="owner/agent-zero" npm start
+A0_BACKEND_IMAGE_REPO="namespace/agent-zero" npm start
+```
+
+The default backend image is `agent0ai/agent-zero`, and the default backend
+release metadata repository is `agent0ai/agent-zero`.
+
+The A0 CLI Connector prefers the launcher-managed active instance URL. If there
+is no launcher-managed active instance, it falls back to a running local Agent
+Zero container from the Instances inventory when that container exposes a local
+UI URL such as `http://127.0.0.1:32080/`. The terminal launcher accepts only
+local `http:` or `https:` URLs without credentials.
+
+## Validation
+
+There is no default `npm test` contract yet. For quick validation, use:
+
+```bash
+node --check shell/main.js
+node --check shell/preload.js
+node --check shell/docker_manager/index.js
+node --check app/docker_manager.js
+git diff --check
+```
+
+For visible UI changes, run local content and inspect the affected screen:
+
+```bash
+A0_LAUNCHER_LOCAL_REPO=. npm start
+```
+
+## Build Executables
+
+```bash
+npm run make
 npm run make:mac
 npm run make:win
 npm run make:linux
 ```
 
-### macOS: Unsigned vs Signed Builds
+Platform-specific examples:
 
-For day-to-day development and fork testing, you typically want an unsigned build:
+```bash
+npm run make:mac -- --arch=arm64
+npm run make:mac -- --arch=x64
+npm run make:win -- --arch=arm64
+npm run make:win -- --arch=x64
+npm run make:linux -- --arch=arm64
+npm run make:linux -- --arch=x64
+```
+
+Release artifacts are:
+
+- macOS arm/x86 DMG and ZIP
+- Windows arm/x86 Squirrel setup EXE and NuGet package
+- Linux arm/x86 DEB packages
+- `content.json`
+
+Linux RPM artifacts are intentionally not published unless the product decision
+changes.
+
+## macOS Signing
+
+For local or fork builds, unsigned macOS artifacts are usually enough:
 
 ```bash
 SKIP_SIGNING=1 npm run make:mac
 ```
 
-Release-grade macOS builds (signed + notarized) require CI secrets:
+Release-grade macOS signing and notarization in GitHub Actions require:
 
-- `MACOS_CERT_P12` (base64-encoded .p12)
+- `MACOS_CERT_P12`
 - `MACOS_CERT_PASSPHRASE`
 - `APPLE_ID`
-- `APPLE_PASSWORD` (app-specific password)
+- `APPLE_PASSWORD`
 - `APPLE_TEAM_ID`
 
-Notes:
-- If the signing secrets are not present (common in forks), GitHub Actions will still build mac artifacts unsigned.
-- Notarization is enabled automatically when Apple credentials are present (or explicitly with `NOTARIZE=1`).
-
-### macOS: Ephemeral VM Bootstrap
-
-If you are using short-lived macOS machines and want a repeatable setup:
-
-- **Fastest path (recommended)**: build in GitHub Actions and download the mac artifact to your VM (see "Fork Testing (End-to-End)").
-- **Local build path**: run the bootstrap script from repo root:
-
-```bash
-./scripts/bootstrap-macos.sh build
-```
-
-This installs prerequisites (Homebrew + Node 20) and produces unsigned mac artifacts using `SKIP_SIGNING=1`.
+When Apple credentials are absent, the workflow still builds unsigned macOS
+artifacts.
 
 ## Release Process
 
-1. Update the content in `app/` directory
-2. Create a new GitHub Release with a version tag (e.g., `v1.0.0`)
-3. The `bundle-content.yml` workflow automatically:
-   - Bundles all files in `app/` into `content.json`
-   - Uploads `content.json` to the release
+GitHub Actions owns the release path:
 
-When users launch the app, it will:
-1. Check the latest release via GitHub API
-2. Compare timestamps with locally cached content
-3. Download new content if available
-4. Display the content
+1. Create or move a `v*` tag intentionally.
+2. Create or update the GitHub Release for that tag.
+3. `bundle-content.yml` checks out the tag, bundles `app/` into `content.json`,
+   and uploads it to the release.
+4. `build.yml` builds executable artifacts from the tagged source and uploads
+   them to the release.
 
-## Project Structure
+Two-segment tags such as `v0.3` are normalized to full semver versions such as
+`0.3.0` during executable builds.
 
+After publishing, verify release assets with:
+
+```bash
+gh release view <tag> --repo agent0ai/a0-launcher --json assets \
+  --jq '[.assets[].name]'
 ```
+
+## Repository Layout
+
+```text
 a0-launcher/
-├── .github/workflows/     # GitHub Actions
-│   ├── bundle-content.yml # Bundles app/ on release
-│   └── build.yml          # Builds executables
-├── app/                   # Source content (bundled on release, NOT in executable)
-│   └── index.html
-├── shell/                 # Electron shell (packaged)
-│   ├── assets/           # Icons and entitlements
-│   ├── main.js           # Main process
-│   ├── preload.js        # Context bridge
-│   └── loading.html      # Loading screen
-├── forge.config.js       # Electron Forge config
+├── .github/workflows/       # Release executable and content bundle workflows
+├── app/                     # Static renderer source content
+│   ├── a0ui/                # Portable Agent Zero UI primitives and vendor assets
+│   ├── components/          # Docker Manager component views
+│   ├── docker_manager.css   # Launcher UI styles
+│   ├── docker_manager.js    # Renderer state coordinator and action facade
+│   └── index.html           # Renderer entrypoint
+├── docs/                    # Supplemental user-facing docs and release notes
+├── scripts/                 # Build metadata and bootstrap helpers
+├── shell/                   # Electron shell, preload, content loading, IPC
+│   ├── docker_adapter/      # Docker and registry abstraction layer
+│   └── docker_manager/      # Agent Zero image, instance, release, and volume logic
+├── AGENTS.md                # Repo-wide coding-agent contract
+├── forge.config.js          # Electron Forge makers and packaging config
 └── package.json
 ```
+
+Coding agents should read `AGENTS.md` first. Each subtree may also have its own
+`AGENTS.md` with closer implementation contracts.
 
 ## License
 

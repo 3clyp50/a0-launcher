@@ -112,6 +112,39 @@ function emitState() {
   renderTerminalDock(next);
 }
 
+function localUrl(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    if (url.username || url.password) return "";
+    if (!["127.0.0.1", "localhost", "::1", "[::1]"].includes(url.hostname)) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function isLauncherActiveContainer(container) {
+  return container?.labels?.["a0.launcher.role"] === "active" ||
+    String(container?.containerName || "").includes("-active__");
+}
+
+function cliHostFromState(state = snapshot()) {
+  const managedHost = localUrl(state?.uiUrl);
+  if (managedHost) return managedHost;
+
+  const containers = Array.isArray(state?.containers) ? state.containers : [];
+  const running = containers
+    .filter((container) => String(container?.state || "").toLowerCase() === "running")
+    .filter((container) => localUrl(container?.uiUrl))
+    .sort((a, b) => Number(isLauncherActiveContainer(b)) - Number(isLauncherActiveContainer(a)));
+
+  return localUrl(running[0]?.uiUrl);
+}
+
 function setBanner(type, message) {
   store.setBanner(type || "", message || "");
   if (message) {
@@ -333,7 +366,7 @@ async function openCliTerminal() {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.openCliTerminal !== "function") return;
   try {
-    const res = await api.openCliTerminal(store.uiUrl || "");
+    const res = await api.openCliTerminal(cliHostFromState(snapshot()));
     if (isErrorResponse(res)) {
       setBanner("error", res.message);
       return;
@@ -441,6 +474,7 @@ let terminalDockOpen = false;
 function renderTerminalDock(state = snapshot()) {
   const mount = document.getElementById("dmTerminalDock");
   if (!mount) return;
+  const cliHost = cliHostFromState(state);
 
   mount.innerHTML = "";
   const shell = document.createElement("div");
@@ -466,12 +500,12 @@ function renderTerminalDock(state = snapshot()) {
   body.className = "dm-terminal-body";
   const note = document.createElement("div");
   note.className = "dm-terminal-note";
-  note.textContent = state?.uiUrl
+  note.textContent = cliHost
     ? "Open the local Agent Zero CLI against this running instance."
     : "Start an instance first, then open the A0 CLI against its local socket.";
   const command = document.createElement("code");
   command.className = "dm-terminal-command";
-  command.textContent = state?.uiUrl ? `a0 --host ${state.uiUrl}` : "a0";
+  command.textContent = cliHost ? `a0 --host ${cliHost}` : "a0";
   body.appendChild(note);
   body.appendChild(command);
 
@@ -495,21 +529,21 @@ function renderTerminalDock(state = snapshot()) {
   const status = document.createElement("div");
   status.className = "dm-terminal-status";
   const dot = document.createElement("span");
-  dot.className = `dm-terminal-dot${state?.uiUrl ? " connected" : ""}`;
+  dot.className = `dm-terminal-dot${cliHost ? " connected" : ""}`;
   const statusText = document.createElement("span");
-  statusText.textContent = state?.uiUrl ? "Instance socket ready" : "No running instance";
+  statusText.textContent = cliHost ? "Instance socket ready" : "No running instance";
   const url = document.createElement("span");
   url.className = "dm-terminal-url";
-  url.textContent = state?.uiUrl || "";
+  url.textContent = cliHost;
   status.appendChild(dot);
   status.appendChild(statusText);
-  if (state?.uiUrl) status.appendChild(url);
+  if (cliHost) status.appendChild(url);
 
   const launch = document.createElement("button");
   launch.className = "button confirm";
   launch.type = "button";
-  launch.disabled = !state?.uiUrl;
-  launch.title = state?.uiUrl ? "Open A0 CLI terminal" : "Start an instance first";
+  launch.disabled = !cliHost;
+  launch.title = cliHost ? "Open A0 CLI terminal" : "Start an instance first";
   launch.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">open_in_new</span><span>Open A0 CLI</span>';
   launch.addEventListener("click", () => window.dockerManagerActions?.openCliTerminal?.());
 

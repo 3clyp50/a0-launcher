@@ -169,6 +169,9 @@ Tags and GitHub Releases:
 
 - `v*` tags are release inputs for executable builds.
 - Two-segment tags such as `v0.1` become semver `0.1.0` in the workflow.
+- Release artifacts are macOS arm/x86 DMG and ZIP, Windows arm/x86 Squirrel
+  setup and NuGet packages, Linux arm/x86 DEB packages, and `content.json`.
+  Linux RPMs are intentionally omitted unless the product decision changes.
 - If a release tag is moved to include a metadata fix, keep `main`, the tag, and
   both remotes intentionally aligned; stale tags are worse than no poetry at all.
 

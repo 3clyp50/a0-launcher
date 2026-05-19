@@ -43,6 +43,8 @@ This scope owns:
   `shell/docker_manager`.
 - New windows that open Agent Zero UIs or remote instances must sanitize URLs and
   allow only `http:` or `https:`.
+- The A0 CLI terminal IPC must accept only local `http:` or `https:` URLs
+  without credentials.
 - External links should open through Electron `shell.openExternal` only after
   validation.
 

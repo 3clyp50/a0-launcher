@@ -164,6 +164,11 @@ jobs:
           npm run make:win -- --arch=x64
           mv "out/make/squirrel.windows/x64/A0 Launcher-${{ env.VERSION }} Setup.exe" "dist/a0-launcher-${{ env.VERSION }}-windows-x86-setup.exe"
           mv "out/make/squirrel.windows/x64/A0Launcher-${{ env.VERSION }}-full.nupkg" "dist/a0-launcher-${{ env.VERSION }}-windows-x86.nupkg"
+
+          # arm64 -> arm
+          npm run make:win -- --arch=arm64
+          mv "out/make/squirrel.windows/arm64/A0 Launcher-${{ env.VERSION }} Setup.exe" "dist/a0-launcher-${{ env.VERSION }}-windows-arm-setup.exe"
+          mv "out/make/squirrel.windows/arm64/A0Launcher-${{ env.VERSION }}-full.nupkg" "dist/a0-launcher-${{ env.VERSION }}-windows-arm.nupkg"
         env:
           DEBUG: electron-forge:*
 

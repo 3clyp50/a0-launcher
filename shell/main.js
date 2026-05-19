@@ -601,8 +601,9 @@ function isAllowedLocalUrl(value) {
   try {
     const u = new URL(String(value));
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    if (u.username || u.password) return false;
     const host = u.hostname;
-    if (host !== 'localhost' && host !== '127.0.0.1' && host !== '::1') return false;
+    if (host !== 'localhost' && host !== '127.0.0.1' && host !== '::1' && host !== '[::1]') return false;
     if (u.port) {
       const p = Number(u.port);
       if (!Number.isFinite(p) || p <= 0 || p > 65535) return false;

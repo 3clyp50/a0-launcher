@@ -30,9 +30,9 @@ This scope owns:
   assets from older releases.
 - Executable artifact names should remain predictable:
   `a0-launcher-<version>-<platform>-<arch>...`.
-- Release artifacts are macOS DMG/ZIP for arm and x86, Windows x86 Squirrel
-  setup/NuGet packages, and Linux DEB packages for arm and x86. Do not publish
-  Linux RPMs unless the product decision changes.
+- Release artifacts are macOS DMG/ZIP for arm and x86, Windows arm/x86
+  Squirrel setup/NuGet packages, and Linux DEB packages for arm and x86. Do not
+  publish Linux RPMs unless the product decision changes.
 - Content bundling checks out the release tag, walks `app/`, and uploads
   `content.json` to the same release.
 - `content.json` file entries use `{ encoding, data }`, with `utf8` for text

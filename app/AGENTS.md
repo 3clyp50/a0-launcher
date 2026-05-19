@@ -44,6 +44,9 @@ This scope owns:
   each call the Docker APIs independently.
 - Components invoke behavior through `window.dockerManagerActions`, not through
   raw IPC names.
+- The bottom A0 CLI Connector should prefer the launcher-managed active
+  instance URL, then fall back to a running local container from the Instances
+  inventory when that container has a local UI URL.
 - `Content: ...` comes from shell content metadata. `App: ...` comes from
   Electron `app.getVersion()`.
 - Keep external navigation intentional. Product destinations such as API

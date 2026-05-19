@@ -14,6 +14,8 @@ This scope owns:
 
 - `running-ui.md`: notes for running and validating the launcher UI.
 - `faq-integration.md`: integration-oriented FAQ and user guidance.
+- `release-todos.md`: release checklist and temporary product corrections that
+  must survive across coding sessions.
 
 ## Documentation Contracts
 

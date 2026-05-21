@@ -7,7 +7,13 @@ function activeTab(snapshot) {
   return tabs.find((tab) => tab?.active) || tabs.find((tab) => tab?.id === snapshot?.activeTabId) || null;
 }
 
-function render(snapshot = window.__dmLastInstanceTabs || { tabs: [], activeTabId: "" }) {
+function instanceTabsFromState(state) {
+  const snapshot = state?.instanceTabs && typeof state.instanceTabs === "object" ? state.instanceTabs : state;
+  return snapshot && typeof snapshot === "object" ? snapshot : { tabs: [], activeTabId: "" };
+}
+
+function render(state = window.__dmLastState || { instanceTabs: { tabs: [], activeTabId: "" } }) {
+  const snapshot = instanceTabsFromState(state);
   const section = document.querySelector(".dm-instance-tabs");
   const strip = byId("dmInstanceTabStrip");
   const empty = byId("dmInstanceTabEmpty");
@@ -90,7 +96,7 @@ function render(snapshot = window.__dmLastInstanceTabs || { tabs: [], activeTabI
   window.dockerManagerActions?.syncInstanceTabBounds?.();
 }
 
-window.addEventListener("dm:instance-tabs", (event) => render(event.detail));
+window.addEventListener("dm:state", (event) => render(event.detail));
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => render());

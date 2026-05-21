@@ -113,19 +113,12 @@ function emitState() {
   renderTerminalDock(next);
 }
 
-function emitInstanceTabs() {
-  const next = store.instanceTabs || { tabs: [], activeTabId: "" };
-  window.__dmLastInstanceTabs = next;
-  window.dispatchEvent(new CustomEvent("dm:instance-tabs", { detail: next }));
-}
-
 function applyInstanceTabsSnapshot(snap) {
   const tabs = Array.isArray(snap?.tabs) ? snap.tabs : [];
   store.instanceTabs = {
     tabs,
     activeTabId: typeof snap?.activeTabId === "string" ? snap.activeTabId : ""
   };
-  emitInstanceTabs();
   emitState();
 }
 
@@ -692,8 +685,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   initSubscriptions();
   initInstanceTabBoundsObserver();
   if (typeof window.dockerManagerAPI?.getInstanceTabs === "function") {
-    const tabsSnapshot = await window.dockerManagerAPI.getInstanceTabs();
-    if (!isErrorResponse(tabsSnapshot)) applyInstanceTabsSnapshot(tabsSnapshot);
+    try {
+      const tabsSnapshot = await window.dockerManagerAPI.getInstanceTabs();
+      if (!isErrorResponse(tabsSnapshot)) applyInstanceTabsSnapshot(tabsSnapshot);
+    } catch {
+      // ignore; tab state can still arrive through the live subscription
+    }
   }
   await refresh();
 });

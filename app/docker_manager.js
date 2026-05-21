@@ -373,6 +373,15 @@ async function openDockerDownload() {
   window.open("https://www.docker.com/products/docker-desktop/", "_blank");
 }
 
+let postOperationRefreshTimer = 0;
+
+function schedulePostOperationRefresh() {
+  window.clearTimeout(postOperationRefreshTimer);
+  postOperationRefreshTimer = window.setTimeout(() => {
+    refresh();
+  }, 350);
+}
+
 async function runDockerOperation(label, action, successMessage) {
   try {
     const res = await action();
@@ -662,6 +671,10 @@ function initSubscriptions() {
     api.onProgress((progress) => {
       store.progress = progress && typeof progress === "object" ? progress : null;
       emitState();
+      const status = typeof progress?.status === "string" ? progress.status : "";
+      if (status === "completed" || status === "failed" || status === "canceled") {
+        schedulePostOperationRefresh();
+      }
     });
   }
 

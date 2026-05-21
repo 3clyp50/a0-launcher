@@ -901,6 +901,109 @@ body, html {
   min-width: 2rem;
 }
 
+/*
+ * Instance tabs render as a fixed overlay, not an inline block. The launcher
+ * shell is a fixed-height, non-scrolling window, so an always-present tab
+ * surface would push content off-screen. The overlay takes zero layout space
+ * until at least one instance tab is open.
+ */
+.dm-instance-tabs {
+  display: none;
+  flex-direction: column;
+  gap: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 4200;
+  background: var(--color-background);
+}
+
+.dm-instance-tabs.has-tabs {
+  display: flex;
+}
+
+.dm-instance-tab-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  border-bottom: 1px solid var(--dm-line-soft);
+  overflow-x: auto;
+  padding: 0.4rem 0.65rem 0;
+  flex: 0 0 auto;
+}
+
+.dm-instance-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 15rem;
+  min-width: 8rem;
+  min-height: 2.1rem;
+  border: 1px solid var(--dm-line-soft);
+  border-radius: 0.45rem 0.45rem 0 0;
+  background: var(--dm-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: "Rubik", Arial, Helvetica, sans-serif;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.dm-instance-tab.active {
+  background: var(--dm-surface-strong);
+  color: var(--color-text);
+  border-color: var(--color-highlight);
+}
+
+.dm-instance-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-instance-tab-close {
+  margin-left: auto;
+  font-size: 1rem;
+}
+
+.dm-instance-tab-controls {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-left: auto;
+  position: sticky;
+  right: 0;
+  background: var(--color-background);
+  padding-left: 0.35rem;
+}
+
+.dm-instance-tab-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: color-mix(in srgb, var(--color-panel) 65%, transparent);
+}
+
+.dm-instance-tab-viewport.has-tab {
+  background: #000;
+}
+
+.dm-instance-tab-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  .dm-instance-tab {
+    min-width: 6.5rem;
+    max-width: 11rem;
+  }
+}
+
 .dm-terminal-dock {
   position: fixed;
   left: 0;

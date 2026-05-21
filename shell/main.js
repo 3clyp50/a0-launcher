@@ -1563,10 +1563,12 @@ ipcMain.handle('docker-manager:getInstanceTabs', async () => {
 
 ipcMain.handle('docker-manager:setInstanceTabBounds', async (_event, body) => {
   try {
+    // Bounds reporting is renderer->shell viewport telemetry. It must NOT emit
+    // a tab-state event: the renderer reacts to that event by re-measuring and
+    // calling setInstanceTabBounds again, which loops indefinitely.
     instanceTabBounds = sanitizeInstanceTabBounds(body);
     applyActiveInstanceTabBounds();
-    sendInstanceTabsEvent();
-    return getInstanceTabsSnapshot();
+    return { updated: !!instanceTabBounds };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

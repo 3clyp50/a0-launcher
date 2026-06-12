@@ -6,6 +6,10 @@
  */
 
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
 
 /**
  * @typedef {Object} AssessResult
@@ -31,6 +35,10 @@ export class RuntimeProvisioner {
    * @returns {Promise<RuntimeProvisioner|null>}
    */
   static async forPlatform(options) {
+    if (process.platform === 'darwin') {
+      const { ColimaRuntime } = await import('./impl/ColimaRuntime.mjs');
+      return new ColimaRuntime(options);
+    }
     if (process.platform !== 'linux') return null;
     const { LinuxEngineRuntime } = await import('./impl/LinuxEngineRuntime.mjs');
     return new LinuxEngineRuntime(options);
@@ -62,6 +70,7 @@ export function makeError(code, message, details) {
  * @param {number=} options.timeoutMs
  * @param {AbortSignal=} options.signal
  * @param {(line: string) => void=} options.onLine
+ * @param {Object=} options.env
  * @returns {Promise<{code: number, stdout: string, stderr: string}>}
  */
 export function run(cmd, args, options = {}) {
@@ -70,7 +79,7 @@ export function run(cmd, args, options = {}) {
   return new Promise((resolve, reject) => {
     let child;
     try {
-      child = spawn(cmd, args, { env: process.env, windowsHide: true });
+      child = spawn(cmd, args, { env: options.env || process.env, windowsHide: true });
     } catch (error) {
       reject(makeError('SPAWN_FAILED', `Failed to run ${cmd}`, { message: error?.message || String(error) }));
       return;
@@ -152,4 +161,117 @@ export function run(cmd, args, options = {}) {
       });
     });
   });
+}
+
+export async function pathExists(filePath) {
+  try {
+    await fsp.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    signal: options.signal,
+    headers: {
+      'Accept': 'application/vnd.github+json, application/json',
+      'User-Agent': 'A0-Launcher'
+    }
+  });
+  if (!response.ok) {
+    throw makeError('DOWNLOAD_FAILED', `Request failed: ${response.status} ${response.statusText}`, { url });
+  }
+  return await response.json();
+}
+
+export async function fetchText(url, options = {}) {
+  const response = await fetch(url, {
+    signal: options.signal,
+    headers: {
+      'Accept': 'text/plain, */*',
+      'User-Agent': 'A0-Launcher'
+    }
+  });
+  if (!response.ok) {
+    throw makeError('DOWNLOAD_FAILED', `Request failed: ${response.status} ${response.statusText}`, { url });
+  }
+  return await response.text();
+}
+
+export async function downloadVerified(url, destPath, sha256 = '', options = {}) {
+  const response = await fetch(url, {
+    signal: options.signal,
+    redirect: 'follow',
+    headers: {
+      'Accept': 'application/octet-stream',
+      'User-Agent': 'A0-Launcher'
+    }
+  });
+  if (!response.ok) {
+    throw makeError('DOWNLOAD_FAILED', `Download failed: ${response.status} ${response.statusText}`, { url });
+  }
+
+  await fsp.mkdir(path.dirname(destPath), { recursive: true });
+  const tempPath = `${destPath}.tmp-${process.pid}-${Date.now()}`;
+  const hash = crypto.createHash('sha256');
+  let file = null;
+
+  try {
+    if (!response.body || typeof response.body.getReader !== 'function') {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      hash.update(buffer);
+      await fsp.writeFile(tempPath, buffer);
+    } else {
+      file = fs.createWriteStream(tempPath, { mode: 0o644 });
+      const reader = response.body.getReader();
+      const total = Number(response.headers.get('content-length')) || 0;
+      let received = 0;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = Buffer.from(value);
+        hash.update(chunk);
+        received += chunk.length;
+        if (total && typeof options.onProgress === 'function') {
+          options.onProgress(null, Math.max(0, Math.min(100, Math.round((received / total) * 100))));
+        }
+        await new Promise((resolve, reject) => file.write(chunk, (error) => (error ? reject(error) : resolve())));
+      }
+
+      await new Promise((resolve, reject) => file.end((error) => (error ? reject(error) : resolve())));
+    }
+
+    const actual = hash.digest('hex');
+    const expected = String(sha256 || '').trim().toLowerCase();
+    if (expected && actual.toLowerCase() !== expected) {
+      throw makeError('CHECKSUM_MISMATCH', 'Downloaded component failed verification', { url, expected, actual });
+    }
+
+    await fsp.rename(tempPath, destPath);
+  } catch (error) {
+    if (file) {
+      try {
+        file.destroy();
+      } catch {
+        // ignore
+      }
+    }
+    await fsp.rm(tempPath, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+export function sha256FromSumText(text, assetName) {
+  const wanted = String(assetName || '').trim();
+  if (!wanted) return '';
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const match = /^\s*([a-fA-F0-9]{64})\s+[* ]?(.+?)\s*$/.exec(line);
+    if (!match) continue;
+    const name = path.basename(match[2].trim());
+    if (name === wanted) return match[1].toLowerCase();
+  }
+  return '';
 }

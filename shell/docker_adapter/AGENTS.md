@@ -20,6 +20,9 @@ This scope owns:
 - `impl/DockerodeDocker.mjs`: Dockerode-backed concrete implementation.
 - `impl/DockerHubRegistry.mjs`: Docker Hub registry and manifest/digest access.
 - `impl/DockerodeLogProcessor.mjs`: Docker pull/log stream processing.
+- `impl/ColimaRuntime.mjs`: macOS Colima/Lima assessment, self-contained
+  component download, checksum verification, and dedicated runtime profile
+  start mechanics.
 - `impl/LinuxEngineRuntime.mjs`: Linux native Docker Engine assessment, daemon
   start, and package-manager bootstrap mechanics.
 - `LOG_PROCESSOR.md`: explanatory implementation notes for log processing.
@@ -38,6 +41,11 @@ This scope owns:
 - Runtime provisioners are consulted only after the Docker Manager has tried to
   reuse an existing Docker endpoint. They should classify repairable states
   before proposing installation.
+- macOS automatic provisioning uses a dedicated Colima profile named `a0`.
+  It must not require Docker Desktop, Homebrew, or a privileged Docker socket
+  symlink. Because Colima checks for a Docker client during startup, the
+  provisioner may install Docker's official static macOS CLI into the
+  launcher-owned runtime bin directory when the host does not provide one.
 - Linux automatic provisioning uses the host package manager and starts native
   Docker Engine; it must not manage container CPU, memory, or disk sizing.
 - Concrete implementations live under `impl/` and are loaded on demand.

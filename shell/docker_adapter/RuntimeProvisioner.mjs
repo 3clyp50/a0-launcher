@@ -31,15 +31,16 @@ export class RuntimeProvisioner {
   }
 
   /**
-   * @param {{managedDir: string}} options
+   * @param {{managedDir: string, platform?: NodeJS.Platform}} options
    * @returns {Promise<RuntimeProvisioner|null>}
    */
   static async forPlatform(options) {
-    if (process.platform === 'darwin') {
+    const platform = options?.platform || process.platform;
+    if (platform === 'darwin') {
       const { ColimaRuntime } = await import('./impl/ColimaRuntime.mjs');
       return new ColimaRuntime(options);
     }
-    if (process.platform !== 'linux') return null;
+    if (platform !== 'linux') return null;
     const { LinuxEngineRuntime } = await import('./impl/LinuxEngineRuntime.mjs');
     return new LinuxEngineRuntime(options);
   }

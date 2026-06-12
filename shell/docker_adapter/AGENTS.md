@@ -17,6 +17,8 @@ This scope owns:
 - `getDocker.js`: CommonJS bridge that dynamically imports the ESM interface for
   `shell/docker_manager`.
 - `RuntimeProvisioner.mjs`: platform provisioner base and shared process helpers.
+- `runtime_provisioner.test.mjs`: runtime provisioner selection and parser
+  smoke tests.
 - `impl/DockerodeDocker.mjs`: Dockerode-backed concrete implementation.
 - `impl/DockerHubRegistry.mjs`: Docker Hub registry and manifest/digest access.
 - `impl/DockerodeLogProcessor.mjs`: Docker pull/log stream processing.
@@ -78,6 +80,12 @@ For ESM files, also run Node syntax checks through dynamic import when needed:
 
 ```bash
 node -e "import('./shell/docker_adapter/DockerInterface.mjs')"
+```
+
+For runtime provisioner changes, run:
+
+```bash
+node --test shell/docker_adapter/runtime_provisioner.test.mjs
 ```
 
 ## Child DOX Index

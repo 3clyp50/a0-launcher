@@ -14,6 +14,8 @@ This scope owns:
 
 - `running-ui.md`: notes for running and validating the launcher UI.
 - `faq-integration.md`: integration-oriented FAQ and user guidance.
+- `runtime-troubleshooting.md`: user-facing runtime detection and repair notes
+  for Docker Desktop, native Docker Engine, Colima, and rootless Docker.
 - `release-todos.md`: release checklist and temporary product corrections that
   must survive across coding sessions.
 

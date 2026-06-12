@@ -45,7 +45,11 @@ into local content explicitly.
 
 - Node.js 20+
 - npm 9+
-- Docker Desktop or Docker Engine for Docker Manager features
+- Docker Desktop, Docker Engine, Colima, or rootless Docker for Docker Manager
+  features
+
+Runtime setup and repair notes are in
+[docs/runtime-troubleshooting.md](docs/runtime-troubleshooting.md).
 
 ## Quick Start
 

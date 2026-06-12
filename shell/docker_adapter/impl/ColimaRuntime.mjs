@@ -357,6 +357,10 @@ function findAsset(release, pattern) {
 
 async function latestDockerCliAsset(indexUrl, options = {}) {
   const html = await fetchText(indexUrl, options);
+  return selectLatestDockerCliAsset(indexUrl, html);
+}
+
+export function selectLatestDockerCliAsset(indexUrl, html) {
   const assets = [];
   const pattern = /href="(docker-([0-9]+(?:\.[0-9]+){2}(?:-[0-9]+)?)\.tgz)"/g;
   for (;;) {

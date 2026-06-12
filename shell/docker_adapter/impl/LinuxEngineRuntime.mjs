@@ -150,7 +150,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
       });
     }
 
-    const socket = await this.#probeNativeSocket();
+    const socket = await this.#waitForNativeSocket(options.signal);
     if (socket === 'EACCES') {
       throw makeError(
         'RUNTIME_NEEDS_RELOGIN',
@@ -181,7 +181,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
       });
     }
 
-    const socket = await this.#probeNativeSocket();
+    const socket = await this.#waitForNativeSocket(options.signal);
     if (socket === 'EACCES') {
       throw makeError(
         'RUNTIME_NEEDS_RELOGIN',
@@ -240,7 +240,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
   }
 
   #startScript() {
-    return 'if command -v systemctl >/dev/null 2>&1; then systemctl enable --now docker; else service docker start; fi';
+    return 'if command -v systemctl >/dev/null 2>&1 && systemctl enable --now docker; then exit 0; fi; if command -v service >/dev/null 2>&1; then service docker start; else exit 1; fi';
   }
 
   #dockerGroupScript() {
@@ -280,6 +280,20 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
     });
   }
 
+  async #waitForNativeSocket(signal, timeoutMs = 90000) {
+    const startedAt = Date.now();
+    let last = 'ENOENT';
+
+    while (Date.now() - startedAt < timeoutMs) {
+      if (signal?.aborted) throw makeError('ABORTED', 'Runtime start aborted');
+      last = await this.#probeNativeSocket();
+      if (last === 'OK' || last === 'EACCES') return last;
+      await sleep(1000);
+    }
+
+    return last;
+  }
+
   #isRoot() {
     return typeof process.getuid === 'function' && process.getuid() === 0;
   }
@@ -295,4 +309,8 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
 
 function tail(value, limit = 1200) {
   return String(value || '').slice(-limit);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

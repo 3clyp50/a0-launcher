@@ -16,7 +16,7 @@ function actionForRuntime(runtime) {
     return { label: "Start Docker", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (runtime.canProvision && runtime.action === "install") {
-    return { label: "Set Up Docker Engine", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
+    return { label: "Set Up Runtime", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (runtime.action === "refresh" || runtime.state === "needs_relogin") {
     return { label: "Refresh", handler: () => window.dockerManagerActions?.refresh?.() };
@@ -41,7 +41,7 @@ function render(state) {
   panel.classList.remove("hidden");
   const runtime = state?.runtime || null;
   if (title) title.textContent = runtime?.state === "engine_stopped" ? "Docker is installed" : "Docker setup";
-  const fallback = state?.error || state?.environment?.diagnosticMessage || "Docker is not available. Install Docker Desktop or Docker Engine and start it.";
+  const fallback = state?.error || state?.environment?.diagnosticMessage || "Docker is not available. Start Docker Desktop, Docker Engine, or Colima, then refresh.";
   const detail = runtimeMessage(runtime, fallback);
   if (message) message.textContent = detail;
 

@@ -111,7 +111,6 @@ function emitState() {
   const next = snapshot();
   window.__dmLastState = next;
   window.dispatchEvent(new CustomEvent("dm:state", { detail: next }));
-  renderTerminalDock(next);
 }
 
 function applyInstanceTabsSnapshot(snap) {
@@ -136,24 +135,6 @@ function localUrl(value) {
   } catch {
     return "";
   }
-}
-
-function isLauncherActiveContainer(container) {
-  return container?.labels?.["a0.launcher.role"] === "active" ||
-    String(container?.containerName || "").includes("-active__");
-}
-
-function cliHostFromState(state = snapshot()) {
-  const managedHost = localUrl(state?.uiUrl);
-  if (managedHost) return managedHost;
-
-  const containers = Array.isArray(state?.containers) ? state.containers : [];
-  const running = containers
-    .filter((container) => String(container?.state || "").toLowerCase() === "running")
-    .filter((container) => localUrl(container?.uiUrl))
-    .sort((a, b) => Number(isLauncherActiveContainer(b)) - Number(isLauncherActiveContainer(a)));
-
-  return localUrl(running[0]?.uiUrl);
 }
 
 function setBanner(type, message) {
@@ -423,6 +404,27 @@ async function stopActive() {
   return runDockerOperation("Stop", () => api.stopActive(), "Instance stop requested.");
 }
 
+async function stopLocalInstance(containerId) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.stopLocalInstance !== "function") return stopActive();
+  return runDockerOperation(
+    "Stop",
+    () => api.stopLocalInstance(containerId || ""),
+    "Instance stop requested."
+  );
+}
+
+async function deleteLocalInstance(containerId) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.deleteLocalInstance !== "function") return false;
+  const res = await runDockerOperation(
+    "Delete",
+    () => api.deleteLocalInstance(containerId || ""),
+    "Instance delete requested."
+  );
+  return !isErrorResponse(res);
+}
+
 async function activateTag(tag, options = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.activateTag !== "function") return;
@@ -435,18 +437,25 @@ async function activateTag(tag, options = {}) {
   );
 }
 
-async function openCliTerminal() {
+async function openCliTerminal(host = "") {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.openCliTerminal !== "function") return;
+  const target = localUrl(host);
+  if (!target) {
+    setBanner("error", "Open the A0 CLI from a running local instance.");
+    return false;
+  }
   try {
-    const res = await api.openCliTerminal(cliHostFromState(snapshot()));
+    const res = await api.openCliTerminal(target);
     if (isErrorResponse(res)) {
       setBanner("error", res.message);
-      return;
+      return false;
     }
     setBanner("info", "A0 CLI terminal opened.");
+    return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to open A0 CLI terminal");
+    return false;
   }
 }
 
@@ -533,6 +542,8 @@ window.dockerManagerActions = {
   provisionRuntime,
   startActive,
   stopActive,
+  stopLocalInstance,
+  deleteLocalInstance,
   activateTag,
   openCliTerminal,
   addRemoteInstance,
@@ -573,93 +584,6 @@ window.dockerManagerActions = {
     }
   }
 };
-
-let terminalDockOpen = false;
-
-function renderTerminalDock(state = snapshot()) {
-  const mount = document.getElementById("dmTerminalDock");
-  if (!mount) return;
-  const cliHost = cliHostFromState(state);
-
-  mount.innerHTML = "";
-  const shell = document.createElement("div");
-  shell.className = `dm-terminal-shell${terminalDockOpen ? " open" : ""}`;
-
-  const panel = document.createElement("div");
-  panel.className = "dm-terminal-panel";
-
-  const tabs = document.createElement("div");
-  tabs.className = "dm-terminal-tabs";
-  const tab = document.createElement("div");
-  tab.className = "dm-terminal-tab";
-  const tabIcon = document.createElement("span");
-  tabIcon.className = "material-symbols-outlined";
-  tabIcon.textContent = "terminal";
-  const tabText = document.createElement("span");
-  tabText.textContent = "A0 CLI Connector";
-  tab.appendChild(tabIcon);
-  tab.appendChild(tabText);
-  tabs.appendChild(tab);
-
-  const body = document.createElement("div");
-  body.className = "dm-terminal-body";
-  const note = document.createElement("div");
-  note.className = "dm-terminal-note";
-  note.textContent = cliHost
-    ? "Open the local Agent Zero CLI against this running instance."
-    : "Start an instance first, then open the A0 CLI against its local socket.";
-  const command = document.createElement("code");
-  command.className = "dm-terminal-command";
-  command.textContent = cliHost ? `a0 --host ${cliHost}` : "a0";
-  body.appendChild(note);
-  body.appendChild(command);
-
-  panel.appendChild(tabs);
-  panel.appendChild(body);
-
-  const footer = document.createElement("div");
-  footer.className = "dm-terminal-footer";
-
-  const toggle = document.createElement("button");
-  toggle.className = "button dm-terminal-toggle";
-  toggle.type = "button";
-  toggle.title = terminalDockOpen ? "Hide terminal" : "Show terminal";
-  toggle.setAttribute("aria-label", toggle.title);
-  toggle.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">keyboard_arrow_up</span>';
-  toggle.addEventListener("click", () => {
-    terminalDockOpen = !terminalDockOpen;
-    renderTerminalDock(snapshot());
-  });
-
-  const status = document.createElement("div");
-  status.className = "dm-terminal-status";
-  const dot = document.createElement("span");
-  dot.className = `dm-terminal-dot${cliHost ? " connected" : ""}`;
-  const statusText = document.createElement("span");
-  statusText.textContent = cliHost ? "Instance socket ready" : "No running instance";
-  const url = document.createElement("span");
-  url.className = "dm-terminal-url";
-  url.textContent = cliHost;
-  status.appendChild(dot);
-  status.appendChild(statusText);
-  if (cliHost) status.appendChild(url);
-
-  const launch = document.createElement("button");
-  launch.className = "button confirm";
-  launch.type = "button";
-  launch.disabled = !cliHost;
-  launch.title = cliHost ? "Open A0 CLI terminal" : "Start an instance first";
-  launch.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">open_in_new</span><span>Open A0 CLI</span>';
-  launch.addEventListener("click", () => window.dockerManagerActions?.openCliTerminal?.());
-
-  footer.appendChild(toggle);
-  footer.appendChild(status);
-  footer.appendChild(launch);
-
-  shell.appendChild(panel);
-  shell.appendChild(footer);
-  mount.appendChild(shell);
-}
 
 function initSubscriptions() {
   const api = window.dockerManagerAPI;

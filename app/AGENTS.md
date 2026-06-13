@@ -15,8 +15,7 @@ This scope owns:
 - `app/index.html`: renderer entrypoint, CSP, shared styles/scripts, and tab
   layout.
 - `app/docker_manager.js`: renderer state coordination, preload API calls,
-  action facade, runtime setup action, toast helpers, terminal dock, and initial
-  refresh flow.
+  action facade, runtime setup action, toast helpers, and initial refresh flow.
 - `app/docker_manager.css`: launcher-specific UI surface.
 - `app/assets/`: renderer-visible images and symbols.
 - `app/components/`: component HTML and ES modules loaded through
@@ -37,9 +36,9 @@ This scope owns:
 - Runtime setup state is part of the canonical renderer snapshot. Onboarding
   may offer setup/start/refresh/manual actions from that state, but Docker
   mechanics stay in the shell.
-- The bottom A0 CLI Connector should prefer the launcher-managed active
-  instance URL, then fall back to a running local container from the Instances
-  inventory when that container has a local UI URL.
+- A0 CLI launch belongs to each local instance card. Pass the card's local UI
+  URL through the shell-owned terminal action; do not add a global footer or
+  ambiguous active-instance CLI button.
 - `Content: ...` comes from shell content metadata. `App: ...` comes from
   Electron `app.getVersion()`.
 - Keep external navigation intentional. Product destinations such as API

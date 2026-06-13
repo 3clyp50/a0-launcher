@@ -20,8 +20,8 @@ This scope owns:
 - `sidebar/`: tab navigation and `dm:nav` event publication.
 - `official-versions/`: install/version cards, activation dialog, port/env
   overrides, data-loss acknowledgement, and update/switch actions.
-- `local-testing/`: local containers, active instance controls, remote instance
-  CRUD, and instance opening.
+- `local-testing/`: local containers, per-instance action menus, remote
+  instance CRUD, and instance opening.
 - `retained-instances/`: retained rollback containers and storage-volume cleanup.
 - `storage-summary/`: storage overview metrics.
 - `settings/`: port preferences and retention policy controls.
@@ -58,6 +58,9 @@ This scope owns:
   should not become a required path for normal users.
 - The Instances tab owns both local Docker containers and saved remote
   instances. Visible copy must say `Instances`, not `Sessions`.
+- Local instance cards keep `Open UI` as the visible primary action. Secondary
+  management actions such as `Open A0 CLI`, `Stop`, and `Delete` belong in the
+  card overflow menu so they always apply to the specific instance shown.
 - Retained instances are rollback candidates; storage-volume cleanup must remain
   clearly separate from instance start/stop actions.
 - Storage UI must say `Storage volumes` when referring to Docker volumes.

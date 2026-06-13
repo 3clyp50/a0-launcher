@@ -28,8 +28,97 @@ function defaultRemoteName(value) {
   return parsed?.hostname || "";
 }
 
+function localUiUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    if (url.username || url.password) return "";
+    if (!["127.0.0.1", "localhost", "::1", "[::1]"].includes(url.hostname)) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
 function closeDialog(dialog) {
   if (dialog && dialog.parentNode) dialog.parentNode.removeChild(dialog);
+}
+
+function closeCardMenus(except = null) {
+  document.querySelectorAll(".dm-card-menu.open").forEach((menu) => {
+    if (menu === except) return;
+    menu.classList.remove("open");
+    menu.querySelector(".dm-card-menu-trigger")?.setAttribute("aria-expanded", "false");
+  });
+}
+
+function bindCardMenuDismissal() {
+  if (document.body.dataset.dmCardMenuDismissalBound) return;
+  document.body.dataset.dmCardMenuDismissalBound = "1";
+  document.addEventListener("click", () => closeCardMenus());
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeCardMenus();
+  });
+}
+
+function menuButton(icon, label, onSelect, options = {}) {
+  const button = document.createElement("button");
+  button.className = `dm-card-menu-item${options.danger ? " danger" : ""}`;
+  button.type = "button";
+  button.setAttribute("role", "menuitem");
+  button.disabled = !!options.disabled;
+  if (options.title) button.title = options.title;
+
+  const glyph = document.createElement("span");
+  glyph.className = "material-symbols-outlined";
+  glyph.setAttribute("aria-hidden", "true");
+  glyph.textContent = icon;
+
+  const text = document.createElement("span");
+  text.textContent = label;
+
+  button.appendChild(glyph);
+  button.appendChild(text);
+  button.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    closeCardMenus();
+    if (button.disabled) return;
+    await onSelect?.();
+  });
+  return button;
+}
+
+function createCardMenu(items) {
+  const menu = document.createElement("div");
+  menu.className = "dm-card-menu";
+
+  const trigger = document.createElement("button");
+  trigger.className = "button dm-icon-button dm-card-menu-trigger";
+  trigger.type = "button";
+  trigger.title = "Instance actions";
+  trigger.setAttribute("aria-label", "Instance actions");
+  trigger.setAttribute("aria-haspopup", "menu");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">more_horiz</span>';
+  trigger.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = !menu.classList.contains("open");
+    closeCardMenus(menu);
+    menu.classList.toggle("open", open);
+    trigger.setAttribute("aria-expanded", String(open));
+  });
+
+  const popover = document.createElement("div");
+  popover.className = "dm-card-menu-popover";
+  popover.setAttribute("role", "menu");
+  popover.addEventListener("click", (event) => event.stopPropagation());
+  items.filter(Boolean).forEach((item) => popover.appendChild(item));
+
+  menu.appendChild(trigger);
+  menu.appendChild(popover);
+  return menu;
 }
 
 function openAddRemoteInstanceDialog() {
@@ -102,6 +191,7 @@ function openAddRemoteInstanceDialog() {
 }
 
 function bindActions() {
+  bindCardMenuDismissal();
   const addBtn = byId("addRemoteInstanceBtn");
   if (addBtn && !addBtn.dataset.bound) {
     addBtn.dataset.bound = "1";
@@ -111,6 +201,9 @@ function bindActions() {
 
 function renderDockerInstance(list, c, state) {
   const operationRunning = state?.progress?.status === "running";
+  const containerId = c?.containerId || "";
+  const displayName = c?.instanceName || c?.containerName || c?.containerId?.slice(0, 12) || "instance";
+  const cliHost = localUiUrl(c?.uiUrl);
   const card = document.createElement("div");
   card.className = "dm-card";
 
@@ -126,7 +219,7 @@ function renderDockerInstance(list, c, state) {
   body.className = "dm-card-body";
   const title = document.createElement("div");
   title.className = "dm-card-title";
-  title.textContent = c?.instanceName || c?.containerName || c?.containerId?.slice(0, 12) || "instance";
+  title.textContent = displayName;
   body.appendChild(title);
 
   const meta = document.createElement("div");
@@ -163,8 +256,9 @@ function renderDockerInstance(list, c, state) {
   const actions = document.createElement("div");
   actions.className = "dm-card-actions";
   const isActiveInstance = c?.labels?.["a0.launcher.role"] === "active" || String(c?.containerName || "").includes("-active__");
+  const isRunning = st === "running";
 
-  if (st === "running") {
+  if (isRunning) {
     const openBtn = document.createElement("button");
     openBtn.className = "button confirm";
     openBtn.type = "button";
@@ -173,18 +267,6 @@ function renderDockerInstance(list, c, state) {
       window.dockerManagerActions?.openInstanceUi?.({ kind: "local", containerId: c?.containerId || "" });
     });
     actions.appendChild(openBtn);
-
-    if (isActiveInstance) {
-      const stopBtn = document.createElement("button");
-      stopBtn.className = "button cancel";
-      stopBtn.type = "button";
-      stopBtn.textContent = "Stop";
-      stopBtn.disabled = operationRunning;
-      stopBtn.addEventListener("click", () => {
-        window.dockerManagerActions?.stopActive?.();
-      });
-      actions.appendChild(stopBtn);
-    }
   } else if (isActiveInstance) {
     const startBtn = document.createElement("button");
     startBtn.className = "button confirm";
@@ -196,6 +278,38 @@ function renderDockerInstance(list, c, state) {
     });
     actions.appendChild(startBtn);
   }
+
+  const menu = createCardMenu([
+    menuButton("terminal", "Open A0 CLI", () => {
+      window.dockerManagerActions?.openCliTerminal?.(cliHost);
+    }, {
+      disabled: !isRunning || !cliHost || operationRunning,
+      title: !isRunning
+        ? "Start this instance before opening A0 CLI"
+        : cliHost
+          ? "Open A0 CLI for this instance"
+          : "A0 CLI requires a running local Web UI"
+    }),
+    menuButton("stop_circle", "Stop", () => {
+      window.dockerManagerActions?.stopLocalInstance?.(containerId);
+    }, {
+      disabled: !isRunning || !containerId || operationRunning,
+      title: isRunning ? "Stop this instance" : "Instance is not running"
+    }),
+    menuButton("delete", "Delete", async () => {
+      const verb = isRunning ? "Stop and delete" : "Delete";
+      const detail = isRunning
+        ? "This will stop and delete the container. Storage volumes are not removed."
+        : "This removes the container. Storage volumes are not removed.";
+      if (!window.confirm(`${verb} ${displayName}?\n\n${detail}`)) return;
+      await window.dockerManagerActions?.deleteLocalInstance?.(containerId);
+    }, {
+      danger: true,
+      disabled: !containerId || operationRunning,
+      title: "Delete this container"
+    })
+  ]);
+  actions.appendChild(menu);
 
   footer.appendChild(actions);
 
@@ -249,14 +363,17 @@ function renderRemoteInstance(list, remote) {
   });
   actions.appendChild(openBtn);
 
-  const removeBtn = document.createElement("button");
-  removeBtn.className = "button cancel";
-  removeBtn.type = "button";
-  removeBtn.textContent = "Remove";
-  removeBtn.addEventListener("click", () => {
-    window.dockerManagerActions?.deleteRemoteInstance?.(remote?.id || "");
-  });
-  actions.appendChild(removeBtn);
+  const menu = createCardMenu([
+    menuButton("delete", "Delete", async () => {
+      if (!window.confirm(`Delete ${remote?.name || "this remote instance"}?`)) return;
+      await window.dockerManagerActions?.deleteRemoteInstance?.(remote?.id || "");
+    }, {
+      danger: true,
+      disabled: !remote?.id,
+      title: "Delete this saved remote instance"
+    })
+  ]);
+  actions.appendChild(menu);
 
   footer.appendChild(actions);
 

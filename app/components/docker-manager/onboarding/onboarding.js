@@ -8,13 +8,27 @@ function runtimeMessage(runtime, fallback) {
   return detail || fallback;
 }
 
+function isDockerDesktopRuntime(runtime) {
+  return runtime?.mode === "docker_desktop" || runtime?.dockerFlavor === "docker_desktop";
+}
+
+function titleForRuntime(runtime) {
+  if (isDockerDesktopRuntime(runtime)) {
+    return runtime?.state === "engine_stopped" ? "Docker Desktop is installed" : "Docker Desktop setup";
+  }
+  return "Agent Zero setup";
+}
+
 function actionForRuntime(runtime) {
   const openGuide = () => window.dockerManagerActions?.openDockerDownload?.(runtime?.manualUrl || "");
   if (!runtime || typeof runtime !== "object") {
-    return { label: "Download Docker", handler: () => window.dockerManagerActions?.openDockerDownload?.() };
+    return { label: "Set Up Agent Zero", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (runtime.canProvision && runtime.action === "start") {
-    return { label: "Start Docker", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
+    return {
+      label: isDockerDesktopRuntime(runtime) ? "Start Docker Desktop" : "Continue Setup",
+      handler: () => window.dockerManagerActions?.provisionRuntime?.()
+    };
   }
   if (runtime.canProvision && runtime.action === "install") {
     const label = typeof runtime.setupActionLabel === "string" && runtime.setupActionLabel.trim()
@@ -44,8 +58,8 @@ function render(state) {
 
   panel.classList.remove("hidden");
   const runtime = state?.runtime || null;
-  if (title) title.textContent = runtime?.state === "engine_stopped" ? "Docker is installed" : "Docker setup";
-  const fallback = state?.error || state?.environment?.diagnosticMessage || "Docker is not available. Start Docker Desktop, Docker Engine, or Colima, then refresh.";
+  if (title) title.textContent = titleForRuntime(runtime);
+  const fallback = state?.error || state?.environment?.diagnosticMessage || "Agent Zero needs to finish local setup before it can start.";
   const detail = runtimeMessage(runtime, fallback);
   if (message) message.textContent = detail;
 

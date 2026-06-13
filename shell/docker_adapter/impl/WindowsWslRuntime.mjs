@@ -140,7 +140,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
 
     if (!wslPresent) {
       if (dockerDesktopInstalled) return this.#dockerDesktopStoppedAssessment();
-      return this.#wslFeatureSetupAssessment('Install WSL2, then install Ubuntu and Docker Engine for a Docker-Desktop-free runtime.');
+      return this.#wslFeatureSetupAssessment('Set up the local Agent Zero runtime. Windows may ask for approval and may require a restart.');
     }
 
     const distros = await this.#wslDistros();
@@ -150,16 +150,16 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       const vmPlatform = await this.#optionalFeatureState('VirtualMachinePlatform');
       if (wslFeature !== 'Enabled' || vmPlatform !== 'Enabled') {
         if (dockerDesktopInstalled) return this.#dockerDesktopStoppedAssessment();
-        return this.#wslFeatureSetupAssessment('Enable WSL2 and VirtualMachinePlatform, then install Ubuntu and Docker Engine.');
+        return this.#wslFeatureSetupAssessment('Set up the local Agent Zero runtime. Windows may ask for approval and may require a restart.');
       }
       if (dockerDesktopInstalled) return this.#dockerDesktopStoppedAssessment();
       return {
         state: 'not_provisioned',
         mode: 'wsl_distribution',
-        detail: 'WSL2 is enabled, but no Linux distro is installed. Install Ubuntu, then install Docker Engine inside WSL.',
+        detail: 'Finish setting up the local Agent Zero runtime.',
         manualCommand: `wsl.exe --install -d ${DEFAULT_WSL_DISTRO} --no-launch`,
         manualUrl: WSL_INSTALL_URL,
-        setupActionLabel: `Install ${DEFAULT_WSL_DISTRO}`
+        setupActionLabel: 'Set Up Agent Zero'
       };
     }
 
@@ -171,9 +171,9 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
         state: 'not_provisioned',
         mode: 'wsl_engine',
         distro: distro.name,
-        detail: `WSL2 distro '${distro.name}' is available, but Docker Engine is not installed there. The launcher can install Docker Engine inside WSL.`,
+        detail: 'Finish setting up the local Agent Zero runtime.',
         manualUrl: DOCKER_ENGINE_UBUNTU_URL,
-        setupActionLabel: 'Install Docker'
+        setupActionLabel: 'Set Up Agent Zero'
       };
     }
 
@@ -183,10 +183,10 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
         state: 'not_provisioned',
         mode: 'wsl_bridge_dependency',
         distro: distro.name,
-        detail: `WSL2 distro '${distro.name}' has Docker Engine, but python3 is required for the Windows loopback bridge. The launcher can install it inside WSL.`,
+        detail: 'Finish setting up the local Agent Zero runtime.',
         manualCommand: 'sudo apt-get update && sudo apt-get install -y python3',
         manualUrl: DOCKER_ENGINE_UBUNTU_URL,
-        setupActionLabel: 'Finish Docker Setup'
+        setupActionLabel: 'Set Up Agent Zero'
       };
     }
 
@@ -196,7 +196,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
         state: 'engine_stopped',
         mode: 'wsl_engine',
         distro: distro.name,
-        detail: `WSL Docker Engine is running in '${distro.name}'. Start the local loopback bridge at ${WSL_DOCKER_HOST}.`
+        detail: 'Agent Zero local runtime is ready to start.'
       };
     }
 
@@ -204,7 +204,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       state: 'engine_stopped',
       mode: 'wsl_engine',
       distro: distro.name,
-      detail: `Docker Engine is installed in WSL distro '${distro.name}', but it is not running or needs endpoint repair. The launcher can start it and expose a Windows loopback bridge at ${WSL_DOCKER_HOST}.`
+      detail: 'Agent Zero local runtime is installed but needs to be started.'
     };
   }
 
@@ -226,7 +226,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       manualUrl: WSL_INSTALL_URL,
       requiresAdmin: true,
       requiresRestart: true,
-      setupActionLabel: 'Install WSL'
+      setupActionLabel: 'Set Up Agent Zero'
     };
   }
 
@@ -340,7 +340,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     });
     return {
       state: 'needs_followup',
-      detail: 'WSL setup was started. Restart Windows if prompted, then return here to install Ubuntu and Docker Engine.'
+      detail: 'Agent Zero setup was started. Restart Windows if prompted, then return here to continue.'
     };
   }
 
@@ -369,7 +369,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     if (!distroReady) {
       return {
         state: 'needs_followup',
-        detail: `${DEFAULT_WSL_DISTRO} installation was requested. If Windows asks for a restart or Ubuntu asks for first-run setup, complete that and return here.`
+        detail: 'Agent Zero setup was started. If Windows asks for a restart or a first-run setup window opens, complete that and return here.'
       };
     }
     await this.#installAndStartWslDocker(DEFAULT_WSL_DISTRO, options);
@@ -439,7 +439,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     }
     return {
       state: 'needs_followup',
-      detail: 'WSL bridge dependency was installed. Continue setup to start Docker Engine.'
+      detail: 'Agent Zero setup is almost done. Continue setup to start the local runtime.'
     };
   }
 

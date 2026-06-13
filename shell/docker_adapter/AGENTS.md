@@ -66,6 +66,10 @@ This scope owns:
 - Windows WSL Engine support must keep unauthenticated Docker API exposure on
   Windows loopback only. Do not bind Docker TCP on WSL public or non-loopback
   interfaces.
+- Windows client WSL onboarding details should stay Agent Zero-first for normal
+  users. Reserve explicit Docker Desktop naming for Docker Desktop reuse or
+  repair states, and keep low-level Docker Engine wording out of the primary
+  setup path.
 - Windows client WSL feature installation may use a user-approved UAC prompt via
   `wsl.exe --install --no-distribution`; it must report restart/follow-up states
   instead of claiming Docker is ready immediately.

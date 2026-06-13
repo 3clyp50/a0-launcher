@@ -33,7 +33,10 @@ This scope owns:
 - New windows that open Agent Zero UIs or remote instances must sanitize URLs and
   allow only `http:` or `https:`.
 - The A0 CLI terminal IPC must accept only local `http:` or `https:` URLs
-  without credentials.
+  without credentials. Terminal launch should stay shell-owned and work across
+  Windows, macOS, and Linux when the `a0` CLI is installed or available in a
+  sibling `a0-connector` development checkout. Launcher-owned instance launches
+  should pass the known host directly to the CLI and skip Docker discovery.
 - External links should open through Electron `shell.openExternal` only after
   validation.
 - Instance UI tabs are shell-owned `WebContentsView`s. Renderer code may request

@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   installOrSync: (tag) => ipcRenderer.invoke('docker-manager:install', { tag }),
   startActive: () => ipcRenderer.invoke('docker-manager:startActive'),
   stopActive: () => ipcRenderer.invoke('docker-manager:stopActive'),
+  stopLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:stopLocalInstance', { containerId }),
   setRetentionPolicy: (keepCount) => ipcRenderer.invoke('docker-manager:setRetentionPolicy', { keepCount }),
   setPortPreferences: (prefs) => {
     const p = prefs && typeof prefs === 'object' ? prefs : {};
@@ -56,6 +57,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     });
   },
   deleteRemoteInstance: (id) => ipcRenderer.invoke('docker-manager:deleteRemoteInstance', { id }),
+  deleteLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:deleteLocalInstance', { containerId }),
   deleteRetainedInstance: (containerId) =>
     ipcRenderer.invoke('docker-manager:deleteRetainedInstance', { containerId }),
   updateToLatest: (dataLossAck) => ipcRenderer.invoke('docker-manager:updateToLatest', { dataLossAck }),

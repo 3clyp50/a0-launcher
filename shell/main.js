@@ -1,6 +1,7 @@
 const { app, BrowserWindow, WebContentsView, net, ipcMain, shell, Tray, Menu, nativeImage, protocol } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const os = require('node:os');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const childProcess = require('node:child_process');
@@ -1039,10 +1040,195 @@ function shellSingleQuote(value) {
   return `'${String(value || '').replace(/'/g, `'\\''`)}'`;
 }
 
+function powerShellSingleQuote(value) {
+  return `'${String(value || '').replace(/'/g, `''`)}'`;
+}
+
+function powerShellArrayLiteral(values) {
+  return `@(${values.map((value) => powerShellSingleQuote(value)).join(', ')})`;
+}
+
+function appleScriptString(value) {
+  return JSON.stringify(String(value || ''));
+}
+
+function existingFilePath(filePath) {
+  const candidate = String(filePath || '').trim();
+  if (!candidate) return '';
+  try {
+    return fsSync.existsSync(candidate) ? candidate : '';
+  } catch {
+    return '';
+  }
+}
+
+function firstPathLine(value) {
+  return String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) || '';
+}
+
+function findCommandOnPath(command) {
+  const cmd = String(command || '').trim();
+  if (!cmd) return '';
+
+  if (process.platform === 'win32') {
+    try {
+      const found = childProcess.spawnSync('where.exe', [cmd], {
+        encoding: 'utf8',
+        windowsHide: true
+      });
+      if (found.status === 0) return firstPathLine(found.stdout);
+    } catch {
+      // ignore
+    }
+    return '';
+  }
+
+  try {
+    const found = childProcess.spawnSync('sh', ['-lc', `command -v ${shellSingleQuote(cmd)}`], {
+      encoding: 'utf8'
+    });
+    if (found.status === 0) return firstPathLine(found.stdout);
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
 function findA0CliBinary() {
-  const local = '/home/eclypso/a0/a0-connector/.venv/bin/a0';
-  if (fsSync.existsSync(local)) return local;
-  return 'a0';
+  const override = existingFilePath(process.env.A0_CLI_PATH);
+  if (override) return override;
+
+  const repoRoot = path.resolve(__dirname, '..');
+  const siblingConnector = path.resolve(repoRoot, '..', 'a0-connector');
+  const candidates = process.platform === 'win32'
+    ? [
+        path.join(siblingConnector, '.venv', 'Scripts', 'a0.exe'),
+        path.join(os.homedir(), '.local', 'bin', 'a0.exe')
+      ]
+    : [
+        path.join(siblingConnector, '.venv', 'bin', 'a0'),
+        '/home/eclypso/a0/a0-connector/.venv/bin/a0',
+        '/opt/homebrew/bin/a0',
+        '/usr/local/bin/a0',
+        '/usr/bin/a0'
+      ];
+
+  for (const candidate of candidates) {
+    const existing = existingFilePath(candidate);
+    if (existing) return existing;
+  }
+
+  const pathCommand = findCommandOnPath('a0');
+  if (pathCommand) return pathCommand;
+
+  const err = new Error('A0 CLI was not found. Install a0-connector or add the a0 command to PATH.');
+  err.code = 'TERMINAL_UNAVAILABLE';
+  throw err;
+}
+
+function spawnDetached(command, args, options = {}) {
+  const child = childProcess.spawn(command, args, {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
+    ...options
+  });
+  child.unref();
+  return child;
+}
+
+function openA0CliTerminalWindows(host, cli) {
+  const command = [
+    `$env:AGENT_ZERO_HOST = ${powerShellSingleQuote(host)}`,
+    `& ${powerShellSingleQuote(cli)} --host ${powerShellSingleQuote(host)} --no-docker-discovery --connect`,
+    'if ($LASTEXITCODE) { Write-Host ""; Write-Host "A0 CLI exited with code $LASTEXITCODE" }'
+  ].join('; ');
+  const psArgs = ['-NoLogo', '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command];
+  const env = { ...process.env, AGENT_ZERO_HOST: host };
+
+  if (findCommandOnPath('wt.exe')) {
+    try {
+      spawnDetached('wt.exe', ['new-tab', '--title', 'A0 CLI', 'powershell.exe', ...psArgs], { env });
+      return { opened: true, command: 'wt.exe' };
+    } catch {
+      // Fall through to PowerShell's own console window.
+    }
+  }
+
+  const launcherScript = [
+    `$argumentList = ${powerShellArrayLiteral(psArgs)}`,
+    "Start-Process -FilePath 'powershell.exe' -ArgumentList $argumentList -WindowStyle Normal"
+  ].join('; ');
+  const launched = childProcess.spawnSync('powershell.exe', [
+    '-NoLogo',
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    launcherScript
+  ], {
+    encoding: 'utf8',
+    env,
+    windowsHide: true
+  });
+  if (launched.error || launched.status !== 0) {
+    const detail = launched.error?.message || launched.stderr?.trim() || `PowerShell exited with code ${launched.status}`;
+    const err = new Error(`Could not open the A0 CLI terminal. ${detail}`);
+    err.code = 'TERMINAL_UNAVAILABLE';
+    throw err;
+  }
+  return { opened: true, command: 'powershell.exe' };
+}
+
+function openA0CliTerminalMac(host, cli) {
+  const shellPath = process.env.SHELL || '/bin/zsh';
+  const command = [
+    `export AGENT_ZERO_HOST=${shellSingleQuote(host)}`,
+    `${shellSingleQuote(cli)} --host ${shellSingleQuote(host)} --no-docker-discovery --connect`,
+    `exec ${shellSingleQuote(shellPath)} -l`
+  ].join('; ');
+
+  spawnDetached('osascript', [
+    '-e',
+    `tell application "Terminal" to do script ${appleScriptString(command)}`,
+    '-e',
+    'tell application "Terminal" to activate'
+  ], {
+    env: { ...process.env, AGENT_ZERO_HOST: host }
+  });
+  return { opened: true, command: 'Terminal.app' };
+}
+
+function openA0CliTerminalLinux(host, cli) {
+  const command = `AGENT_ZERO_HOST=${shellSingleQuote(host)} ${shellSingleQuote(cli)} --host ${shellSingleQuote(host)} --no-docker-discovery --connect; exec bash`;
+  const candidates = [
+    ['x-terminal-emulator', ['-e', 'bash', '-lc', command]],
+    ['gnome-terminal', ['--', 'bash', '-lc', command]],
+    ['konsole', ['-e', 'bash', '-lc', command]],
+    ['xfce4-terminal', ['-e', `bash -lc ${shellSingleQuote(command)}`]],
+    ['xterm', ['-e', 'bash', '-lc', command]]
+  ];
+
+  let lastError = null;
+  for (const [cmd, args] of candidates) {
+    try {
+      const found = findCommandOnPath(cmd);
+      if (!found) continue;
+      spawnDetached(cmd, args, {
+        env: { ...process.env, AGENT_ZERO_HOST: host }
+      });
+      return { opened: true, command: cmd };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const err = new Error(lastError?.message || 'No terminal emulator was found.');
+  err.code = 'TERMINAL_UNAVAILABLE';
+  throw err;
 }
 
 function openA0CliTerminal(host) {
@@ -1054,42 +1240,11 @@ function openA0CliTerminal(host) {
   }
 
   const cli = findA0CliBinary();
-  const command = `AGENT_ZERO_HOST=${shellSingleQuote(h)} ${shellSingleQuote(cli)} --host ${shellSingleQuote(h)}; exec bash`;
+  if (process.platform === 'win32') return openA0CliTerminalWindows(h, cli);
+  if (process.platform === 'darwin') return openA0CliTerminalMac(h, cli);
+  if (process.platform === 'linux') return openA0CliTerminalLinux(h, cli);
 
-  if (process.platform === 'linux') {
-    const candidates = [
-      ['x-terminal-emulator', ['-e', 'bash', '-lc', command]],
-      ['gnome-terminal', ['--', 'bash', '-lc', command]],
-      ['konsole', ['-e', 'bash', '-lc', command]],
-      ['xfce4-terminal', ['-e', `bash -lc ${shellSingleQuote(command)}`]],
-      ['xterm', ['-e', 'bash', '-lc', command]]
-    ];
-
-    let lastError = null;
-    for (const [cmd, args] of candidates) {
-      try {
-        const found = childProcess.spawnSync('bash', ['-lc', `command -v ${shellSingleQuote(cmd)}`], {
-          encoding: 'utf8'
-        });
-        if (found.status !== 0) continue;
-        const child = childProcess.spawn(cmd, args, {
-          detached: true,
-          stdio: 'ignore',
-          env: { ...process.env, AGENT_ZERO_HOST: h }
-        });
-        child.unref();
-        return { opened: true, command: cmd };
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    const err = new Error(lastError?.message || 'No terminal emulator was found.');
-    err.code = 'TERMINAL_UNAVAILABLE';
-    throw err;
-  }
-
-  const err = new Error('Opening the A0 CLI terminal is currently configured for Linux.');
+  const err = new Error('Opening the A0 CLI terminal is not available on this system.');
   err.code = 'TERMINAL_UNAVAILABLE';
   throw err;
 }
@@ -1447,6 +1602,20 @@ ipcMain.handle('docker-manager:stopActive', async () => {
   }
 });
 
+ipcMain.handle('docker-manager:stopLocalInstance', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const accepted = await dockerManager.stopLocalInstance(containerId);
+    if (!accepted || typeof accepted.opId !== 'string') {
+      return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Stop did not return an opId' });
+    }
+    return { opId: accepted.opId };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
 ipcMain.handle('docker-manager:setRetentionPolicy', async (_event, body) => {
   try {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
@@ -1500,6 +1669,20 @@ ipcMain.handle('docker-manager:deleteRemoteInstance', async (_event, body) => {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     const id = typeof body.id === 'string' ? body.id : '';
     return await dockerManager.deleteRemoteInstance(id);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:deleteLocalInstance', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const accepted = await dockerManager.deleteLocalInstance(containerId);
+    if (!accepted || typeof accepted.opId !== 'string') {
+      return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Delete did not return an opId' });
+    }
+    return { opId: accepted.opId };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

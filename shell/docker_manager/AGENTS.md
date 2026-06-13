@@ -76,6 +76,10 @@ This scope owns:
   Linux Engine.
 - Progress messages should be user-oriented: `Starting selected version`, not
   raw Docker implementation chatter.
+- Per-container stop/delete actions from the Instances card menu still belong
+  in this product layer. They must target the requested container id, return an
+  operation id, refresh state afterward, and keep storage-volume deletion
+  separate from container deletion.
 - Cancellation should be best-effort and explicit about whether the active Docker
   operation can actually stop.
 - Destructive flows should require renderer acknowledgement when the active

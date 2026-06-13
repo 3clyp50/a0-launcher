@@ -1549,6 +1549,44 @@ async function stopActiveInstance() {
   return { opId };
 }
 
+async function stopLocalInstance(containerId) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+
+  requireNoRunningOperation();
+  const opId = beginOperation('stop', null);
+
+  (async () => {
+    try {
+      updateOperationProgress({ message: 'Stopping', progress: null });
+      const docker = await getDocker({ imageRepo });
+      const containers = await docker.listContainers(imageRepo);
+      const target = (containers || []).find((c) => c && c.containerId === id) || null;
+
+      if (!target || !target.containerId) {
+        const err = new Error('Instance not found');
+        err.code = 'INSTANCE_NOT_FOUND';
+        throw err;
+      }
+
+      const state = (target.state || '').toLowerCase();
+      if (state === 'running') {
+        await docker.stopContainer(target.containerId, { t: 10 });
+      }
+
+      finishOperation('completed', null);
+      updateOperationProgress({ progress: 100, message: 'Stopped' });
+    } catch (error) {
+      const message = mapDockerInterfaceErrorToUiMessage(error) || 'Stop failed';
+      finishOperation('failed', message);
+    } finally {
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+    }
+  })().catch(() => {});
+
+  return { opId };
+}
+
 async function startActiveInstance() {
   const imageRepo = getBackendImageRepo();
 
@@ -1643,6 +1681,40 @@ async function deleteRetainedInstance(containerId) {
           ? 'You cannot delete the active instance.'
           : '') ||
         'Delete failed';
+      finishOperation('failed', message);
+    } finally {
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+    }
+  })().catch(() => {});
+
+  return { opId };
+}
+
+async function deleteLocalInstance(containerId) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+
+  requireNoRunningOperation();
+  const opId = beginOperation('delete_instance', null);
+
+  (async () => {
+    try {
+      updateOperationProgress({ message: 'Deleting', progress: null });
+      const docker = await getDocker({ imageRepo });
+      const containers = await docker.listContainers(imageRepo);
+      const target = (containers || []).find((c) => c && c.containerId === id) || null;
+
+      if (!target || !target.containerId) {
+        const err = new Error('Instance not found');
+        err.code = 'INSTANCE_NOT_FOUND';
+        throw err;
+      }
+
+      await docker.deleteContainer(target.containerId, { force: true });
+      finishOperation('completed', null);
+      updateOperationProgress({ progress: 100, message: 'Deleted' });
+    } catch (error) {
+      const message = mapDockerInterfaceErrorToUiMessage(error) || 'Delete failed';
       finishOperation('failed', message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
@@ -2172,12 +2244,14 @@ module.exports = {
   installOrSync,
   startActiveInstance,
   stopActiveInstance,
+  stopLocalInstance,
   setRetentionPolicy,
   setPortPreferences,
   provisionRuntime,
   resumeRuntimeSetupIfPending,
   addRemoteInstance,
   deleteRemoteInstance,
+  deleteLocalInstance,
   getRemoteInstance,
   deleteRetainedInstance,
   updateToLatest,

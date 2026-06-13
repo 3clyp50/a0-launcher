@@ -3,8 +3,9 @@
  *
  * DockerInterface probing runs before this class is consulted. This provisioner
  * can start Docker Desktop when it is installed, or start an already-installed
- * WSL Docker Engine behind a Windows loopback bridge. It does not silently
- * enable Windows features, install WSL distros, or install Docker Engine.
+ * WSL Docker Engine behind a Windows loopback bridge. Windows client WSL setup
+ * is explicit and goes through a user-approved UAC prompt when Windows features
+ * need administrator rights.
  */
 
 import { RuntimeProvisioner, makeError, run } from '../RuntimeProvisioner.mjs';
@@ -15,6 +16,7 @@ const WSL_INSTALL_URL = 'https://learn.microsoft.com/windows/wsl/install';
 const DOCKER_ENGINE_UBUNTU_URL = 'https://docs.docker.com/engine/install/ubuntu/';
 const DOCKER_DESKTOP_URL = 'https://www.docker.com/products/docker-desktop/';
 const WSL_DOCKER_HOST = 'tcp://127.0.0.1:23750';
+const DEFAULT_WSL_DISTRO = 'Ubuntu';
 
 export class WindowsWslRuntime extends RuntimeProvisioner {
   constructor(options = {}) {
@@ -65,28 +67,38 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     };
   }
 
-  async provision() {
+  async provision(options = {}) {
     const assessment = await this.assess();
+    if (assessment?.mode === 'wsl_feature' && assessment.state === 'not_provisioned') {
+      return await this.#installWslFeatures(options);
+    }
+    if (assessment?.mode === 'wsl_distribution' && assessment.state === 'not_provisioned') {
+      return await this.#installWslDistribution(options);
+    }
     if (assessment?.mode === 'wsl_engine' && (assessment.state === 'engine_stopped' || assessment.state === 'not_provisioned')) {
+      options.onProgress?.('Starting WSL Docker Engine');
       await this.#configureAndStartWslDocker(assessment.distro);
       await ensureWindowsWslDockerProxy({ distro: assessment.distro });
       return;
     }
     if (assessment?.mode === 'docker_desktop' && assessment.state === 'engine_stopped') {
+      options.onProgress?.('Starting Docker Desktop');
       await this.#startDockerDesktop();
       return;
     }
     throw makeError('RUNTIME_UNSUPPORTED', assessment.detail, this.#manualDetails(assessment));
   }
 
-  async start() {
+  async start(options = {}) {
     const assessment = await this.assess();
     if (assessment?.mode === 'wsl_engine') {
+      options.onProgress?.('Starting WSL Docker Engine');
       await this.#configureAndStartWslDocker(assessment.distro);
       await ensureWindowsWslDockerProxy({ distro: assessment.distro });
       return;
     }
     if (assessment?.mode === 'docker_desktop') {
+      options.onProgress?.('Starting Docker Desktop');
       await this.#startDockerDesktop();
       return;
     }
@@ -117,24 +129,14 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
 
     if (!wslPresent) {
       if (dockerDesktopInstalled) return this.#dockerDesktopStoppedAssessment();
-      return {
-        state: 'manual_install',
-        detail: 'Install Docker Desktop, or install WSL2 with a Linux distro and Docker Engine. WSL feature installation may require administrator approval and a Windows restart.',
-        manualCommand: 'wsl.exe --install --no-distribution',
-        manualUrl: WSL_INSTALL_URL
-      };
+      return this.#wslFeatureSetupAssessment('Install WSL2, then install Ubuntu and Docker Engine for a Docker-Desktop-free runtime.');
     }
 
     const wslFeature = await this.#optionalFeatureState('Microsoft-Windows-Subsystem-Linux');
     const vmPlatform = await this.#optionalFeatureState('VirtualMachinePlatform');
     if (wslFeature !== 'Enabled' || vmPlatform !== 'Enabled') {
       if (dockerDesktopInstalled) return this.#dockerDesktopStoppedAssessment();
-      return {
-        state: 'manual_install',
-        detail: 'WSL2 is not fully enabled. Enable WSL and VirtualMachinePlatform, restart Windows if requested, then install a Linux distro and Docker Engine.',
-        manualCommand: 'wsl.exe --install --no-distribution',
-        manualUrl: WSL_INSTALL_URL
-      };
+      return this.#wslFeatureSetupAssessment('Enable WSL2 and VirtualMachinePlatform, then install Ubuntu and Docker Engine.');
     }
 
     const distros = await this.#wslDistros();
@@ -142,10 +144,12 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     if (!distro) {
       if (dockerDesktopInstalled) return this.#dockerDesktopStoppedAssessment();
       return {
-        state: 'manual_install',
+        state: 'not_provisioned',
+        mode: 'wsl_distribution',
         detail: 'WSL2 is enabled, but no Linux distro is installed. Install Ubuntu, then install Docker Engine inside WSL.',
-        manualCommand: 'wsl.exe --install -d Ubuntu',
-        manualUrl: WSL_INSTALL_URL
+        manualCommand: `wsl.exe --install -d ${DEFAULT_WSL_DISTRO} --no-launch`,
+        manualUrl: WSL_INSTALL_URL,
+        setupActionLabel: `Install ${DEFAULT_WSL_DISTRO}`
       };
     }
 
@@ -198,6 +202,19 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       mode: 'docker_desktop',
       detail: 'Docker Desktop is installed but its Docker endpoint is not reachable. Start Docker Desktop, or install WSL2 and Docker Engine for a Docker-Desktop-free runtime.',
       manualUrl: DOCKER_DESKTOP_URL
+    };
+  }
+
+  #wslFeatureSetupAssessment(detail) {
+    return {
+      state: 'not_provisioned',
+      mode: 'wsl_feature',
+      detail,
+      manualCommand: 'wsl.exe --install --no-distribution',
+      manualUrl: WSL_INSTALL_URL,
+      requiresAdmin: true,
+      requiresRestart: true,
+      setupActionLabel: 'Install WSL'
     };
   }
 
@@ -282,6 +299,45 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     await this.#wslRootSh(distro, script, { timeoutMs: 120000 });
   }
 
+  async #installWslFeatures(options = {}) {
+    options.onProgress?.('Requesting Windows approval');
+    const script = [
+      '$ErrorActionPreference = "Stop"',
+      'wsl.exe --install --no-distribution',
+      'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }',
+      'wsl.exe --set-default-version 2',
+      'exit $LASTEXITCODE'
+    ].join('\n');
+    await this.#runElevatedPowerShell(script, {
+      timeoutMs: options.timeoutMs || 20 * 60 * 1000,
+      signal: options.signal
+    });
+    return {
+      state: 'needs_followup',
+      detail: 'WSL setup was started. Restart Windows if prompted, then return here to install Ubuntu and Docker Engine.'
+    };
+  }
+
+  async #installWslDistribution(options = {}) {
+    options.onProgress?.(`Installing ${DEFAULT_WSL_DISTRO}`);
+    const result = await this._runCommand(
+      'wsl.exe',
+      ['--install', '-d', DEFAULT_WSL_DISTRO, '--no-launch'],
+      { timeoutMs: options.timeoutMs || 20 * 60 * 1000, signal: options.signal }
+    );
+    if (result.code !== 0) {
+      throw makeError('RUNTIME_PROVISION_FAILED', `Could not install ${DEFAULT_WSL_DISTRO} for WSL.`, {
+        exitCode: result.code,
+        stdout: cleanCommandText(result.stdout),
+        stderr: cleanCommandText(result.stderr)
+      });
+    }
+    return {
+      state: 'needs_followup',
+      detail: `${DEFAULT_WSL_DISTRO} was installed. Install Docker Engine inside WSL, then return here.`
+    };
+  }
+
   async #dockerDesktopPath() {
     const script = [
       '$paths = @(',
@@ -301,6 +357,27 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       ? `Start-Process -LiteralPath '${desktopPath.replace(/'/g, "''")}'`
       : "Start-Process 'docker-desktop:'";
     await this.#powershell(command);
+  }
+
+  async #runElevatedPowerShell(script, options = {}) {
+    const encodedCommand = Buffer.from(String(script || ''), 'utf16le').toString('base64');
+    const launcher = [
+      '$ErrorActionPreference = "Stop"',
+      `$argsList = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '${encodedCommand}')`,
+      '$p = Start-Process -FilePath "powershell.exe" -ArgumentList $argsList -Verb RunAs -WindowStyle Hidden -Wait -PassThru',
+      'if ($null -ne $p.ExitCode) { exit $p.ExitCode }'
+    ].join('; ');
+    const result = await this.#powershell(launcher, {
+      timeoutMs: options.timeoutMs || 20 * 60 * 1000,
+      signal: options.signal
+    });
+    if (result.code !== 0) {
+      throw makeError('RUNTIME_PROVISION_FAILED', 'Windows WSL setup did not complete.', {
+        exitCode: result.code,
+        stdout: cleanCommandText(result.stdout),
+        stderr: cleanCommandText(result.stderr)
+      });
+    }
   }
 
   async #wslSh(distro, script, options = {}) {
@@ -327,11 +404,11 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     };
   }
 
-  async #powershell(script) {
+  async #powershell(script, options = {}) {
     return await this._runCommand(
       'powershell.exe',
       ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
-      { timeoutMs: 15000 }
+      { timeoutMs: options.timeoutMs || 15000, signal: options.signal }
     );
   }
 }

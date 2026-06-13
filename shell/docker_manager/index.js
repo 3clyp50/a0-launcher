@@ -182,10 +182,15 @@ function normalizeRuntimeAssessment(assessment, env = null) {
     detail,
     dockerFlavor: typeof env?.dockerFlavor === 'string' ? env.dockerFlavor : null,
     dockerHost: typeof env?.dockerHost?.raw === 'string' ? env.dockerHost.raw : null,
-    canProvision: state === 'not_provisioned' || state === 'needs_group_membership' || state === 'engine_stopped',
+    canProvision: assessment?.canProvision === true || state === 'not_provisioned' || state === 'needs_group_membership' || state === 'engine_stopped',
     action: actionByState[state] || ''
   };
 
+  if (typeof assessment?.mode === 'string') runtime.mode = assessment.mode;
+  if (typeof assessment?.distro === 'string') runtime.distro = assessment.distro;
+  if (typeof assessment?.requiresAdmin === 'boolean') runtime.requiresAdmin = assessment.requiresAdmin;
+  if (typeof assessment?.requiresRestart === 'boolean') runtime.requiresRestart = assessment.requiresRestart;
+  if (typeof assessment?.setupActionLabel === 'string') runtime.setupActionLabel = assessment.setupActionLabel;
   if (typeof assessment?.packageManager === 'string') runtime.packageManager = assessment.packageManager;
   if (Array.isArray(assessment?.manualPackages)) {
     runtime.manualPackages = assessment.manualPackages.filter((item) => typeof item === 'string');
@@ -1097,6 +1102,13 @@ async function setPortPreferences(portPreferences) {
 async function provisionRuntime() {
   requireNoRunningOperation();
   const opId = beginOperation('runtime_setup', null);
+  const finishRuntimeFollowup = (result) => {
+    if (!result || typeof result !== 'object' || typeof result.detail !== 'string') return false;
+    resetDocker();
+    updateOperationProgress({ message: result.detail, progress: 100 });
+    finishOperation('completed', null);
+    return true;
+  };
 
   (async () => {
     const controller = new AbortController();
@@ -1121,15 +1133,17 @@ async function provisionRuntime() {
       }
 
       if (assessment?.state === 'engine_stopped') {
-        await provisioner.start({
+        const result = await provisioner.start({
           signal: controller.signal,
           onProgress: (message, progress = null) => updateOperationProgress({ message, progress })
         });
+        if (finishRuntimeFollowup(result)) return;
       } else if (assessment?.state === 'not_provisioned' || assessment?.state === 'needs_group_membership') {
-        await provisioner.provision({
+        const result = await provisioner.provision({
           signal: controller.signal,
           onProgress: (message, progress = null) => updateOperationProgress({ message, progress })
         });
+        if (finishRuntimeFollowup(result)) return;
       } else if (assessment?.state === 'needs_relogin') {
         const err = new Error(assessment.detail || 'Log out and back in once, then return here.');
         err.code = 'RUNTIME_NEEDS_RELOGIN';

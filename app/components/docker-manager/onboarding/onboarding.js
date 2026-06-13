@@ -17,7 +17,10 @@ function actionForRuntime(runtime) {
     return { label: "Start Docker", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (runtime.canProvision && runtime.action === "install") {
-    return { label: "Set Up Runtime", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
+    const label = typeof runtime.setupActionLabel === "string" && runtime.setupActionLabel.trim()
+      ? runtime.setupActionLabel.trim()
+      : "Set Up Runtime";
+    return { label, handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (runtime.action === "refresh" || runtime.state === "needs_relogin") {
     return { label: "Refresh", handler: () => window.dockerManagerActions?.refresh?.() };

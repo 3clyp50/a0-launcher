@@ -41,6 +41,9 @@ This scope owns:
   installable Linux Engine setup, stopped daemons, relogin-required states, and
   manual install fallback without exposing package-manager details as the main
   path.
+- If runtime state includes `setupActionLabel`, onboarding should use it for the
+  primary setup button so Windows WSL steps can say `Install WSL` or
+  `Install Ubuntu` plainly.
 - Sidebar navigation publishes `dm:nav`; tab content activation remains owned by
   the renderer coordinator, not individual tab content components.
 - Empty, loading, error, success, and disabled states must be explicit enough

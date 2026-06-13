@@ -19,6 +19,11 @@ import path from 'node:path';
  * @property {string[]=} manualPackages
  * @property {string=} manualCommand
  * @property {string=} manualUrl
+ * @property {string=} mode
+ * @property {string=} distro
+ * @property {boolean=} requiresAdmin
+ * @property {boolean=} requiresRestart
+ * @property {string=} setupActionLabel
  */
 
 export class RuntimeProvisioner {

@@ -1308,6 +1308,11 @@ function sanitizeDockerManagerState(state) {
       canProvision: !!r.canProvision,
       action: typeof r.action === 'string' && allowedRuntimeActions.has(r.action) ? r.action : ''
     };
+    if (typeof r.mode === 'string') runtime.mode = r.mode;
+    if (typeof r.distro === 'string') runtime.distro = r.distro;
+    if (typeof r.requiresAdmin === 'boolean') runtime.requiresAdmin = r.requiresAdmin;
+    if (typeof r.requiresRestart === 'boolean') runtime.requiresRestart = r.requiresRestart;
+    if (typeof r.setupActionLabel === 'string') runtime.setupActionLabel = r.setupActionLabel;
     if (typeof r.dockerFlavor === 'string' || r.dockerFlavor === null) runtime.dockerFlavor = r.dockerFlavor;
     if (typeof r.dockerHost === 'string' || r.dockerHost === null) runtime.dockerHost = r.dockerHost;
     if (typeof r.packageManager === 'string') runtime.packageManager = r.packageManager;

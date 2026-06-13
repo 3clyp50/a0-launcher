@@ -60,6 +60,9 @@ This scope owns:
 - Runtime setup IPC is a named Docker Manager intent. The renderer may request
   setup/start, but assessment and privileged mechanics stay in
   `shell/docker_manager` and `shell/docker_adapter`.
+- Windows client WSL setup may request UAC through an explicit runtime setup
+  action. Keep that path narrowly scoped to WSL feature/distro setup; do not add
+  generic command execution IPC.
 - Runtime state may expose HTTP(S) manual guide URLs, but `shell/main.js` must
   continue sanitizing that field before it reaches the renderer.
 - Long-running Docker operations should return an accepted operation id and

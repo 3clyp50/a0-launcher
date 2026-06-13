@@ -38,8 +38,11 @@ test('WindowsWslRuntime assess directs Windows clients without WSL to runtime in
 
     const assessment = await runtime.assess();
 
-    assert.equal(assessment.state, 'manual_install');
-    assert.match(assessment.detail, /Docker Desktop/i);
+    assert.equal(assessment.state, 'not_provisioned');
+    assert.equal(assessment.mode, 'wsl_feature');
+    assert.equal(assessment.requiresAdmin, true);
+    assert.equal(assessment.requiresRestart, true);
+    assert.equal(assessment.setupActionLabel, 'Install WSL');
     assert.match(assessment.detail, /WSL2/i);
     assert.match(assessment.manualCommand, /wsl\.exe --install --no-distribution/i);
   } finally {
@@ -89,6 +92,65 @@ test('WindowsWslRuntime assess detects Docker Desktop when WSL2 is incomplete', 
     assert.equal(assessment.state, 'engine_stopped');
     assert.equal(assessment.mode, 'docker_desktop');
     assert.match(assessment.detail, /Docker Desktop is installed/i);
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime provision requests UAC for WSL feature setup', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  const progress = [];
+  try {
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      isWindowsServer: false,
+      runCommand: fakeWindowsCommandRunner({ calls })
+    });
+
+    const result = await runtime.provision({ onProgress: (message) => progress.push(message) });
+
+    assert.equal(result.state, 'needs_followup');
+    assert.match(result.detail, /Restart Windows/i);
+    assert.ok(progress.includes('Requesting Windows approval'));
+    const elevated = calls.find((call) => call.cmd === 'powershell.exe' && /Start-Process/.test(String(call.args.at(-1))));
+    assert.ok(elevated, 'expected an elevated PowerShell launcher');
+    assert.match(String(elevated.args.at(-1)), /-Verb RunAs/);
+    assert.match(String(elevated.args.at(-1)), /-WindowStyle Hidden/);
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime provision installs Ubuntu when WSL2 has no distro', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  try {
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      isWindowsServer: false,
+      runCommand: fakeWindowsCommandRunner({
+        binaries: ['wsl.exe'],
+        calls,
+        features: {
+          'Microsoft-Windows-Subsystem-Linux': 'Enabled',
+          VirtualMachinePlatform: 'Enabled'
+        },
+        wslList: '  NAME      STATE           VERSION\n'
+      })
+    });
+
+    const assessment = await runtime.assess();
+    assert.equal(assessment.state, 'not_provisioned');
+    assert.equal(assessment.mode, 'wsl_distribution');
+    assert.equal(assessment.setupActionLabel, 'Install Ubuntu');
+
+    const result = await runtime.provision();
+
+    assert.equal(result.state, 'needs_followup');
+    assert.match(result.detail, /Ubuntu was installed/i);
+    const install = calls.find((call) => call.cmd === 'wsl.exe' && call.args?.[0] === '--install');
+    assert.deepEqual(install?.args, ['--install', '-d', 'Ubuntu', '--no-launch']);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -375,16 +437,20 @@ function fakeLinuxCommandRunner({ binaries = [], groups = [], passwordlessSudo =
 
 function fakeWindowsCommandRunner({
   binaries = [],
+  calls = [],
+  elevatedExitCode = 0,
   features = {},
   productType = 3,
   wslList = '',
   dockerDesktopPath = '',
+  wslInstallDistroCode = 0,
   wslDockerInstalled = false,
   wslDockerReady = false,
   wslPythonInstalled = true
 } = {}) {
   const present = new Set(binaries);
   return async (cmd, args) => {
+    calls.push({ cmd, args: Array.isArray(args) ? [...args] : args });
     if (cmd === 'where.exe') {
       const binary = args?.[0] || '';
       return {
@@ -395,6 +461,9 @@ function fakeWindowsCommandRunner({
     }
     if (cmd === 'powershell.exe') {
       const script = String(args?.[args.length - 1] || '');
+      if (/Start-Process/.test(script) && /-Verb RunAs/.test(script)) {
+        return { code: elevatedExitCode, stdout: '', stderr: '' };
+      }
       if (/Win32_OperatingSystem\)\.ProductType/.test(script)) {
         return { code: 0, stdout: `${productType}\r\n`, stderr: '' };
       }
@@ -409,6 +478,9 @@ function fakeWindowsCommandRunner({
     }
     if (cmd === 'wsl.exe' && args?.[0] === '-l') {
       return { code: 0, stdout: wslList, stderr: '' };
+    }
+    if (cmd === 'wsl.exe' && args?.[0] === '--install') {
+      return { code: wslInstallDistroCode, stdout: '', stderr: '' };
     }
     if (cmd === 'wsl.exe' && args?.includes('--exec')) {
       const script = String(args?.[args.length - 1] || '');

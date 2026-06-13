@@ -55,6 +55,9 @@ This scope owns:
 - Runtime setup is additive and reuse-first: existing Docker Desktop, native
   Engine, and rootless endpoints are used before Linux Engine provisioning is
   offered.
+- Windows WSL setup may complete an intermediate step such as feature enablement
+  or distro installation. Preserve the follow-up message instead of reporting
+  the runtime as ready prematurely.
 - Linux runtime setup may install/start Docker Engine, then report
   `needs_relogin` when docker group access cannot apply to the current desktop
   session yet. Do not introduce CPU, memory, or disk sizing controls for native

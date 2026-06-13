@@ -86,6 +86,7 @@ async function startProxy({ host, port, distro, socketPath }) {
     const args = [];
     const selectedDistro = (distro || process.env.A0_WSL_DOCKER_DISTRO || '').trim();
     if (selectedDistro) args.push('-d', selectedDistro);
+    args.push('-u', 'root');
     args.push('--exec', 'python3', '-c', PYTHON_UNIX_SOCKET_BRIDGE);
 
     const child = spawn('wsl.exe', args, {

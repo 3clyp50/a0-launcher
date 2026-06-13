@@ -58,6 +58,9 @@ This scope owns:
 - Windows WSL setup may complete an intermediate step such as feature enablement
   or distro installation. Preserve the follow-up message instead of reporting
   the runtime as ready prematurely.
+- Windows WSL setup can continue from distro installation into Docker Engine
+  installation when the distro is immediately usable; if Windows requires a
+  restart or first-run distro setup, report that as the next step.
 - Linux runtime setup may install/start Docker Engine, then report
   `needs_relogin` when docker group access cannot apply to the current desktop
   session yet. Do not introduce CPU, memory, or disk sizing controls for native

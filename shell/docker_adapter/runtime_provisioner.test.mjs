@@ -125,13 +125,18 @@ test('WindowsWslRuntime provision requests UAC for WSL feature setup', async () 
 test('WindowsWslRuntime provision installs Ubuntu when WSL2 has no distro', async () => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
   const calls = [];
+  const proxyCalls = [];
   try {
     const runtime = new WindowsWslRuntime({
       managedDir,
       isWindowsServer: false,
+      ensureProxy: async (options) => {
+        proxyCalls.push(options);
+      },
       runCommand: fakeWindowsCommandRunner({
         binaries: ['wsl.exe'],
         calls,
+        wslRootReady: true,
         features: {
           'Microsoft-Windows-Subsystem-Linux': 'Enabled',
           VirtualMachinePlatform: 'Enabled'
@@ -147,10 +152,54 @@ test('WindowsWslRuntime provision installs Ubuntu when WSL2 has no distro', asyn
 
     const result = await runtime.provision();
 
-    assert.equal(result.state, 'needs_followup');
-    assert.match(result.detail, /Ubuntu was installed/i);
+    assert.equal(result, undefined);
     const install = calls.find((call) => call.cmd === 'wsl.exe' && call.args?.[0] === '--install');
     assert.deepEqual(install?.args, ['--install', '-d', 'Ubuntu', '--no-launch']);
+    assert.ok(calls.some((call) => call.cmd === 'wsl.exe' && /docker-ce docker-ce-cli containerd\.io/.test(String(call.args?.at(-1)))));
+    assert.deepEqual(proxyCalls, [{ distro: 'Ubuntu' }]);
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime provision installs Docker Engine inside an existing WSL distro', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  const progress = [];
+  const proxyCalls = [];
+  try {
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      isWindowsServer: false,
+      ensureProxy: async (options) => {
+        proxyCalls.push(options);
+      },
+      runCommand: fakeWindowsCommandRunner({
+        binaries: ['wsl.exe'],
+        calls,
+        features: {
+          'Microsoft-Windows-Subsystem-Linux': 'Enabled',
+          VirtualMachinePlatform: 'Enabled'
+        },
+        wslList: '  NAME      STATE           VERSION\n* Ubuntu    Running         2\n',
+        wslDockerInstalled: false,
+        wslRootReady: true
+      })
+    });
+
+    const assessment = await runtime.assess();
+    assert.equal(assessment.state, 'not_provisioned');
+    assert.equal(assessment.mode, 'wsl_engine');
+    assert.equal(assessment.setupActionLabel, 'Install Docker');
+
+    await runtime.provision({ onProgress: (message) => progress.push(message) });
+
+    assert.deepEqual(progress, ['Installing Docker Engine', 'Starting WSL Docker Engine']);
+    const dockerInstall = calls.find((call) => call.cmd === 'wsl.exe' && /docker-ce docker-ce-cli containerd\.io/.test(String(call.args?.at(-1))));
+    assert.ok(dockerInstall, 'expected Docker Engine install script');
+    assert.match(String(dockerInstall.args.at(-1)), /download\.docker\.com\/linux\/ubuntu/);
+    assert.match(String(dockerInstall.args.at(-1)), /apt-get install -y ca-certificates curl python3/);
+    assert.deepEqual(proxyCalls, [{ distro: 'Ubuntu' }]);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -444,9 +493,11 @@ function fakeWindowsCommandRunner({
   wslList = '',
   dockerDesktopPath = '',
   wslInstallDistroCode = 0,
+  wslDockerInstallCode = 0,
   wslDockerInstalled = false,
   wslDockerReady = false,
-  wslPythonInstalled = true
+  wslPythonInstalled = true,
+  wslRootReady = false
 } = {}) {
   const present = new Set(binaries);
   return async (cmd, args) => {
@@ -484,6 +535,20 @@ function fakeWindowsCommandRunner({
     }
     if (cmd === 'wsl.exe' && args?.includes('--exec')) {
       const script = String(args?.[args.length - 1] || '');
+      if (args?.includes('-u') && args?.includes('root')) {
+        if (script.trim() === 'true') {
+          return { code: wslRootReady ? 0 : 1, stdout: '', stderr: '' };
+        }
+        if (/docker-ce docker-ce-cli containerd\.io/.test(script)) {
+          return { code: wslDockerInstallCode, stdout: '', stderr: '' };
+        }
+        if (/apt-get install -y python3/.test(script)) {
+          return { code: 0, stdout: '', stderr: '' };
+        }
+        if (/systemctl start docker|service docker start|dockerd >\/tmp\/a0-dockerd\.log/.test(script)) {
+          return { code: 0, stdout: '', stderr: '' };
+        }
+      }
       if (/command -v docker/.test(script)) {
         return { code: wslDockerInstalled ? 0 : 1, stdout: wslDockerInstalled ? '/usr/bin/docker\n' : '', stderr: '' };
       }

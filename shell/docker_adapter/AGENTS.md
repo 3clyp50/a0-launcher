@@ -69,6 +69,12 @@ This scope owns:
 - Windows client WSL feature installation may use a user-approved UAC prompt via
   `wsl.exe --install --no-distribution`; it must report restart/follow-up states
   instead of claiming Docker is ready immediately.
+- Windows client WSL Docker Engine setup may install Docker Engine packages
+  inside an existing Ubuntu WSL2 distro using Docker's official apt repository.
+  Include the Python bridge dependency and keep Docker API access on the
+  launcher-owned Windows loopback bridge.
+- The Windows loopback bridge may run its WSL helper as `root` so users do not
+  need to manage Linux `docker` group membership during onboarding.
 - Concrete implementations live under `impl/` and are loaded on demand.
 - Docker Hub calls should expose digest/content-type/rate-limit metadata without
   forcing renderer or Docker Manager code to parse registry responses directly.

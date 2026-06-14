@@ -690,6 +690,10 @@ body, html {
   font-size: 0.8rem;
 }
 
+.sv-progress-message.error {
+  color: var(--color-accent);
+}
+
 .sv-row-end {
   display: flex;
   justify-content: flex-end;

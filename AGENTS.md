@@ -65,7 +65,8 @@ Runtime and release contracts:
 - Use Linux paths and commands in examples.
 - Do not assume Windows-only paths such as `.\.venv\Scripts\python`; use Linux
   virtualenv paths like `./.venv/bin/python`.
-- Use local app contents with:
+- `npm start` from the repository root uses local app contents. For explicit
+  local-content selection, use:
 
 ```bash
 A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start

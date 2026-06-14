@@ -30,28 +30,47 @@ function defaultInstanceName(tag) {
   return sanitizeName(`agent-zero-${tag || "instance"}`).slice(0, 64);
 }
 
-function normalizeInstalledEntries(state) {
+function normalizeVersionEntries(state) {
   const versions = Array.isArray(state?.versions) ? state.versions : [];
-  const installed = versions
-    .filter((v) => v?.availability && v.availability !== "available")
-    .map((v) => ({
-      tag: v.id,
-      title: v.displayVersion || v.id,
-      category: v.category,
-      availability: v.availability,
-      installability: v.installability || null,
-      badges: Array.isArray(v.channelBadges) ? v.channelBadges : [],
-      isActive: !!v.isActive,
-      activeState: v.activeState || null,
-      publishedAt: v.publishedAt || null,
-      sizeBytes: v.sizeBytes || null,
-      matchHint: v.matchHint || "",
-      digestHint: v.digestHint || ""
-    }));
-
-  if (installed.length) return installed;
-
   const images = Array.isArray(state?.images) ? state.images : [];
+  if (versions.length) {
+    const entries = versions.map((v) => ({
+      tag: v?.id || "",
+      title: v?.displayVersion || v?.id || "unknown",
+      category: v?.category || "",
+      availability: v?.availability || "available",
+      installability: v?.installability || null,
+      badges: Array.isArray(v?.channelBadges) ? v.channelBadges : [],
+      isActive: !!v?.isActive,
+      activeState: v?.activeState || null,
+      publishedAt: v?.publishedAt || null,
+      sizeBytes: v?.sizeBytes || null,
+      matchHint: v?.matchHint || "",
+      digestHint: v?.digestHint || "",
+      differsFromPublished: !!v?.differsFromPublished
+    })).filter((entry) => entry.tag);
+
+    const knownTags = new Set(entries.map((entry) => entry.tag));
+    for (const img of images) {
+      const tag = img?.tag || img?.imageRef || "";
+      if (!tag || knownTags.has(tag)) continue;
+      knownTags.add(tag);
+      entries.push({
+        tag,
+        title: tag,
+        imageRef: img?.imageRef || "",
+        category: "local_build",
+        availability: "installed",
+        isActive: !!img?.isActive,
+        publishedAt: img?.createdAt || null,
+        sizeBytes: img?.size || img?.sizeBytes || null,
+        badges: []
+      });
+    }
+
+    return entries;
+  }
+
   return images.map((img) => ({
     tag: img?.tag || img?.imageRef || "unknown",
     title: img?.tag || img?.imageRef || "unknown",
@@ -59,8 +78,69 @@ function normalizeInstalledEntries(state) {
     availability: "installed",
     isActive: !!img?.isActive,
     publishedAt: img?.createdAt || null,
-    sizeBytes: img?.size || img?.sizeBytes || null
+    sizeBytes: img?.size || img?.sizeBytes || null,
+    badges: []
   }));
+}
+
+function statusForEntry(entry) {
+  if (entry.isActive) {
+    return {
+      className: "status-active",
+      label: entry.activeState === "running" ? "Running" : "Active"
+    };
+  }
+
+  if (entry.availability === "installing") {
+    return { className: "status-installed", label: "Working" };
+  }
+
+  if (entry.availability === "update_available" || entry.differsFromPublished) {
+    return { className: "status-update", label: "Update available" };
+  }
+
+  if (entry.availability === "installed") {
+    return { className: "status-installed", label: "Installed" };
+  }
+
+  if (entry.installability === "not_yet_available") {
+    return { className: "status-unavailable", label: "Not ready" };
+  }
+
+  return { className: "status-available", label: "Available" };
+}
+
+function actionForEntry(entry, state) {
+  if (entry.isActive || entry.availability === "installing") return null;
+
+  if (entry.availability === "installed" || entry.availability === "update_available" || entry.differsFromPublished) {
+    return {
+      label: entry.availability === "update_available" || entry.differsFromPublished ? "Update" : "Activate",
+      className: "button confirm",
+      handler: () => {
+        if (entry.availability === "update_available" || entry.differsFromPublished) {
+          window.dockerManagerActions?.installOrSync?.(entry.tag);
+          return;
+        }
+        openActivateDialog(entry, state);
+      }
+    };
+  }
+
+  if (entry.installability === "not_yet_available") {
+    return {
+      label: "Not ready",
+      className: "button",
+      disabled: true,
+      handler: () => {}
+    };
+  }
+
+  return {
+    label: "Install",
+    className: "button confirm",
+    handler: () => window.dockerManagerActions?.installOrSync?.(entry.tag)
+  };
 }
 
 function hasDifferentActive(state, tag) {
@@ -163,12 +243,18 @@ function render(state) {
   const list = byId("officialList");
   if (!list) return;
 
-  const entries = normalizeInstalledEntries(state);
-  if (subtitle) subtitle.textContent = `${entries.length} install${entries.length === 1 ? "" : "s"} detected`;
+  const entries = normalizeVersionEntries(state);
+  const installedCount = entries.filter((entry) => entry.availability && entry.availability !== "available").length;
+  const availableCount = entries.filter((entry) => entry.availability === "available").length;
+  if (subtitle) {
+    subtitle.textContent = entries.length
+      ? `${installedCount} installed · ${availableCount} available`
+      : "0 installs detected";
+  }
 
   list.innerHTML = "";
   if (!entries.length) {
-    list.innerHTML = '<div class="dm-empty">No installs found. Pull or install an Agent Zero image to get started.</div>';
+    list.innerHTML = '<div class="dm-empty">No versions found. Refresh to try again.</div>';
     return;
   }
 
@@ -207,9 +293,12 @@ function render(state) {
     meta.className = "dm-card-meta";
     const parts = [];
     if (entry.imageRef) parts.push(entry.imageRef);
-    if (entry.publishedAt) parts.push("Created " + fmtDate(entry.publishedAt));
+    if (entry.publishedAt) {
+      parts.push(`${entry.imageRef ? "Created" : "Released"} ${fmtDate(entry.publishedAt)}`);
+    }
     if (entry.sizeBytes) parts.push(fmtSize(entry.sizeBytes));
     if (entry.matchHint) parts.push(entry.matchHint);
+    if (entry.digestHint) parts.push(entry.digestHint);
     meta.textContent = parts.join(" · ");
     body.appendChild(meta);
 
@@ -218,25 +307,23 @@ function render(state) {
 
     const statusEl = document.createElement("span");
     statusEl.className = "status";
-    if (entry.isActive) {
-      statusEl.classList.add("status-active");
-      statusEl.textContent = entry.activeState === "running" ? "Running" : "Active";
-    } else {
-      statusEl.classList.add("status-installed");
-      statusEl.textContent = entry.availability === "installing" ? "Working" : "Installed";
-    }
+    const status = statusForEntry(entry);
+    statusEl.classList.add(status.className);
+    statusEl.textContent = status.label;
     footer.appendChild(statusEl);
 
     const actions = document.createElement("div");
     actions.className = "dm-card-actions";
 
-    if (!entry.isActive && entry.availability !== "installing") {
-      const activateBtn = document.createElement("button");
-      activateBtn.className = "button confirm";
-      activateBtn.type = "button";
-      activateBtn.textContent = "Activate";
-      activateBtn.addEventListener("click", () => openActivateDialog(entry, state));
-      actions.appendChild(activateBtn);
+    const action = actionForEntry(entry, state);
+    if (action) {
+      const actionBtn = document.createElement("button");
+      actionBtn.className = action.className;
+      actionBtn.type = "button";
+      actionBtn.textContent = action.label;
+      actionBtn.disabled = !!action.disabled;
+      actionBtn.addEventListener("click", action.handler);
+      actions.appendChild(actionBtn);
     }
 
     footer.appendChild(actions);

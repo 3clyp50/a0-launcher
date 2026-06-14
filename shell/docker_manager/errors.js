@@ -39,6 +39,8 @@ function mapDockerInterfaceErrorToUiMessage(error) {
     case 'REGISTRY_ERROR':
     case 'REGISTRY_NO_DIGEST':
       return 'Update checks are unavailable right now. Please try again later.';
+    case 'DOCKER_PULL_RATE_LIMIT':
+      return 'Docker Hub pull limit reached. Sign in to Docker or try again later.';
 
     case 'GITHUB_API_ERROR':
     case 'GITHUB_PAGINATION_ERROR':

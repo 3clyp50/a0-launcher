@@ -43,15 +43,18 @@ This scope owns:
   path.
 - If runtime state includes `setupActionLabel`, onboarding should use it for the
   primary setup button. Docker Desktop states may name Docker Desktop plainly;
-  the default Windows WSL setup path should stay Agent Zero-first.
+  default setup buttons should stay Agent Zero-first.
 - Sidebar navigation publishes `dm:nav`; tab content activation remains owned by
   the renderer coordinator, not individual tab content components.
 - Empty, loading, error, success, and disabled states must be explicit enough
   that the user is never left wondering whether Docker or the launcher is still
   working.
-- Official version cards must distinguish available, installed, active, testing,
-  local, matching digest, and differing digest states without exposing raw Docker
-  mechanics as the main story.
+- Operation progress failures must remain visible with the stable
+  renderer-facing error message after the async operation finishes.
+- Official version cards must distinguish available, installable, installed,
+  active, testing, local, matching digest, and differing digest states without
+  exposing raw Docker mechanics as the main story. Fresh machines must have a
+  visible install action once Docker is ready.
 - Activating a tag while another instance is active must keep the
   backup/proceed acknowledgement.
 - Port mappings and environment text stay advanced activation inputs. They

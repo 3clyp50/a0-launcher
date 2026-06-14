@@ -69,7 +69,8 @@ function makeTabKey(target) {
   const idKey = kind === 'remote' ? 'instanceId' : 'containerId';
   const id = typeof safeTarget[idKey] === 'string' ? safeTarget[idKey] : '';
   const url = normalizeHttpUrl(safeTarget.url);
-  return `${kind}:${id}:${url}`;
+  if (id) return `${kind}:${id}`;
+  return `${kind}:${url}`;
 }
 
 function makeTabsSnapshot(tabs, activeTabId) {

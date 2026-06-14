@@ -46,6 +46,7 @@ function makeDockerInterfaceError(code, message, details = {}, cause = null) {
 function normalizeDockerError(error, context = {}) {
   const code = error?.code || '';
   const statusCode = error?.statusCode;
+  const message = typeof error?.message === 'string' ? error.message : '';
 
   const details = {
     ...context,
@@ -57,6 +58,12 @@ function normalizeDockerError(error, context = {}) {
     statusCode
   };
 
+  if (typeof statusCode === 'number' && statusCode === 429) {
+    return makeDockerInterfaceError('DOCKER_PULL_RATE_LIMIT', 'Docker Hub pull rate limit exceeded', details, error);
+  }
+  if (message && /(?:pull\s+)?rate limit|too many requests/i.test(message)) {
+    return makeDockerInterfaceError('DOCKER_PULL_RATE_LIMIT', 'Docker Hub pull rate limit exceeded', details, error);
+  }
   if (code === 'EACCES' || code === 'EPERM') {
     return makeDockerInterfaceError('PERMISSION_DENIED', 'Permission denied accessing Docker', details, error);
   }

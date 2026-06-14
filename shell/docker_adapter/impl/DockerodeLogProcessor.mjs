@@ -205,6 +205,27 @@ export async function readContainerLogs(docker, containerId, options = {}) {
 
   /** @type {LogLineEvent[]} */
   const lines = [];
+  const appendChunk = (chunk) => {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk || '');
+    for (const evt of decoder.pushBuffer(buf)) {
+      if (lines.length >= maxLines) break;
+      lines.push(evt);
+    }
+  };
+
+  if (!stream || typeof stream.on !== 'function') {
+    if (signal?.aborted) return { mode: 'snapshot', lines, aborted: true };
+
+    appendChunk(stream);
+    if (flushPartialOnEnd && lines.length < maxLines) {
+      for (const evt of decoder.flush(includeStderr)) {
+        if (lines.length >= maxLines) break;
+        lines.push(evt);
+      }
+    }
+    return { mode: 'snapshot', lines, aborted: false };
+  }
+
   let aborted = false;
   let done = false;
 
@@ -242,11 +263,7 @@ export async function readContainerLogs(docker, containerId, options = {}) {
   return await new Promise((resolve, reject) => {
     const onData = (chunk) => {
       try {
-        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        for (const evt of decoder.pushBuffer(buf)) {
-          if (lines.length >= maxLines) break;
-          lines.push(evt);
-        }
+        appendChunk(chunk);
         if (lines.length >= maxLines) {
           try { stream.destroy(); } catch { /* ignore */ }
         }

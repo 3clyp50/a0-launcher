@@ -34,14 +34,18 @@ test('normalizeHttpUrl canonicalizes valid HTTP URLs and rejects invalid values'
   assert.equal(normalizeHttpUrl('file:///tmp/nope'), '');
 });
 
-test('makeTabKey includes target identity and normalized URL', () => {
+test('makeTabKey uses stable identity before URL fallback', () => {
   assert.equal(
     makeTabKey({ kind: 'local', containerId: 'abc123', url: 'http://127.0.0.1:32080/' }),
-    'local:abc123:http://127.0.0.1:32080/'
+    'local:abc123'
   );
   assert.equal(
     makeTabKey({ kind: 'remote', instanceId: 'remote-1', url: 'https://example.com/' }),
-    'remote:remote-1:https://example.com/'
+    'remote:remote-1'
+  );
+  assert.equal(
+    makeTabKey({ kind: 'local', url: 'http://127.0.0.1:32080/' }),
+    'local:http://127.0.0.1:32080/'
   );
 });
 

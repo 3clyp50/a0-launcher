@@ -33,7 +33,7 @@ function actionForRuntime(runtime) {
   if (runtime.canProvision && runtime.action === "install") {
     const label = typeof runtime.setupActionLabel === "string" && runtime.setupActionLabel.trim()
       ? runtime.setupActionLabel.trim()
-      : "Set Up Runtime";
+      : "Set Up Agent Zero";
     return { label, handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (runtime.action === "refresh" || runtime.state === "needs_relogin") {

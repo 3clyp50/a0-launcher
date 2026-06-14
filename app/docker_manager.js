@@ -190,9 +190,12 @@ async function refresh() {
   emitState();
 
   try {
+    const stateRequest = typeof api.refresh === "function"
+      ? api.refresh()
+      : typeof api.getState === "function" ? api.getState() : null;
     const [inventory, state] = await Promise.all([
       typeof api.getInventory === "function" ? api.getInventory() : null,
-      typeof api.getState === "function" ? api.getState() : null
+      stateRequest
     ]);
 
     if (isErrorResponse(inventory)) {
@@ -363,6 +366,16 @@ async function provisionRuntime() {
     "Runtime setup",
     () => api.provisionRuntime(),
     "Runtime setup requested."
+  );
+}
+
+async function installOrSync(tag) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.installOrSync !== "function") return;
+  return runDockerOperation(
+    "Install",
+    () => api.installOrSync(tag),
+    "Install requested."
   );
 }
 
@@ -540,6 +553,7 @@ window.dockerManagerActions = {
   pruneVolumes,
   openDockerDownload,
   provisionRuntime,
+  installOrSync,
   startActive,
   stopActive,
   stopLocalInstance,

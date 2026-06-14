@@ -11,14 +11,26 @@ function render(state) {
   if (appVersion) appVersion.textContent = state?.meta?.appVersion || "";
 
   const progress = state?.progress || null;
-  if (!panel || !progress || progress.status !== "running") {
+  const status = typeof progress?.status === "string" ? progress.status : "";
+  const shouldShow = status === "running" || status === "failed" || status === "canceled";
+  if (!panel || !progress || !shouldShow) {
     if (panel) panel.classList.add("hidden");
     return;
   }
 
   panel.classList.remove("hidden");
-  if (progressTitle) progressTitle.textContent = progress.type || "operation";
-  if (progressMessage) progressMessage.textContent = progress.message || "Working...";
+  const type = progress.type || "operation";
+  if (progressTitle) {
+    progressTitle.textContent = status === "failed"
+      ? `${type} failed`
+      : status === "canceled" ? `${type} canceled` : type;
+  }
+  if (progressMessage) {
+    progressMessage.textContent = status === "failed"
+      ? (progress.error || progress.message || "Operation failed.")
+      : status === "canceled" ? (progress.error || progress.message || "Canceled.") : (progress.message || "Working...");
+    progressMessage.classList.toggle("error", status === "failed");
+  }
 }
 
 function bindActions() {

@@ -74,25 +74,30 @@ function defaultAppRepoArg(argv = process.argv) {
   return '';
 }
 
+function isLocalRepoContentDir(dir) {
+  try {
+    const appIndex = path.join(dir, 'app', 'index.html');
+    const pkg = path.join(dir, 'package.json');
+    return fsSync.existsSync(appIndex) && fsSync.existsSync(pkg);
+  } catch {
+    return false;
+  }
+}
+
 function resolveLocalRepoDir() {
   const rawPath = (process.env[LOCAL_REPO_ENV_VAR] || '').trim();
   const useLocalFromCwd = isTruthyEnv(process.env[USE_LOCAL_CONTENT_ENV_VAR]);
   const defaultAppPath = defaultAppRepoArg();
+  const useCwdFallback = useLocalFromCwd || process.defaultApp || !app.isPackaged;
 
   const candidates = [];
   if (rawPath) candidates.push(path.resolve(process.cwd(), rawPath));
   if (defaultAppPath) candidates.push(path.resolve(process.cwd(), defaultAppPath));
-  if (useLocalFromCwd) candidates.push(process.cwd());
+  if (useCwdFallback) candidates.push(process.cwd());
 
   for (const dir of candidates) {
-    try {
-      const appIndex = path.join(dir, 'app', 'index.html');
-      const pkg = path.join(dir, 'package.json');
-      if (!fsSync.existsSync(appIndex)) continue;
-      if (!fsSync.existsSync(pkg)) continue;
+    if (isLocalRepoContentDir(dir)) {
       return dir;
-    } catch {
-      // ignore
     }
   }
 
@@ -599,6 +604,8 @@ function createTray() {
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('get-content-version', async () => {
+  if (USING_LOCAL_CONTENT) return 'dev-local';
+
   try {
     const meta = await readLocalMeta();
     return meta?.version || 'unknown';
@@ -941,6 +948,16 @@ async function openInstanceTab(target) {
 
   const existing = findInstanceTabByKey(target.key);
   if (existing) {
+    const nextUrl = normalizeHttpUrl(target.url);
+    if (nextUrl && nextUrl !== normalizeHttpUrl(existing.url)) {
+      existing.url = nextUrl;
+      existing.title = target.title || existing.title;
+      existing.containerId = target.containerId || existing.containerId || '';
+      existing.instanceId = target.instanceId || existing.instanceId || '';
+      existing.loading = true;
+      sendInstanceTabsEvent();
+      await existing.view?.webContents?.loadURL(nextUrl);
+    }
     setActiveInstanceTab(existing.id);
     return { opened: true, tabId: existing.id, focusedExisting: true };
   }

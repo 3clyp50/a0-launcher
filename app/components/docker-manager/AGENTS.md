@@ -66,8 +66,8 @@ This scope owns:
   status strip.
 - Operation progress should keep actionable recovery affordances for
   user-fixable failures. For Docker Hub pull-rate limits, keep the error
-  visible and offer a Docker sign-in path plus retry instead of a dead-end
-  message.
+  visible and offer the shell-owned Docker sign-in wrapper plus retry instead
+  of a dead-end message.
 - Operation progress failures must remain visible with the stable
   renderer-facing error message after the async operation finishes.
 - Official version cards must distinguish available, installable, installed,

@@ -503,7 +503,8 @@ async function openDockerLoginTerminal() {
       setBanner("error", res.message);
       return false;
     }
-    setBanner("info", "Docker login terminal opened.");
+    const target = typeof res?.command === "string" && res.command ? ` in ${res.command}` : "";
+    setBanner("info", `Docker login opened${target}. Finish sign-in, then click Retry.`);
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to open a Docker login terminal");

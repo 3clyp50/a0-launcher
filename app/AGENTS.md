@@ -56,6 +56,8 @@ This scope owns:
 - Use `Storage volumes` when referring to Docker volumes.
 - Keep install, activation, rollback, and destructive-storage flows explicit
   about risk without adding Docker jargon where a user decision is enough.
+- Toast feedback for modal actions must remain visible above blocking modal
+  backdrops, especially recoverable failures such as Docker Hub sign-in.
 - Keep `Open UI` colocated with the instance or install it opens.
 - Keep compact controls stable in width and avoid text overflow on small
   windows.

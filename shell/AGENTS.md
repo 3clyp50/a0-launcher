@@ -67,6 +67,9 @@ This scope owns:
 - Runtime setup IPC is a named Docker Manager intent. The renderer may request
   setup/start, but assessment and privileged mechanics stay in
   `shell/docker_manager` and `shell/docker_adapter`.
+- Docker Hub sign-in recovery is a named shell-owned intent. The renderer may
+  request it, but `shell/main.js` must launch a visible wrapper around the real
+  `docker login` flow instead of exposing generic command execution.
 - Windows client WSL setup may request UAC through an explicit runtime setup
   action. Keep that path narrowly scoped to WSL feature/distro setup; do not add
   generic command execution IPC.

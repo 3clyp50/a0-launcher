@@ -1167,6 +1167,70 @@ function spawnDetached(command, args, options = {}) {
   return child;
 }
 
+function terminalWrapperDir() {
+  const dir = path.join(app.getPath('userData'), 'terminal-wrappers');
+  fsSync.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function writeDockerLoginShellWrapper(dockerCli) {
+  const scriptPath = path.join(terminalWrapperDir(), 'docker-login.sh');
+  const script = [
+    '#!/usr/bin/env bash',
+    'set -u',
+    'clear 2>/dev/null || true',
+    'echo "Agent Zero Docker Login"',
+    'echo',
+    'echo "Sign in to Docker Hub so Agent Zero image downloads can continue."',
+    'echo "When login succeeds, return to Agent Zero and click Retry."',
+    'echo',
+    `${shellSingleQuote(dockerCli)} login`,
+    'code=$?',
+    'echo',
+    'if [ "$code" -eq 0 ]; then',
+    '  echo "Docker login completed."',
+    'else',
+    '  echo "Docker login exited with code $code."',
+    'fi',
+    'echo',
+    'read -r -p "Press Enter to close this window..." _',
+    'exit "$code"',
+    ''
+  ].join('\n');
+  fsSync.writeFileSync(scriptPath, script, { encoding: 'utf8', mode: 0o700 });
+  try {
+    fsSync.chmodSync(scriptPath, 0o700);
+  } catch {
+    // Best-effort on platforms that ignore POSIX modes.
+  }
+  return scriptPath;
+}
+
+function writeDockerLoginPowerShellWrapper(dockerCli) {
+  const scriptPath = path.join(terminalWrapperDir(), 'docker-login.ps1');
+  const script = [
+    'Write-Host "Agent Zero Docker Login"',
+    'Write-Host ""',
+    'Write-Host "Sign in to Docker Hub so Agent Zero image downloads can continue."',
+    'Write-Host "When login succeeds, return to Agent Zero and click Retry."',
+    'Write-Host ""',
+    `& ${powerShellSingleQuote(dockerCli)} login`,
+    '$code = $LASTEXITCODE',
+    'Write-Host ""',
+    'if ($code -eq 0) {',
+    '  Write-Host "Docker login completed."',
+    '} else {',
+    '  Write-Host "Docker login exited with code $code."',
+    '}',
+    'Write-Host ""',
+    'Read-Host "Press Enter to close this window"',
+    'exit $code',
+    ''
+  ].join('\r\n');
+  fsSync.writeFileSync(scriptPath, script, { encoding: 'utf8' });
+  return scriptPath;
+}
+
 function openA0CliTerminalWindows(host, cli) {
   const command = [
     `$env:AGENT_ZERO_HOST = ${powerShellSingleQuote(host)}`,
@@ -1259,11 +1323,8 @@ function openA0CliTerminalLinux(host, cli) {
 }
 
 function openDockerLoginTerminalWindows(dockerCli) {
-  const command = [
-    `& ${powerShellSingleQuote(dockerCli)} login`,
-    'if ($LASTEXITCODE) { Write-Host ""; Write-Host "Docker login exited with code $LASTEXITCODE" }'
-  ].join('; ');
-  const psArgs = ['-NoLogo', '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command];
+  const scriptPath = writeDockerLoginPowerShellWrapper(dockerCli);
+  const psArgs = ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath];
 
   if (findCommandOnPath('wt.exe')) {
     try {
@@ -1300,16 +1361,8 @@ function openDockerLoginTerminalWindows(dockerCli) {
 }
 
 function openDockerLoginTerminalMac(dockerCli) {
-  const shellPath = process.env.SHELL || '/bin/zsh';
-  const command = [
-    `${shellSingleQuote(dockerCli)} login`,
-    'code=$?',
-    'if [ "$code" -ne 0 ]; then',
-    '  echo',
-    '  echo "Docker login exited with code $code"',
-    'fi',
-    `exec ${shellSingleQuote(shellPath)} -l`
-  ].join('; ');
+  const scriptPath = writeDockerLoginShellWrapper(dockerCli);
+  const command = `bash ${shellSingleQuote(scriptPath)}`;
 
   spawnDetached('osascript', [
     '-e',
@@ -1323,18 +1376,11 @@ function openDockerLoginTerminalMac(dockerCli) {
 }
 
 function openDockerLoginTerminalLinux(dockerCli) {
-  const command = [
-    `${shellSingleQuote(dockerCli)} login`,
-    'code=$?',
-    'if [ "$code" -ne 0 ]; then',
-    '  echo',
-    '  echo "Docker login exited with code $code"',
-    'fi',
-    'exec bash'
-  ].join('; ');
+  const scriptPath = writeDockerLoginShellWrapper(dockerCli);
+  const command = `bash ${shellSingleQuote(scriptPath)}`;
   const candidates = [
-    ['x-terminal-emulator', ['-e', 'bash', '-lc', command]],
     ['gnome-terminal', ['--', 'bash', '-lc', command]],
+    ['x-terminal-emulator', ['-e', 'bash', '-lc', command]],
     ['konsole', ['-e', 'bash', '-lc', command]],
     ['xfce4-terminal', ['-e', `bash -lc ${shellSingleQuote(command)}`]],
     ['xterm', ['-e', 'bash', '-lc', command]]

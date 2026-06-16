@@ -12,10 +12,13 @@ function isDockerDesktopRuntime(runtime) {
   return runtime?.mode === "docker_desktop" || runtime?.dockerFlavor === "docker_desktop";
 }
 
+function isDockerDesktopStopped(runtime) {
+  return isDockerDesktopRuntime(runtime) && runtime?.state === "engine_stopped";
+}
+
 function titleForRuntime(runtime) {
-  if (isDockerDesktopRuntime(runtime)) {
-    return runtime?.state === "engine_stopped" ? "Docker Desktop is installed" : "Docker Desktop setup";
-  }
+  if (isDockerDesktopStopped(runtime)) return "Docker Desktop is not running";
+  if (isDockerDesktopRuntime(runtime)) return "Docker Desktop setup";
   return "Agent Zero setup";
 }
 
@@ -36,6 +39,9 @@ function actionForRuntime(runtime) {
       : "Set Up Agent Zero";
     return { label, handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
+  if (isDockerDesktopStopped(runtime)) {
+    return { label: "Start Docker Desktop", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
+  }
   if (runtime.action === "refresh" || runtime.state === "needs_relogin") {
     return { label: "Refresh", handler: () => window.dockerManagerActions?.refresh?.() };
   }
@@ -53,11 +59,13 @@ function render(state) {
     || (Array.isArray(state?.containers) && state.containers.length > 0);
   if (state?.dockerAvailable || hasData) {
     panel.classList.add("hidden");
+    panel.classList.remove("sv-onboarding-warning");
     return;
   }
 
   panel.classList.remove("hidden");
   const runtime = state?.runtime || null;
+  panel.classList.toggle("sv-onboarding-warning", isDockerDesktopStopped(runtime));
   if (title) title.textContent = titleForRuntime(runtime);
   const fallback = state?.error || state?.environment?.diagnosticMessage || "Agent Zero needs to finish local setup before it can start.";
   const detail = runtimeMessage(runtime, fallback);

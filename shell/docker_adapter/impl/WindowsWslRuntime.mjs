@@ -95,7 +95,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     }
     if (assessment?.mode === 'docker_desktop' && assessment.state === 'engine_stopped') {
       options.onProgress?.('Starting Docker Desktop');
-      await this.#startDockerDesktop();
+      await this.#startDockerDesktop(options);
       return;
     }
     throw makeError('RUNTIME_UNSUPPORTED', assessment.detail, this.#manualDetails(assessment));
@@ -111,7 +111,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     }
     if (assessment?.mode === 'docker_desktop') {
       options.onProgress?.('Starting Docker Desktop');
-      await this.#startDockerDesktop();
+      await this.#startDockerDesktop(options);
       return;
     }
     throw makeError('RUNTIME_UNSUPPORTED', assessment.detail, this.#manualDetails(assessment));
@@ -215,8 +215,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     return {
       state: 'engine_stopped',
       mode: 'docker_desktop',
-      detail: 'Docker Desktop is installed but its Docker endpoint is not reachable. Start Docker Desktop, or install WSL2 and Docker Engine for a Docker-Desktop-free runtime.',
-      manualUrl: DOCKER_DESKTOP_URL
+      detail: 'Docker Desktop is installed but not running. Start Docker Desktop, wait until it finishes starting, then return here.'
     };
   }
 
@@ -343,6 +342,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
 
   async #installWslFeatures(options = {}) {
     options.onProgress?.('Requesting Windows approval');
+    options.onProgress?.('Enabling WSL features');
     const script = [
       '$ErrorActionPreference = "Stop"',
       'wsl.exe --install --no-distribution',
@@ -426,6 +426,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     await this.#installDockerEngineInWsl(distro, options);
     options.onProgress?.('Starting WSL Docker Engine');
     await this.#configureAndStartWslDocker(distro);
+    options.onProgress?.('Starting local Docker bridge');
     await this._ensureProxy({ distro });
   }
 
@@ -501,12 +502,44 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     return result.code === 0 ? String(result.stdout || '').trim() : '';
   }
 
-  async #startDockerDesktop() {
+  async #startDockerDesktop(options = {}) {
     const desktopPath = await this.#dockerDesktopPath();
     const command = desktopPath
       ? `Start-Process -LiteralPath '${desktopPath.replace(/'/g, "''")}'`
       : "Start-Process 'docker-desktop:'";
     await this.#powershell(command);
+    options.onProgress?.('Waiting for Docker Desktop');
+    const ready = await this.#waitForDockerDesktopPipe(options.signal);
+    if (!ready) {
+      throw makeError('RUNTIME_START_FAILED', 'Docker Desktop started, but Docker did not become reachable.');
+    }
+  }
+
+  async #waitForDockerDesktopPipe(signal, timeoutMs = 120000) {
+    const net = await import('node:net');
+    const pipePath = '\\\\.\\pipe\\docker_engine';
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (signal?.aborted) throw makeError('ABORTED', 'Runtime start aborted');
+      const ok = await new Promise((resolve) => {
+        const socket = net.connect(pipePath);
+        const finish = (value) => {
+          try {
+            socket.destroy();
+          } catch {
+            // ignore
+          }
+          resolve(value);
+        };
+        socket.setTimeout(1500);
+        socket.once('connect', () => finish(true));
+        socket.once('timeout', () => finish(false));
+        socket.once('error', () => finish(false));
+      });
+      if (ok) return true;
+      await sleep(1000);
+    }
+    return false;
   }
 
   async #runElevatedPowerShell(script, options = {}) {
@@ -568,4 +601,8 @@ export const WINDOWS_DOCKER_DESKTOP_URL = DOCKER_DESKTOP_URL;
 
 function cleanCommandText(value) {
   return String(value || '').replace(/\0/g, '');
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

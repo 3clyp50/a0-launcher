@@ -47,11 +47,19 @@ This scope owns:
 - Runtime provisioners are consulted only after the Docker Manager has tried to
   reuse an existing Docker endpoint. They should classify repairable states
   before proposing installation.
+- Runtime provisioners should report user-facing progress through `onProgress`
+  for platform setup phases such as authorization, component download, Docker
+  Engine install/start, follow-up/relogin, and Docker Desktop waiting. Keep the
+  messages stable enough for Docker Manager to normalize into modal steps.
 - macOS automatic provisioning uses a dedicated Colima profile named `a0`.
   It must not require Docker Desktop, Homebrew, or a privileged Docker socket
   symlink. Because Colima checks for a Docker client during startup, the
   provisioner may install Docker's official static macOS CLI into the
   launcher-owned runtime bin directory when the host does not provide one.
+- macOS assessment is reuse-first for an already installed Docker Desktop. If
+  Docker Desktop is installed but its socket is not reachable, report a
+  `docker_desktop` `engine_stopped` state so the product can ask the user to
+  start it instead of offering a fresh download/setup path.
 - Linux automatic provisioning uses the host package manager and starts native
   Docker Engine; it must not manage container CPU, memory, or disk sizing.
 - Linux privileged setup prefers `pkexec` for desktop authentication and may use
@@ -79,6 +87,9 @@ This scope owns:
   users. Reserve explicit Docker Desktop naming for Docker Desktop reuse or
   repair states, and keep low-level Docker Engine wording out of the primary
   setup path.
+- Windows clients with Docker Desktop installed but stopped must report a
+  `docker_desktop` `engine_stopped` state with start guidance, not a Docker
+  Desktop download or reinstall link.
 - Windows client WSL feature installation may use a user-approved UAC prompt via
   `wsl.exe --install --no-distribution`; it must report restart/follow-up states
   instead of claiming Docker is ready immediately.

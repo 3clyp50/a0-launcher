@@ -128,7 +128,8 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
     }
 
     if (assessment.state === 'needs_group_membership') {
-      options.onProgress?.('Updating Docker access');
+      options.onProgress?.('Requesting system authorization');
+      options.onProgress?.('Checking Docker access');
       const updated = await this.#runPrivileged(this.#dockerGroupScript(), {
         timeoutMs: 120000,
         signal: options.signal
@@ -170,7 +171,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
       throw makeError('RUNTIME_UNSUPPORTED', 'Automatic setup is not available on this system.');
     }
 
-    options.onProgress?.('Installing Docker Engine');
+    options.onProgress?.('Requesting system authorization');
     const install = await this.#runPrivileged(this.#installScript(pm), {
       timeoutMs: 15 * 60 * 1000,
       signal: options.signal,
@@ -190,6 +191,8 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
       });
     }
 
+    options.onProgress?.('Starting Docker Engine');
+    options.onProgress?.('Checking Docker access');
     const socket = await this.#waitForNativeSocket(options.signal);
     if (socket === 'EACCES') {
       throw makeError(
@@ -206,6 +209,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
   }
 
   async start(options = {}) {
+    options.onProgress?.('Requesting system authorization');
     options.onProgress?.('Starting Docker Engine');
     const started = await this.#runPrivileged(this.#startScript(), {
       timeoutMs: 120000,
@@ -221,6 +225,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
       });
     }
 
+    options.onProgress?.('Checking Docker access');
     const socket = await this.#waitForNativeSocket(options.signal);
     if (socket === 'EACCES') {
       throw makeError(

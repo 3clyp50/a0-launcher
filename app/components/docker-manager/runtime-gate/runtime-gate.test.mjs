@@ -1,0 +1,407 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import {
+  normalizedRuntimeGate,
+  renderRuntimeGate,
+  shouldShowRuntimeGate
+} from './runtime-gate.js';
+
+class MiniEvent {
+  constructor(type, options = {}) {
+    this.type = type;
+    this.key = options.key || '';
+    this.shiftKey = !!options.shiftKey;
+    this.defaultPrevented = false;
+    this.propagationStopped = false;
+    this.target = null;
+  }
+
+  preventDefault() {
+    this.defaultPrevented = true;
+  }
+
+  stopPropagation() {
+    this.propagationStopped = true;
+  }
+}
+
+class MiniClassList {
+  constructor(element) {
+    this.element = element;
+  }
+
+  values() {
+    return String(this.element.className || '').split(/\s+/).filter(Boolean);
+  }
+
+  write(values) {
+    this.element.className = [...new Set(values)].join(' ');
+  }
+
+  add(...classes) {
+    this.write([...this.values(), ...classes.filter(Boolean)]);
+  }
+
+  remove(...classes) {
+    const remove = new Set(classes);
+    this.write(this.values().filter((item) => !remove.has(item)));
+  }
+
+  contains(value) {
+    return this.values().includes(value);
+  }
+
+  toggle(value, force) {
+    const has = this.contains(value);
+    const shouldAdd = force === undefined ? !has : !!force;
+    if (shouldAdd) this.add(value);
+    else this.remove(value);
+    return shouldAdd;
+  }
+}
+
+class MiniElement {
+  constructor(tagName, ownerDocument = null) {
+    this.tagName = String(tagName || '').toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.attributes = new Map();
+    this.dataset = {};
+    this.style = {};
+    this.className = '';
+    this.id = '';
+    this.textContent = '';
+    this.disabled = false;
+    this.hidden = false;
+    this.inert = false;
+    this.tabIndex = undefined;
+    this.listeners = new Map();
+    this.classList = new MiniClassList(this);
+  }
+
+  appendChild(child) {
+    child.parentNode = this;
+    child.ownerDocument = this.ownerDocument;
+    this.children.push(child);
+    return child;
+  }
+
+  removeChild(child) {
+    this.children = this.children.filter((item) => item !== child);
+    child.parentNode = null;
+    return child;
+  }
+
+  remove() {
+    this.parentNode?.removeChild(this);
+  }
+
+  setAttribute(name, value) {
+    const key = String(name || '');
+    const text = String(value);
+    this.attributes.set(key, text);
+    if (key === 'id') this.id = text;
+    if (key === 'class') this.className = text;
+    if (key === 'disabled') this.disabled = true;
+    if (key === 'hidden') this.hidden = true;
+    if (key === 'tabindex') this.tabIndex = Number(text);
+  }
+
+  getAttribute(name) {
+    return this.attributes.get(String(name || '')) || null;
+  }
+
+  removeAttribute(name) {
+    const key = String(name || '');
+    this.attributes.delete(key);
+    if (key === 'disabled') this.disabled = false;
+    if (key === 'hidden') this.hidden = false;
+  }
+
+  addEventListener(type, handler) {
+    const key = String(type || '');
+    const list = this.listeners.get(key) || [];
+    list.push(handler);
+    this.listeners.set(key, list);
+  }
+
+  dispatchEvent(event) {
+    event.target ||= this;
+    const list = this.listeners.get(event.type) || [];
+    for (const handler of list) handler(event);
+    return !event.defaultPrevented;
+  }
+
+  focus() {
+    if (this.ownerDocument) this.ownerDocument.activeElement = this;
+  }
+
+  querySelector(selector) {
+    return this.querySelectorAll(selector)[0] || null;
+  }
+
+  querySelectorAll(selector) {
+    const selectors = String(selector || '').split(',').map((item) => item.trim()).filter(Boolean);
+    const out = [];
+    const visit = (node) => {
+      for (const child of node.children) {
+        if (selectors.some((item) => matches(child, item))) out.push(child);
+        visit(child);
+      }
+    };
+    visit(this);
+    return out;
+  }
+}
+
+class MiniDocument extends MiniElement {
+  constructor() {
+    super('#document', null);
+    this.ownerDocument = this;
+    this.activeElement = null;
+    this.body = new MiniElement('body', this);
+    this.appendChild(this.body);
+  }
+
+  createElement(tagName) {
+    return new MiniElement(tagName, this);
+  }
+
+  getElementById(id) {
+    const target = String(id || '');
+    return this.find((node) => node.id === target);
+  }
+
+  find(predicate) {
+    const visit = (node) => {
+      if (predicate(node)) return node;
+      for (const child of node.children) {
+        const found = visit(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    return visit(this);
+  }
+}
+
+function matches(element, selector) {
+  if (!selector) return false;
+  if (selector === 'button:not([disabled])') return element.tagName === 'BUTTON' && !element.disabled;
+  if (selector === '[href]') return !!element.getAttribute('href');
+  if (selector === 'input' || selector === 'select' || selector === 'textarea') return element.tagName === selector.toUpperCase();
+  if (selector === "[tabindex]:not([tabindex='-1'])") return element.tabIndex !== undefined && element.tabIndex !== -1;
+  if (selector.startsWith('#')) return element.id === selector.slice(1);
+  if (selector.startsWith('.')) return element.classList.contains(selector.slice(1));
+  if (/^[a-z]+$/i.test(selector)) return element.tagName === selector.toUpperCase();
+  return false;
+}
+
+function installDom() {
+  const document = new MiniDocument();
+  const page = document.createElement('div');
+  page.className = 'dm-page';
+  document.body.appendChild(page);
+  globalThis.document = document;
+  globalThis.window = { __dmLastState: null };
+  return document;
+}
+
+function buttons(document) {
+  return document.querySelectorAll('button');
+}
+
+function buttonByText(document, text) {
+  return buttons(document).find((button) => button.textContent === text) || null;
+}
+
+test('no Docker on Linux shows blocking setup action', () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: false,
+    runtime: {
+      platform: 'linux',
+      state: 'not_provisioned',
+      action: 'install',
+      canProvision: true,
+      detail: 'No container runtime was found.'
+    }
+  };
+
+  assert.equal(shouldShowRuntimeGate(state), true);
+  const model = normalizedRuntimeGate(state);
+  assert.equal(model.action.label, 'Set Up Agent Zero');
+
+  let setupCount = 0;
+  assert.equal(renderRuntimeGate(state, { provisionRuntime: () => { setupCount += 1; } }), true);
+  assert.ok(document.getElementById('runtimeSetupDialog'));
+  assert.equal(document.querySelector('.dm-page').inert, true);
+  buttonByText(document, 'Set Up Agent Zero').dispatchEvent(new MiniEvent('click'));
+  assert.equal(setupCount, 1);
+});
+
+test('Docker Desktop installed but stopped starts Docker Desktop instead of opening an install guide', () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: false,
+    runtime: {
+      platform: 'darwin',
+      mode: 'docker_desktop',
+      state: 'engine_stopped',
+      action: 'start',
+      canProvision: true,
+      detail: 'Docker Desktop is installed but not running.'
+    }
+  };
+
+  const model = normalizedRuntimeGate(state);
+  assert.equal(model.action.label, 'Start Docker Desktop');
+  assert.equal(buttonByText(document, 'Open Install Guide'), null);
+
+  let setupCount = 0;
+  let guideCount = 0;
+  renderRuntimeGate(state, {
+    provisionRuntime: () => { setupCount += 1; },
+    openDockerDownload: () => { guideCount += 1; }
+  });
+  assert.ok(buttonByText(document, 'Start Docker Desktop'));
+  assert.equal(buttonByText(document, 'Open Install Guide'), null);
+  buttonByText(document, 'Start Docker Desktop').dispatchEvent(new MiniEvent('click'));
+  assert.equal(setupCount, 1);
+  assert.equal(guideCount, 0);
+});
+
+test('runtime setup progress keeps setup disabled and shows an indeterminate bar', () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: false,
+    runtime: { platform: 'linux', state: 'not_provisioned', action: 'install', canProvision: true },
+    progress: {
+      type: 'runtime_setup',
+      status: 'running',
+      headline: 'Setting up Agent Zero',
+      detail: 'Installing Docker Engine',
+      indeterminate: true
+    }
+  };
+
+  const model = normalizedRuntimeGate(state);
+  assert.equal(model.action.disabled, true);
+  assert.equal(model.indeterminate, true);
+
+  renderRuntimeGate(state, {});
+  const primary = buttonByText(document, 'Setting Up Agent Zero');
+  assert.equal(primary.disabled, true);
+  assert.ok(document.querySelector('.indeterminate'));
+  assert.equal(document.querySelector('.dm-runtime-steps'), null);
+});
+
+test('completed runtime setup shows success without a refresh button or step list', () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: true,
+    runtime: { platform: 'linux', state: 'ready' },
+    versions: [
+      { id: 'v1.20', displayVersion: '1.20', channelBadges: ['latest'] },
+      { id: 'testing', displayVersion: 'Testing', channelBadges: ['testing'] }
+    ],
+    progress: {
+      opId: 'op-success',
+      type: 'runtime_setup',
+      status: 'completed',
+      headline: 'Setting up Agent Zero',
+      detail: 'Runtime ready',
+      phase: 'ready',
+      progress: 100
+    }
+  };
+  window.__dmLastState = state;
+
+  const model = normalizedRuntimeGate(state);
+  assert.equal(model.success, true);
+  assert.equal(model.action.label, 'Setup Agent Zero');
+  assert.deepEqual(model.setupOptions.map((option) => option.value), ['latest', 'v1.20', 'testing']);
+
+  let installTag = '';
+  assert.equal(renderRuntimeGate(state, { installOrSync: (tag) => { installTag = tag; } }), true);
+  assert.ok(document.querySelector('.dm-runtime-success'));
+  assert.equal(document.querySelector('#runtimeSetupTag')?.value, 'latest');
+  assert.equal(buttonByText(document, 'Refresh'), null);
+  assert.equal(document.querySelector('.dm-runtime-steps'), null);
+
+  buttonByText(document, 'Setup Agent Zero').dispatchEvent(new MiniEvent('click'));
+  assert.equal(installTag, 'latest');
+  assert.equal(document.getElementById('runtimeSetupDialog'), null);
+  assert.equal(document.querySelector('.dm-page').inert, false);
+});
+
+test('manual and relogin states stay blocked with recovery actions', () => {
+  let document = installDom();
+  const manual = {
+    stateLoaded: true,
+    dockerAvailable: false,
+    runtime: {
+      platform: 'linux',
+      state: 'manual_install',
+      action: 'manual',
+      manualUrl: 'https://docs.docker.com/engine/install/ubuntu/',
+      detail: 'Install Docker Engine manually.'
+    }
+  };
+  let openedUrl = '';
+  renderRuntimeGate(manual, { openDockerDownload: (url) => { openedUrl = url; } });
+  buttonByText(document, 'Open Install Guide').dispatchEvent(new MiniEvent('click'));
+  assert.equal(openedUrl, manual.runtime.manualUrl);
+
+  document = installDom();
+  const relogin = {
+    stateLoaded: true,
+    dockerAvailable: false,
+    runtime: {
+      platform: 'linux',
+      state: 'needs_relogin',
+      action: 'refresh',
+      detail: 'Log out and back in once, then return here.'
+    }
+  };
+  let refreshCount = 0;
+  renderRuntimeGate(relogin, { refresh: () => { refreshCount += 1; } });
+  buttonByText(document, 'Refresh').dispatchEvent(new MiniEvent('click'));
+  assert.equal(refreshCount, 1);
+  assert.ok(document.getElementById('runtimeSetupDialog'));
+});
+
+test('ready state closes the modal and runtime gate cannot be dismissed with Escape or backdrop click', () => {
+  const document = installDom();
+  const blocked = {
+    stateLoaded: true,
+    dockerAvailable: false,
+    runtime: { platform: 'linux', state: 'not_provisioned', action: 'install', canProvision: true }
+  };
+  renderRuntimeGate(blocked, {});
+
+  const escape = new MiniEvent('keydown', { key: 'Escape' });
+  document.dispatchEvent(escape);
+  assert.equal(escape.defaultPrevented, true);
+  assert.ok(document.getElementById('runtimeSetupDialog'));
+
+  const click = new MiniEvent('click');
+  document.getElementById('runtimeSetupDialog').dispatchEvent(click);
+  assert.equal(click.defaultPrevented, true);
+  assert.ok(document.getElementById('runtimeSetupDialog'));
+
+  const ready = {
+    stateLoaded: true,
+    dockerAvailable: true,
+    runtime: { platform: 'linux', state: 'ready' }
+  };
+  assert.equal(renderRuntimeGate(ready, {}), false);
+  assert.equal(document.getElementById('runtimeSetupDialog'), null);
+  assert.equal(document.querySelector('.dm-page').inert, false);
+});

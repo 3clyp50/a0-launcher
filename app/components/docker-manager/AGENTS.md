@@ -15,8 +15,13 @@ This scope owns:
 
 - `docker-manager-store.js`: mutable renderer store and default state shape.
 - `status-header/`: title, release metadata, refresh, API Dashboard, and
-  operation progress.
-- `onboarding/`: Docker/runtime availability guidance and setup actions.
+  shared progress-recovery helpers.
+- `operation-modal/`: centered progress/error modal for non-runtime installs,
+  updates, activation, start/stop, delete, rollback, and recovery actions.
+- `runtime-gate/`: mandatory startup runtime setup modal, runtime setup
+  progress, recovery actions, and non-dismissable gating.
+- `onboarding/`: retired runtime setup banner files kept only for compatibility
+  until they are removed.
 - `sidebar/`: tab navigation and `dm:nav` event publication.
 - `official-versions/`: install/version cards, activation dialog, port/env
   overrides, data-loss acknowledgement, and update/switch actions.
@@ -37,18 +42,32 @@ This scope owns:
   exists, then subscribe to future updates.
 - Components should not call `window.dockerManagerAPI` directly. Use
   `window.dockerManagerActions`.
-- Onboarding renders runtime setup from `state.runtime`. It should distinguish
-  installable Linux Engine setup, stopped daemons, relogin-required states, and
-  manual install fallback without exposing package-manager details as the main
-  path.
-- If runtime state includes `setupActionLabel`, onboarding should use it for the
-  primary setup button. Docker Desktop states may name Docker Desktop plainly;
-  default setup buttons should stay Agent Zero-first.
+- Runtime setup renders from `state.runtime` in the blocking startup modal. It
+  should distinguish installable Linux Engine setup, stopped daemons,
+  relogin-required states, and manual install fallback without exposing
+  package-manager details as the main path.
+- Docker Desktop installed-but-stopped states must be warning states that tell
+  the user to start Docker Desktop. Do not show a download/reinstall action for
+  that state.
+- If runtime state includes `setupActionLabel`, the runtime modal should use it
+  for the primary setup button. Docker Desktop states may name Docker Desktop
+  plainly; default setup buttons should stay Agent Zero-first.
 - Sidebar navigation publishes `dm:nav`; tab content activation remains owned by
   the renderer coordinator, not individual tab content components.
 - Empty, loading, error, success, and disabled states must be explicit enough
   that the user is never left wondering whether Docker or the launcher is still
   working.
+- Runtime setup progress belongs primarily in the blocking runtime modal.
+- Runtime setup success should stay in the same modal shell long enough to
+  offer first Agent Zero image setup. The selector defaults to `latest`, and the
+  primary `Setup Agent Zero` action starts the selected image install.
+- Post-runtime image, activation, update, rollback, start, stop, and delete
+  progress should use the centered operation modal rather than a top-page
+  status strip.
+- Operation progress should keep actionable recovery affordances for
+  user-fixable failures. For Docker Hub pull-rate limits, keep the error
+  visible and offer a Docker sign-in path plus retry instead of a dead-end
+  message.
 - Operation progress failures must remain visible with the stable
   renderer-facing error message after the async operation finishes.
 - Official version cards must distinguish available, installable, installed,

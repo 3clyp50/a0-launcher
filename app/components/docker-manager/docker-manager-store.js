@@ -2,6 +2,7 @@ import { createStore } from "/a0ui/js/AlpineStore.js";
 
 export const dockerManagerStore = createStore("dockerManager", {
   loading: false,
+  stateLoaded: false,
   banner: { type: "", message: "" },
   meta: { appVersion: "", contentVersion: "" },
   dockerAvailable: false,

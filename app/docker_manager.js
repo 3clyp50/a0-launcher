@@ -1,4 +1,6 @@
 import { dockerManagerStore as store } from "./components/docker-manager/docker-manager-store.js";
+import { renderOperationDialog } from "./components/docker-manager/operation-modal/operation-modal.js";
+import { renderRuntimeGate } from "./components/docker-manager/runtime-gate/runtime-gate.js";
 
 function isErrorResponse(obj) {
   return !!obj && typeof obj === "object" && typeof obj.message === "string";
@@ -86,6 +88,7 @@ window.toastFrontendWarning = (message, title = "Agent Zero", displayTime = 5, g
 function snapshot() {
   return {
     loading: !!store.loading,
+    stateLoaded: !!store.stateLoaded,
     banner: store.banner || { type: "", message: "" },
     meta: store.meta || { appVersion: "", contentVersion: "" },
     dockerAvailable: !!store.dockerAvailable,
@@ -111,6 +114,8 @@ function emitState() {
   const next = snapshot();
   window.__dmLastState = next;
   window.dispatchEvent(new CustomEvent("dm:state", { detail: next }));
+  renderRuntimeGate(next, window.dockerManagerActions || {});
+  renderOperationDialog(next, window.dockerManagerActions || {});
 }
 
 function applyInstanceTabsSnapshot(snap) {
@@ -181,6 +186,7 @@ async function refresh() {
   if (!api) {
     store.error = "Agent Zero controls are not available.";
     store.dockerAvailable = false;
+    store.stateLoaded = true;
     setBanner("error", store.error);
     return;
   }
@@ -201,6 +207,7 @@ async function refresh() {
     if (isErrorResponse(inventory)) {
       store.error = inventory.message;
       store.dockerAvailable = false;
+      store.stateLoaded = true;
       setBanner("error", inventory.message);
       store.loading = false;
       emitState();
@@ -235,6 +242,7 @@ async function refresh() {
     setBanner("error", store.error);
   } finally {
     store.loading = false;
+    store.stateLoaded = true;
     emitState();
   }
 }
@@ -380,12 +388,26 @@ async function installOrSync(tag) {
 }
 
 let postOperationRefreshTimer = 0;
+let postOperationRefreshTimers = [];
 
-function schedulePostOperationRefresh() {
+function clearPostOperationRefreshTimers() {
   window.clearTimeout(postOperationRefreshTimer);
-  postOperationRefreshTimer = window.setTimeout(() => {
+  postOperationRefreshTimer = 0;
+  for (const timer of postOperationRefreshTimers) {
+    window.clearTimeout(timer);
+  }
+  postOperationRefreshTimers = [];
+}
+
+function schedulePostOperationRefresh(progress = null) {
+  clearPostOperationRefreshTimers();
+  const isCompletedInstall = progress?.type === "install" && progress?.status === "completed";
+  const delays = isCompletedInstall ? [350, 1500, 3500] : [350];
+  postOperationRefreshTimers = delays.map((delay, index) => window.setTimeout(() => {
+    if (index === 0) postOperationRefreshTimer = 0;
     refresh();
-  }, 350);
+  }, delay));
+  postOperationRefreshTimer = postOperationRefreshTimers[0] || 0;
 }
 
 async function runDockerOperation(label, action, successMessage) {
@@ -468,6 +490,51 @@ async function openCliTerminal(host = "") {
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to open A0 CLI terminal");
+    return false;
+  }
+}
+
+async function openDockerLoginTerminal() {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.openDockerLoginTerminal !== "function") return false;
+  try {
+    const res = await api.openDockerLoginTerminal();
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Docker login terminal opened.");
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to open a Docker login terminal");
+    return false;
+  }
+}
+
+async function retryInstall(tag = "") {
+  const targetTag = typeof tag === "string" ? tag.trim() : "";
+  if (!targetTag) {
+    setBanner("error", "Choose a version to install.");
+    return false;
+  }
+  await installOrSync(targetTag);
+  return true;
+}
+
+async function cancelOperation(opId = "") {
+  const api = window.dockerManagerAPI;
+  const id = typeof opId === "string" ? opId.trim() : "";
+  if (!api || typeof api.cancel !== "function" || !id) return false;
+  try {
+    const res = await api.cancel(id);
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Operation cancel requested.");
+    return !!res?.canceled;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to cancel the current operation");
     return false;
   }
 }
@@ -560,6 +627,9 @@ window.dockerManagerActions = {
   deleteLocalInstance,
   activateTag,
   openCliTerminal,
+  openDockerLoginTerminal,
+  retryInstall,
+  cancelOperation,
   addRemoteInstance,
   deleteRemoteInstance,
   openRemoteInstance,
@@ -606,6 +676,7 @@ function initSubscriptions() {
   if (typeof api.onStateChange === "function") {
     api.onStateChange((state) => {
       if (!isErrorResponse(state)) {
+        store.stateLoaded = true;
         store.uiUrl = state?.uiUrl || "";
         store.versions = Array.isArray(state?.versions) ? state.versions : [];
         store.retainedInstances = Array.isArray(state?.retainedInstances) ? state.retainedInstances : [];
@@ -625,7 +696,7 @@ function initSubscriptions() {
       emitState();
       const status = typeof progress?.status === "string" ? progress.status : "";
       if (status === "completed" || status === "failed" || status === "canceled") {
-        schedulePostOperationRefresh();
+        schedulePostOperationRefresh(progress);
       }
     });
   }

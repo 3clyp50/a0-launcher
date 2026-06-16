@@ -12,6 +12,7 @@ const stateStore = require('./state_store');
 const retention = require('./retention');
 const { toErrorResponse, mapDockerInterfaceErrorToUiMessage } = require('./errors');
 const { isSemverReleaseTag } = require('./release_tags');
+const { runtimeSetupProgressPatch } = require('./progress');
 
 const DEFAULT_IMAGE_REPO = 'agent0ai/agent-zero';
 const DEFAULT_GITHUB_REPO = 'agent0ai/agent-zero';
@@ -143,6 +144,10 @@ function isTestingTag(tag) {
   return (tag || '').trim() === 'testing';
 }
 
+function isLatestTag(tag) {
+  return (tag || '').trim() === 'latest';
+}
+
 function isCanonicalLocalTag(tag) {
   const t = (tag || '').trim();
   return CANONICAL_LOCAL_TAGS.includes(t);
@@ -155,7 +160,7 @@ function assertTagAllowedForInstall(tag) {
     err.code = 'INVALID_TAG';
     throw err;
   }
-  if (!isTestingTag(t) && !isSemverReleaseTag(t) && !isCanonicalLocalTag(t)) {
+  if (!isLatestTag(t) && !isTestingTag(t) && !isSemverReleaseTag(t) && !isCanonicalLocalTag(t)) {
     const err = new Error('Tag not allowed for install');
     err.code = 'TAG_NOT_ALLOWED';
     throw err;
@@ -590,7 +595,13 @@ function beginOperation(type, targetTag) {
     downloadProgress: null,
     extractProgress: null,
     message: null,
-    error: null
+    headline: null,
+    detail: null,
+    phase: null,
+    steps: null,
+    indeterminate: false,
+    error: null,
+    errorCode: null
   };
   events.emit('progress', { ..._currentOperation });
   return opId;
@@ -602,13 +613,14 @@ function updateOperationProgress(patch) {
   events.emit('progress', { ..._currentOperation });
 }
 
-function finishOperation(status, errorMessage) {
+function finishOperation(status, errorMessage, errorCode = null) {
   if (!_currentOperation) return;
   _currentOperation = {
     ..._currentOperation,
     status,
     finishedAt: nowIso(),
-    error: errorMessage || null
+    error: errorMessage || null,
+    errorCode: errorCode || null
   };
   events.emit('progress', { ..._currentOperation });
 }
@@ -1174,11 +1186,15 @@ async function setPortPreferences(portPreferences) {
 async function provisionRuntime() {
   requireNoRunningOperation();
   const opId = beginOperation('runtime_setup', null);
+  let runtimeAssessment = null;
+  const reportRuntimeProgress = (message, progress = null) => {
+    updateOperationProgress(runtimeSetupProgressPatch(runtimeAssessment, message, progress));
+  };
   const finishRuntimeFollowup = async (result, assessment) => {
     if (!result || typeof result !== 'object' || typeof result.detail !== 'string') return false;
     await markRuntimeSetupResume(assessment);
     resetDocker();
-    updateOperationProgress({ message: result.detail, progress: 100 });
+    updateOperationProgress(runtimeSetupProgressPatch(assessment, result.detail, 100, 'completed'));
     finishOperation('completed', null);
     return true;
   };
@@ -1195,12 +1211,14 @@ async function provisionRuntime() {
         throw err;
       }
 
-      updateOperationProgress({ message: 'Checking runtime', progress: null });
+      updateOperationProgress(runtimeSetupProgressPatch(null, 'Checking runtime', null));
       const assessment = await provisioner.assess();
+      runtimeAssessment = assessment;
+      updateOperationProgress(runtimeSetupProgressPatch(assessment, assessment?.detail || 'Checking runtime', null));
 
       if (assessment?.state === 'ready') {
         await clearRuntimeSetupResume();
-        updateOperationProgress({ message: 'Runtime ready', progress: 100 });
+        updateOperationProgress(runtimeSetupProgressPatch(assessment, 'Runtime ready', 100, 'completed'));
         finishOperation('completed', null);
         resetDocker();
         return;
@@ -1209,13 +1227,13 @@ async function provisionRuntime() {
       if (assessment?.state === 'engine_stopped') {
         const result = await provisioner.start({
           signal: controller.signal,
-          onProgress: (message, progress = null) => updateOperationProgress({ message, progress })
+          onProgress: reportRuntimeProgress
         });
         if (await finishRuntimeFollowup(result, assessment)) return;
       } else if (assessment?.state === 'not_provisioned' || assessment?.state === 'needs_group_membership') {
         const result = await provisioner.provision({
           signal: controller.signal,
-          onProgress: (message, progress = null) => updateOperationProgress({ message, progress })
+          onProgress: reportRuntimeProgress
         });
         if (await finishRuntimeFollowup(result, assessment)) return;
       } else if (assessment?.state === 'needs_relogin') {
@@ -1239,10 +1257,11 @@ async function provisionRuntime() {
 
       resetDocker();
       await clearRuntimeSetupResume();
-      updateOperationProgress({ message: 'Runtime ready', progress: 100 });
+      updateOperationProgress(runtimeSetupProgressPatch(assessment, 'Runtime ready', 100, 'completed'));
       finishOperation('completed', null);
     } catch (error) {
       const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Runtime setup failed';
+      updateOperationProgress(runtimeSetupProgressPatch(runtimeAssessment, message, null, 'failed'));
       finishOperation('failed', message);
     } finally {
       _abortControllers.delete(opId);
@@ -1501,7 +1520,7 @@ async function installOrSync(tag) {
           ? 'This version is not available yet. Please try again later.'
           : '') ||
         'Install failed';
-      finishOperation('failed', message);
+      finishOperation('failed', message, error?.code || null);
     } finally {
       _abortControllers.delete(opId);
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
@@ -2229,6 +2248,7 @@ module.exports = {
   // Tag allowlist helpers (used by IPC boundary)
   isSafeTag,
   isSemverReleaseTag,
+  isLatestTag,
   isTestingTag,
   isCanonicalLocalTag,
   assertTagAllowedForInstall,

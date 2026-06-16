@@ -33,9 +33,16 @@ This scope owns:
   each call the Docker APIs independently.
 - Components invoke behavior through `window.dockerManagerActions`, not through
   raw IPC names.
-- Runtime setup state is part of the canonical renderer snapshot. Onboarding
-  may offer setup/start/refresh/manual actions from that state, but Docker
-  mechanics stay in the shell.
+- Runtime setup state is part of the canonical renderer snapshot. If the
+  runtime is not ready after initial state loads, the renderer must show the
+  blocking startup runtime modal before any launcher workspace feature can be
+  used. Docker mechanics stay in the shell.
+- When runtime setup completes, the same modal shell owns the first Agent Zero
+  image setup prompt, including a short explanation and a version selector that
+  defaults to the Docker `latest` tag.
+- Long-running non-runtime Docker operations should use the same centered modal
+  affordance rather than a top-of-page status strip. Keep the header quiet once
+  the modal flow exists.
 - A0 CLI launch belongs to each local instance card. Pass the card's local UI
   URL through the shell-owned terminal action; do not add a global footer or
   ambiguous active-instance CLI button.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir as mkdirp, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -24,6 +24,28 @@ test('RuntimeProvisioner.forPlatform selects runtime implementations by platform
     assert.ok(linuxRuntime instanceof LinuxEngineRuntime);
     assert.ok(windowsRuntime instanceof WindowsWslRuntime);
     assert.equal(unsupportedRuntime, null);
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('ColimaRuntime assess asks to start installed Docker Desktop before setup', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  try {
+    const dockerApp = path.join(managedDir, 'Docker.app');
+    await mkdirp(dockerApp);
+    const runtime = new ColimaRuntime({
+      managedDir,
+      dockerDesktopAppPaths: [dockerApp],
+      runCommand: async () => ({ code: 1, stdout: '', stderr: '' })
+    });
+
+    const assessment = await runtime.assess();
+
+    assert.equal(assessment.state, 'engine_stopped');
+    assert.equal(assessment.mode, 'docker_desktop');
+    assert.match(assessment.detail, /Start Docker Desktop/i);
+    assert.equal(assessment.manualUrl, undefined);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -68,6 +90,8 @@ test('WindowsWslRuntime assess detects installed Docker Desktop on Windows clien
     assert.equal(assessment.state, 'engine_stopped');
     assert.equal(assessment.mode, 'docker_desktop');
     assert.match(assessment.detail, /Docker Desktop is installed/i);
+    assert.match(assessment.detail, /Start Docker Desktop/i);
+    assert.equal(assessment.manualUrl, undefined);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -94,6 +118,8 @@ test('WindowsWslRuntime assess detects Docker Desktop when WSL2 is incomplete', 
     assert.equal(assessment.state, 'engine_stopped');
     assert.equal(assessment.mode, 'docker_desktop');
     assert.match(assessment.detail, /Docker Desktop is installed/i);
+    assert.match(assessment.detail, /Start Docker Desktop/i);
+    assert.equal(assessment.manualUrl, undefined);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -257,7 +283,7 @@ test('WindowsWslRuntime provision installs Docker Engine inside an existing WSL 
 
     await runtime.provision({ onProgress: (message) => progress.push(message) });
 
-    assert.deepEqual(progress, ['Installing Docker Engine', 'Starting WSL Docker Engine']);
+    assert.deepEqual(progress, ['Installing Docker Engine', 'Starting WSL Docker Engine', 'Starting local Docker bridge']);
     const dockerInstall = calls.find((call) => call.cmd === 'wsl.exe' && /docker-ce docker-ce-cli containerd\.io/.test(String(call.args?.at(-1))));
     assert.ok(dockerInstall, 'expected Docker Engine install script');
     assert.match(String(dockerInstall.args.at(-1)), /download\.docker\.com\/linux\/ubuntu/);

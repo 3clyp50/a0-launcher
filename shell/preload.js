@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   openRemoteInstance: (id) => ipcRenderer.invoke('docker-manager:openRemoteInstance', { id }),
   openHomepage: () => ipcRenderer.invoke('docker-manager:openHomepage'),
   openCliTerminal: (host) => ipcRenderer.invoke('docker-manager:openCliTerminal', { host }),
+  openDockerLoginTerminal: () => ipcRenderer.invoke('docker-manager:openDockerLoginTerminal'),
   getInstanceTabs: () => ipcRenderer.invoke('docker-manager:getInstanceTabs'),
   openInstanceUi: (target) => {
     const t = target && typeof target === 'object' ? target : {};

@@ -1146,6 +1146,16 @@ function findA0CliBinary() {
   throw err;
 }
 
+function findDockerCliBinary() {
+  const binary = process.platform === 'win32' ? 'docker.exe' : 'docker';
+  const pathCommand = findCommandOnPath(binary);
+  if (pathCommand) return pathCommand;
+
+  const err = new Error('Docker CLI was not found. Finish Docker setup, then try again.');
+  err.code = 'TERMINAL_UNAVAILABLE';
+  throw err;
+}
+
 function spawnDetached(command, args, options = {}) {
   const child = childProcess.spawn(command, args, {
     detached: true,
@@ -1244,6 +1254,116 @@ function openA0CliTerminalLinux(host, cli) {
   }
 
   const err = new Error(lastError?.message || 'No terminal emulator was found.');
+  err.code = 'TERMINAL_UNAVAILABLE';
+  throw err;
+}
+
+function openDockerLoginTerminalWindows(dockerCli) {
+  const command = [
+    `& ${powerShellSingleQuote(dockerCli)} login`,
+    'if ($LASTEXITCODE) { Write-Host ""; Write-Host "Docker login exited with code $LASTEXITCODE" }'
+  ].join('; ');
+  const psArgs = ['-NoLogo', '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command];
+
+  if (findCommandOnPath('wt.exe')) {
+    try {
+      spawnDetached('wt.exe', ['new-tab', '--title', 'Docker Login', 'powershell.exe', ...psArgs], { env: process.env });
+      return { opened: true, command: 'wt.exe' };
+    } catch {
+      // Fall through to PowerShell's own console window.
+    }
+  }
+
+  const launcherScript = [
+    `$argumentList = ${powerShellArrayLiteral(psArgs)}`,
+    "Start-Process -FilePath 'powershell.exe' -ArgumentList $argumentList -WindowStyle Normal"
+  ].join('; ');
+  const launched = childProcess.spawnSync('powershell.exe', [
+    '-NoLogo',
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    launcherScript
+  ], {
+    encoding: 'utf8',
+    env: process.env,
+    windowsHide: true
+  });
+  if (launched.error || launched.status !== 0) {
+    const detail = launched.error?.message || launched.stderr?.trim() || `PowerShell exited with code ${launched.status}`;
+    const err = new Error(`Could not open the Docker login terminal. ${detail}`);
+    err.code = 'TERMINAL_UNAVAILABLE';
+    throw err;
+  }
+  return { opened: true, command: 'powershell.exe' };
+}
+
+function openDockerLoginTerminalMac(dockerCli) {
+  const shellPath = process.env.SHELL || '/bin/zsh';
+  const command = [
+    `${shellSingleQuote(dockerCli)} login`,
+    'code=$?',
+    'if [ "$code" -ne 0 ]; then',
+    '  echo',
+    '  echo "Docker login exited with code $code"',
+    'fi',
+    `exec ${shellSingleQuote(shellPath)} -l`
+  ].join('; ');
+
+  spawnDetached('osascript', [
+    '-e',
+    `tell application "Terminal" to do script ${appleScriptString(command)}`,
+    '-e',
+    'tell application "Terminal" to activate'
+  ], {
+    env: process.env
+  });
+  return { opened: true, command: 'Terminal.app' };
+}
+
+function openDockerLoginTerminalLinux(dockerCli) {
+  const command = [
+    `${shellSingleQuote(dockerCli)} login`,
+    'code=$?',
+    'if [ "$code" -ne 0 ]; then',
+    '  echo',
+    '  echo "Docker login exited with code $code"',
+    'fi',
+    'exec bash'
+  ].join('; ');
+  const candidates = [
+    ['x-terminal-emulator', ['-e', 'bash', '-lc', command]],
+    ['gnome-terminal', ['--', 'bash', '-lc', command]],
+    ['konsole', ['-e', 'bash', '-lc', command]],
+    ['xfce4-terminal', ['-e', `bash -lc ${shellSingleQuote(command)}`]],
+    ['xterm', ['-e', 'bash', '-lc', command]]
+  ];
+
+  let lastError = null;
+  for (const [cmd, args] of candidates) {
+    try {
+      const found = findCommandOnPath(cmd);
+      if (!found) continue;
+      spawnDetached(cmd, args, { env: process.env });
+      return { opened: true, command: cmd };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const err = new Error(lastError?.message || 'No terminal emulator was found.');
+  err.code = 'TERMINAL_UNAVAILABLE';
+  throw err;
+}
+
+function openDockerLoginTerminal() {
+  const dockerCli = findDockerCliBinary();
+  if (process.platform === 'win32') return openDockerLoginTerminalWindows(dockerCli);
+  if (process.platform === 'darwin') return openDockerLoginTerminalMac(dockerCli);
+  if (process.platform === 'linux') return openDockerLoginTerminalLinux(dockerCli);
+
+  const err = new Error('Opening the Docker login terminal is not available on this system.');
   err.code = 'TERMINAL_UNAVAILABLE';
   throw err;
 }
@@ -1514,6 +1634,7 @@ function sanitizeDockerManagerState(state) {
 function sanitizeDockerManagerProgress(progress) {
   if (!isPlainObject(progress)) return null;
   const out = {};
+  const hasNumericValue = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 
   if (typeof progress.opId === 'string') out.opId = progress.opId;
   if (typeof progress.type === 'string') out.type = progress.type;
@@ -1522,11 +1643,25 @@ function sanitizeDockerManagerProgress(progress) {
   if (typeof progress.finishedAt === 'string') out.finishedAt = progress.finishedAt;
   if (typeof progress.targetTag === 'string') out.targetTag = progress.targetTag;
 
-  if (Number.isFinite(Number(progress.progress))) out.progress = Number(progress.progress);
-  if (Number.isFinite(Number(progress.downloadProgress))) out.downloadProgress = Number(progress.downloadProgress);
-  if (Number.isFinite(Number(progress.extractProgress))) out.extractProgress = Number(progress.extractProgress);
+  if (hasNumericValue(progress.progress)) out.progress = Number(progress.progress);
+  if (hasNumericValue(progress.downloadProgress)) out.downloadProgress = Number(progress.downloadProgress);
+  if (hasNumericValue(progress.extractProgress)) out.extractProgress = Number(progress.extractProgress);
   if (typeof progress.message === 'string') out.message = progress.message;
+  if (typeof progress.headline === 'string') out.headline = progress.headline;
+  if (typeof progress.detail === 'string') out.detail = progress.detail;
+  if (typeof progress.phase === 'string' || progress.phase === null) out.phase = progress.phase;
+  if (typeof progress.indeterminate === 'boolean') out.indeterminate = progress.indeterminate;
+  if (Array.isArray(progress.steps)) {
+    out.steps = progress.steps
+      .filter((step) => isPlainObject(step) && typeof step.label === 'string')
+      .map((step) => ({
+        id: typeof step.id === 'string' ? step.id : '',
+        label: step.label,
+        status: typeof step.status === 'string' ? step.status : 'pending'
+      }));
+  }
   if (typeof progress.error === 'string') out.error = progress.error;
+  if (typeof progress.errorCode === 'string') out.errorCode = progress.errorCode;
 
   return out.opId ? out : null;
 }
@@ -1925,6 +2060,14 @@ ipcMain.handle('docker-manager:openCliTerminal', async (_event, body) => {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     const host = typeof body.host === 'string' ? body.host : '';
     return openA0CliTerminal(host);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:openDockerLoginTerminal', async () => {
+  try {
+    return openDockerLoginTerminal();
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

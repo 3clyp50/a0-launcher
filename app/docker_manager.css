@@ -152,6 +152,11 @@ body, html {
   padding: 0.9rem 0;
 }
 
+.sv-onboarding-warning {
+  border-left: 3px solid var(--color-warning-text);
+  padding-left: 0.75rem;
+}
+
 .sv-header {
   padding-top: 0;
   padding-bottom: 0;
@@ -681,6 +686,7 @@ body, html {
 }
 
 .sv-progress-fill.indeterminate {
+  width: 35%;
   animation: sv-indeterminate 1.4s ease infinite;
 }
 
@@ -692,6 +698,13 @@ body, html {
 
 .sv-progress-message.error {
   color: var(--color-accent);
+}
+
+.sv-progress-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.65rem;
 }
 
 .sv-row-end {
@@ -736,6 +749,10 @@ body, html {
 .sv-onboarding-message {
   color: var(--color-text-muted);
   margin: 0.25rem 0 0.55rem;
+}
+
+.sv-onboarding-warning .sv-onboarding-message {
+  color: var(--color-warning-text);
 }
 
 .sv-settings-grid {
@@ -928,7 +945,8 @@ body, html {
 }
 
 .dm-text-input,
-.dm-textarea {
+.dm-textarea,
+.dm-select {
   width: 100%;
   border: 1px solid var(--dm-line-soft);
   border-radius: 0.45rem;
@@ -949,7 +967,8 @@ body, html {
 }
 
 .dm-text-input:focus,
-.dm-textarea:focus {
+.dm-textarea:focus,
+.dm-select:focus {
   border-color: var(--color-highlight);
 }
 
@@ -973,6 +992,75 @@ body, html {
 
 .dm-dialog-close {
   min-width: 2rem;
+}
+
+.dm-runtime-gate-backdrop {
+  z-index: 5000;
+}
+
+.dm-runtime-gate {
+  width: min(34rem, 100%);
+}
+
+.dm-operation-backdrop {
+  z-index: 4900;
+}
+
+.dm-operation-dialog {
+  width: min(34rem, 100%);
+}
+
+.dm-runtime-gate .dm-dialog-header {
+  align-items: flex-start;
+}
+
+.dm-runtime-gate-detail {
+  color: var(--color-text);
+  line-height: 1.45;
+  font-size: 0.92rem;
+  margin-bottom: 0.5rem;
+}
+
+.dm-runtime-progress {
+  margin: 0.45rem 0 0;
+}
+
+.dm-runtime-progress .sv-progress-head {
+  margin-bottom: 0.25rem;
+}
+
+.dm-runtime-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: fit-content;
+  color: #7ddc8f;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.dm-runtime-success-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.dm-runtime-install-choice {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.15rem;
+}
+
+.dm-runtime-install-text {
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.dm-runtime-gate-secondary,
+.dm-runtime-gate-primary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /*

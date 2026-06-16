@@ -1,36 +1,29 @@
 function byId(id) { return document.getElementById(id); }
 
+function isDockerHubRateLimit(progress) {
+  const errorCode = typeof progress?.errorCode === "string" ? progress.errorCode : "";
+  const message = `${progress?.error || ""} ${progress?.detail || ""} ${progress?.message || ""}`.trim();
+  return errorCode === "DOCKER_PULL_RATE_LIMIT" || /docker hub pull limit reached/i.test(message);
+}
+
+function progressActionsForState(state) {
+  const progress = state?.progress || null;
+  if (progress?.status !== "failed") return [];
+  if (isDockerHubRateLimit(progress)) {
+    return [
+      { id: "docker-login", label: "Docker Login", emphasis: "primary" },
+      { id: "retry-install", label: "Retry", emphasis: "secondary", disabled: !progress?.targetTag }
+    ];
+  }
+  return [];
+}
+
 function render(state) {
   const contentVersion = byId("contentVersion");
   const appVersion = byId("appVersion");
-  const panel = byId("progressPanel");
-  const progressTitle = byId("progressTitle");
-  const progressMessage = byId("progressMessage");
 
   if (contentVersion) contentVersion.textContent = state?.meta?.contentVersion || "";
   if (appVersion) appVersion.textContent = state?.meta?.appVersion || "";
-
-  const progress = state?.progress || null;
-  const status = typeof progress?.status === "string" ? progress.status : "";
-  const shouldShow = status === "running" || status === "failed" || status === "canceled";
-  if (!panel || !progress || !shouldShow) {
-    if (panel) panel.classList.add("hidden");
-    return;
-  }
-
-  panel.classList.remove("hidden");
-  const type = progress.type || "operation";
-  if (progressTitle) {
-    progressTitle.textContent = status === "failed"
-      ? `${type} failed`
-      : status === "canceled" ? `${type} canceled` : type;
-  }
-  if (progressMessage) {
-    progressMessage.textContent = status === "failed"
-      ? (progress.error || progress.message || "Operation failed.")
-      : status === "canceled" ? (progress.error || progress.message || "Canceled.") : (progress.message || "Working...");
-    progressMessage.classList.toggle("error", status === "failed");
-  }
 }
 
 function bindActions() {
@@ -47,10 +40,17 @@ function bindActions() {
   }
 }
 
-window.addEventListener("dm:state", (e) => {
-  bindActions();
-  render(e.detail || {});
-});
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  window.addEventListener("dm:state", (e) => {
+    bindActions();
+    render(e.detail || {});
+  });
 
-bindActions();
-if (window.__dmLastState) render(window.__dmLastState);
+  bindActions();
+  if (window.__dmLastState) render(window.__dmLastState);
+}
+
+export {
+  isDockerHubRateLimit,
+  progressActionsForState
+};

@@ -55,6 +55,16 @@ This scope owns:
 - Storage-volume operations must remain separate from retained-instance
   activation/removal.
 - Long-running operations return an operation id and emit progress.
+- Image installs may target the Docker `latest` tag in addition to semver
+  releases, `testing`, and local development tags, because first-run setup uses
+  `latest` as the default image choice.
+- Progress payloads may include `headline`, `detail`, `phase`, `steps`, and
+  `indeterminate` in addition to the legacy `message` and numeric progress
+  fields. Runtime setup progress uses those fields for the blocking startup
+  modal.
+- When a product operation fails for a recoverable reason, progress payloads
+  should carry a stable error code so the renderer can show the right recovery
+  action without parsing human-readable copy.
 - Runtime setup is additive and reuse-first: existing Docker Desktop, native
   Engine, and rootless endpoints are used before Linux Engine provisioning is
   offered.

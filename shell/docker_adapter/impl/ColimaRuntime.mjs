@@ -26,6 +26,11 @@ const PROFILE = 'a0';
 const COLIMA_RELEASE_API = 'https://api.github.com/repos/abiosoft/colima/releases/latest';
 const LIMA_RELEASE_API = 'https://api.github.com/repos/lima-vm/lima/releases/latest';
 const DOCKER_STATIC_BASE = 'https://download.docker.com/mac/static/stable';
+const DOCKER_DESKTOP_SOCKET = path.join(os.homedir(), '.docker', 'run', 'docker.sock');
+const DOCKER_DESKTOP_APP_PATHS = Object.freeze([
+  '/Applications/Docker.app',
+  path.join(os.homedir(), 'Applications', 'Docker.app')
+]);
 
 const PROGRESS_MAP = Object.freeze([
   [/download/i, 'Downloading runtime components'],
@@ -41,10 +46,28 @@ export class ColimaRuntime extends RuntimeProvisioner {
     this.binDir = path.join(this.managedDir, 'bin');
     this._colimaBin = null;
     this._dockerBin = null;
+    this._runCommand = typeof options.runCommand === 'function' ? options.runCommand : run;
+    this._dockerDesktopAppPaths = Array.isArray(options.dockerDesktopAppPaths)
+      ? options.dockerDesktopAppPaths.filter((item) => typeof item === 'string' && item.trim())
+      : DOCKER_DESKTOP_APP_PATHS;
   }
 
   async assess() {
     const bin = await this.findColimaBinary();
+    if (bin) {
+      const status = await this.status();
+      if (status.exists && status.running) {
+        return { state: 'ready', detail: 'Runtime is running.' };
+      }
+      if (status.exists && !status.running) {
+        return { state: 'engine_stopped', mode: 'colima', detail: 'The Agent Zero runtime is installed but not running.' };
+      }
+    }
+
+    if (await this.#dockerDesktopInstalled()) {
+      return this.#dockerDesktopStoppedAssessment();
+    }
+
     if (!bin) {
       return {
         state: 'not_provisioned',
@@ -52,13 +75,6 @@ export class ColimaRuntime extends RuntimeProvisioner {
       };
     }
 
-    const status = await this.status();
-    if (status.exists && status.running) {
-      return { state: 'ready', detail: 'Runtime is running.' };
-    }
-    if (status.exists && !status.running) {
-      return { state: 'engine_stopped', detail: 'The Agent Zero runtime is installed but not running.' };
-    }
     return {
       state: 'not_provisioned',
       detail: 'Colima is installed. The Agent Zero runtime profile has not been created yet.'
@@ -71,7 +87,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
     if (!bin) throw makeError('RUNTIME_NOT_PROVISIONED', 'Colima is not available.');
 
     options.onProgress?.('Starting the runtime');
-    const result = await run(bin, ['start', PROFILE, '--runtime', 'docker'], {
+    const result = await this._runCommand(bin, ['start', PROFILE, '--runtime', 'docker'], {
       timeoutMs: 20 * 60 * 1000,
       signal: options.signal,
       env: this.#env(),
@@ -91,7 +107,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
       });
     }
 
-    const ready = await this.#waitForSocket(options.signal);
+    const ready = await this.#waitForSocket({ signal: options.signal });
     if (!ready) {
       throw makeError('RUNTIME_START_FAILED', 'The runtime started, but Docker did not become reachable.');
     }
@@ -101,6 +117,10 @@ export class ColimaRuntime extends RuntimeProvisioner {
   }
 
   async start(options = {}) {
+    const assessment = await this.assess();
+    if (assessment?.mode === 'docker_desktop') {
+      return await this.#startDockerDesktop(options);
+    }
     return await this.provision(options);
   }
 
@@ -108,7 +128,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
     const bin = await this.findColimaBinary();
     if (!bin) return { exists: false, running: false };
 
-    const result = await run(bin, ['list', '--json'], {
+    const result = await this._runCommand(bin, ['list', '--json'], {
       timeoutMs: 15000,
       env: this.#env()
     }).catch(() => null);
@@ -145,7 +165,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
 
     for (const candidate of candidates) {
       try {
-        const result = await run(candidate, ['version'], {
+        const result = await this._runCommand(candidate, ['version'], {
           timeoutMs: 8000,
           env: this.#env()
         });
@@ -171,7 +191,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
 
     for (const candidate of candidates) {
       try {
-        const result = await run(candidate, ['--version'], {
+        const result = await this._runCommand(candidate, ['--version'], {
           timeoutMs: 8000,
           env: this.#env()
         });
@@ -274,7 +294,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
     options.onProgress?.('Installing Docker client');
     await fsp.mkdir(extractDir, { recursive: true });
     try {
-      const result = await run('/usr/bin/tar', ['-xzf', tarPath, '-C', extractDir, 'docker/docker'], {
+      const result = await this._runCommand('/usr/bin/tar', ['-xzf', tarPath, '-C', extractDir, 'docker/docker'], {
         timeoutMs: 120000,
         signal: options.signal,
         env: this.#env()
@@ -296,7 +316,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
   }
 
   async #extractTar(tarPath, options = {}) {
-    const result = await run('/usr/bin/tar', ['-xzf', tarPath, '-C', this.managedDir], {
+    const result = await this._runCommand('/usr/bin/tar', ['-xzf', tarPath, '-C', this.managedDir], {
       timeoutMs: 120000,
       signal: options.signal,
       env: this.#env()
@@ -308,11 +328,14 @@ export class ColimaRuntime extends RuntimeProvisioner {
     }
   }
 
-  async #waitForSocket(signal) {
-    const socketPath = this.endpoint().socketPath;
+  async #waitForSocket(options = {}) {
+    const socketPath = options.socketPath || this.endpoint().socketPath;
+    const timeoutMs = Number.isFinite(Number(options.timeoutMs))
+      ? Math.max(1000, Number(options.timeoutMs))
+      : 60000;
     const startedAt = Date.now();
-    while (Date.now() - startedAt < 60000) {
-      if (signal?.aborted) throw makeError('ABORTED', 'Runtime start aborted');
+    while (Date.now() - startedAt < timeoutMs) {
+      if (options.signal?.aborted) throw makeError('ABORTED', 'Runtime start aborted');
       if (await canConnectSocket(socketPath)) return true;
       await sleep(700);
     }
@@ -324,6 +347,63 @@ export class ColimaRuntime extends RuntimeProvisioner {
       ...process.env,
       PATH: `${this.binDir}:${process.env.PATH || ''}`
     };
+  }
+
+  async #dockerDesktopInstalled() {
+    for (const appPath of this._dockerDesktopAppPaths) {
+      try {
+        const stat = await fsp.stat(appPath);
+        if (stat.isDirectory()) return true;
+      } catch {
+        // try next candidate
+      }
+    }
+    return false;
+  }
+
+  #dockerDesktopStoppedAssessment() {
+    return {
+      state: 'engine_stopped',
+      mode: 'docker_desktop',
+      detail: 'Docker Desktop is installed but not running. Start Docker Desktop, wait until it finishes starting, then return here.'
+    };
+  }
+
+  #dockerDesktopEndpoint() {
+    return {
+      kind: 'unix',
+      socketPath: DOCKER_DESKTOP_SOCKET,
+      dockerHost: `unix://${DOCKER_DESKTOP_SOCKET}`
+    };
+  }
+
+  async #startDockerDesktop(options = {}) {
+    options.onProgress?.('Starting Docker Desktop');
+    const result = await this._runCommand('/usr/bin/open', ['-a', 'Docker'], {
+      timeoutMs: 30000,
+      signal: options.signal,
+      env: this.#env()
+    });
+
+    if (result.code !== 0) {
+      throw makeError('RUNTIME_START_FAILED', 'Docker Desktop could not be started.', {
+        stderr: tail(result.stderr || result.stdout)
+      });
+    }
+
+    const endpoint = this.#dockerDesktopEndpoint();
+    options.onProgress?.('Waiting for Docker Desktop');
+    const ready = await this.#waitForSocket({
+      socketPath: endpoint.socketPath,
+      signal: options.signal,
+      timeoutMs: 120000
+    });
+    if (!ready) {
+      throw makeError('RUNTIME_START_FAILED', 'Docker Desktop started, but Docker did not become reachable.');
+    }
+
+    options.onProgress?.('Runtime ready', 100);
+    return { endpoint };
   }
 }
 

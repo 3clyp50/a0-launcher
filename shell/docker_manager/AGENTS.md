@@ -31,8 +31,8 @@ This scope owns:
 - Backend GitHub repo defaults to `agent0ai/agent-zero` and may be overridden by
   `A0_BACKEND_GITHUB_REPO`.
 - Installable tags must be safe tags and limited to semver-like release tags
-  (`vX.Y` or `vX.Y.Z`), `testing`, or canonical local tags (`local`,
-  `development`, `main`).
+  (`vX.Y` or `vX.Y.Z`), channel tags (`latest`, `ready`, `testing`), or
+  canonical local tags (`local`, `development`, `main`).
 - Activation can target installed local builds, but still must reject unsafe tag
   strings.
 - UI URLs should be derived from inspected port bindings and verified where
@@ -59,9 +59,9 @@ This scope owns:
 - Storage-volume operations must remain separate from retained-instance
   activation/removal.
 - Long-running operations return an operation id and emit progress.
-- Image installs may target the Docker `latest` tag in addition to semver
-  releases, `testing`, and local development tags, because first-run setup uses
-  `latest` as the default image choice.
+- Image installs may target Docker channel tags (`latest`, `ready`, `testing`)
+  in addition to semver releases and local development tags, because first-run
+  setup uses `latest` as the default image choice.
 - Progress payloads may include `headline`, `detail`, `phase`, `steps`, and
   `indeterminate` in addition to the legacy `message` and numeric progress
   fields. Runtime setup progress uses those fields for the blocking startup

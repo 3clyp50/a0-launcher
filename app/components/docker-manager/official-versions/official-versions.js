@@ -16,6 +16,101 @@ function fmtSize(bytes) {
   return `${val.toFixed(i > 1 ? 1 : 0)} ${units[i]}`;
 }
 
+function parseReleaseTagParts(tag) {
+  const normalized = String(tag || "").trim().replace(/^v/, "");
+  const match = normalized.match(/^(\d+)\.(\d+)(?:\.(\d+))?$/);
+  if (!match) return null;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3] || 0)
+  };
+}
+
+function isLatestEntry(entry) {
+  return entry?.tag === "latest";
+}
+
+function isReadyEntry(entry) {
+  return entry?.tag === "ready";
+}
+
+function isPinnedChannelEntry(entry) {
+  return isLatestEntry(entry) || isReadyEntry(entry);
+}
+
+function isTestingEntry(entry) {
+  return entry?.tag === "testing";
+}
+
+function isHiddenEntry(entry) {
+  return isTestingEntry(entry);
+}
+
+function isReleaseTag(entry) {
+  return !!parseReleaseTagParts(entry?.tag);
+}
+
+function compareReleaseTags(a, b) {
+  const aParts = parseReleaseTagParts(a);
+  const bParts = parseReleaseTagParts(b);
+  if (!aParts && !bParts) return 0;
+  if (!aParts) return 1;
+  if (!bParts) return -1;
+
+  if (aParts.major !== bParts.major) return bParts.major - aParts.major;
+  if (aParts.minor !== bParts.minor) return bParts.minor - aParts.minor;
+  if (aParts.patch !== bParts.patch) return bParts.patch - aParts.patch;
+  return 0;
+}
+
+function normalizeDate(value) {
+  const t = Date.parse(value || "");
+  return Number.isFinite(t) ? t : null;
+}
+
+function orderedEntries(entries) {
+  return [...entries].sort((left, right) => {
+    const leftLatest = isLatestEntry(left);
+    const rightLatest = isLatestEntry(right);
+    if (leftLatest && !rightLatest) return -1;
+    if (!leftLatest && rightLatest) return 1;
+
+    const leftReady = isReadyEntry(left);
+    const rightReady = isReadyEntry(right);
+    if (leftReady && !rightReady) return -1;
+    if (!leftReady && rightReady) return 1;
+
+    const leftTesting = isTestingEntry(left);
+    const rightTesting = isTestingEntry(right);
+    if (leftTesting && !rightTesting) return 1;
+    if (!leftTesting && rightTesting) return -1;
+
+    const leftIsRelease = isReleaseTag(left);
+    const rightIsRelease = isReleaseTag(right);
+    if (leftIsRelease && rightIsRelease) {
+      const tagCompare = compareReleaseTags(left.tag, right.tag);
+      if (tagCompare !== 0) return tagCompare;
+      const leftDate = normalizeDate(left.publishedAt);
+      const rightDate = normalizeDate(right.publishedAt);
+      if (leftDate !== null && rightDate !== null && leftDate !== rightDate) return rightDate - leftDate;
+      if (leftDate !== null && rightDate === null) return -1;
+      if (leftDate === null && rightDate !== null) return 1;
+      return (left.tag || "").localeCompare(right.tag || "", undefined, { numeric: true, sensitivity: "base" });
+    }
+    if (leftIsRelease && !rightIsRelease) return -1;
+    if (!leftIsRelease && rightIsRelease) return 1;
+
+    const leftDate = normalizeDate(left.publishedAt);
+    const rightDate = normalizeDate(right.publishedAt);
+    if (leftDate !== null && rightDate !== null && leftDate !== rightDate) return rightDate - leftDate;
+    if (leftDate !== null && rightDate === null) return -1;
+    if (leftDate === null && rightDate !== null) return 1;
+
+    return (left.tag || "").localeCompare(right.tag || "", undefined, { numeric: true, sensitivity: "base" });
+  });
+}
+
 function sanitizeName(value) {
   const cleaned = String(value || "")
     .trim()
@@ -247,7 +342,7 @@ function render(state) {
   const list = byId("officialList");
   if (!list) return;
 
-  const entries = normalizeVersionEntries(state);
+  const entries = orderedEntries(normalizeVersionEntries(state).filter((entry) => !isHiddenEntry(entry)));
   const installedCount = entries.filter((entry) => entry.availability && entry.availability !== "available").length;
   const availableCount = entries.filter((entry) => entry.availability === "available").length;
   const awaitingFirstInventory = isAwaitingFirstInventory(state, entries);
@@ -272,7 +367,7 @@ function render(state) {
 
   for (const entry of entries) {
     const card = document.createElement("div");
-    card.className = "dm-card";
+    card.className = isPinnedChannelEntry(entry) ? "dm-card dm-card-highlight" : "dm-card";
 
     const visual = document.createElement("div");
     visual.className = "dm-card-visual";
@@ -309,6 +404,7 @@ function render(state) {
       parts.push(`${entry.imageRef ? "Created" : "Released"} ${fmtDate(entry.publishedAt)}`);
     }
     if (entry.sizeBytes) parts.push(fmtSize(entry.sizeBytes));
+    if (isReadyEntry(entry)) parts.push("Development image with alpha features under test");
     if (entry.matchHint) parts.push(entry.matchHint);
     if (entry.digestHint) parts.push(entry.digestHint);
     meta.textContent = parts.join(" · ");

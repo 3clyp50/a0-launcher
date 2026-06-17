@@ -74,9 +74,11 @@ This scope owns:
 - Operation progress failures must remain visible with the stable
   renderer-facing error message after the async operation finishes.
 - Official version cards must distinguish available, installable, installed,
-  active, testing, local, matching digest, and differing digest states without
-  exposing raw Docker mechanics as the main story. Fresh machines must have a
-  visible install action once Docker is ready.
+  active, visible channel tags (`latest`, `ready`), local builds, matching
+  digest, and differing digest states without exposing raw Docker mechanics as
+  the main story. Fresh machines must have a visible install action once Docker
+  is ready. The unmaintained `testing` tag is intentionally hidden from the
+  Installs view.
 - Activating a tag while another instance is active must keep the
   backup/proceed acknowledgement.
 - Port mappings and environment text stay advanced activation inputs. They

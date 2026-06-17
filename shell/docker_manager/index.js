@@ -25,6 +25,7 @@ const RUNTIME_SETUP_RESUME_ARG = '--a0-resume-runtime-setup';
 const RUNTIME_SETUP_RUNONCE_VALUE = 'AgentZeroLauncherResumeRuntimeSetup';
 const execFileAsync = promisify(execFile);
 
+const CHANNEL_TAGS = Object.freeze(['latest', 'ready', 'testing']);
 const CANONICAL_LOCAL_TAGS = Object.freeze(['local', 'development', 'main']);
 
 function logDockerManagerError(op, error, details = {}) {
@@ -160,6 +161,14 @@ function isLatestTag(tag) {
   return (tag || '').trim() === 'latest';
 }
 
+function isReadyTag(tag) {
+  return (tag || '').trim() === 'ready';
+}
+
+function isChannelTag(tag) {
+  return isLatestTag(tag) || isReadyTag(tag) || isTestingTag(tag);
+}
+
 function isCanonicalLocalTag(tag) {
   const t = (tag || '').trim();
   return CANONICAL_LOCAL_TAGS.includes(t);
@@ -172,7 +181,7 @@ function assertTagAllowedForInstall(tag) {
     err.code = 'INVALID_TAG';
     throw err;
   }
-  if (!isLatestTag(t) && !isTestingTag(t) && !isSemverReleaseTag(t) && !isCanonicalLocalTag(t)) {
+  if (!isChannelTag(t) && !isSemverReleaseTag(t) && !isCanonicalLocalTag(t)) {
     const err = new Error('Tag not allowed for install');
     err.code = 'TAG_NOT_ALLOWED';
     throw err;
@@ -742,12 +751,11 @@ async function buildDerivedState(options = {}) {
   const latestReleaseTag = releasesForUi.length ? releasesForUi[0].tag : null;
   const imageStats = computeImageBytesStats(localImages);
   const tagsToProbe = new Set();
-  tagsToProbe.add('testing');
-  tagsToProbe.add('latest');
+  for (const tag of CHANNEL_TAGS) tagsToProbe.add(tag);
   if (latestReleaseTag) tagsToProbe.add(latestReleaseTag);
-  if (activeTag && (isTestingTag(activeTag) || isSemverReleaseTag(activeTag))) tagsToProbe.add(activeTag);
+  if (activeTag && (isChannelTag(activeTag) || isSemverReleaseTag(activeTag))) tagsToProbe.add(activeTag);
   for (const inst of retainedInstances) {
-    if (inst.versionTag && (isTestingTag(inst.versionTag) || isSemverReleaseTag(inst.versionTag))) {
+    if (inst.versionTag && (isChannelTag(inst.versionTag) || isSemverReleaseTag(inst.versionTag))) {
       tagsToProbe.add(inst.versionTag);
     }
   }
@@ -816,21 +824,41 @@ async function buildDerivedState(options = {}) {
 
   const releaseEntries = [];
 
-  // First-class preview/testing entry (not derived from GitHub Releases).
-  {
-    const tag = 'testing';
+  const knownRemoteDigests = [];
+  for (const t of Object.keys(entries)) {
+    const e = entries[t];
+    if (e && e.status === 'installable' && typeof e.digest === 'string' && e.digest) {
+      knownRemoteDigests.push({ tag: t, digest: e.digest });
+    }
+  }
+
+  // First-class channel tags (not derived from GitHub Releases).
+  for (const tag of CHANNEL_TAGS) {
     const img = localByTag.get(tag) || null;
     const cacheEntry = entries[tag] || null;
     const isActive = activeTag === tag;
     const localDigest = extractLocalDigest(img?.repoDigests);
     const publishedDigest = cacheEntry && typeof cacheEntry.digest === 'string' && cacheEntry.digest ? cacheEntry.digest : null;
     const differsFromPublished = !!(localDigest && publishedDigest && localDigest !== publishedDigest);
-    const matchHint = differsFromPublished ? 'Differs from published preview' : null;
+    let matchHint = differsFromPublished ? `Differs from published ${tag === 'testing' ? 'preview' : tag}` : null;
     const digestHint = differsFromPublished ? buildDigestHint(publishedDigest, localDigest) : null;
+
+    if (!matchHint && localDigest) {
+      const match = knownRemoteDigests.find((d) => d.digest === localDigest && isSemverReleaseTag(d.tag));
+      if (match && isSemverReleaseTag(match.tag)) {
+        matchHint = tag === 'latest'
+          ? `Matches latest release ${match.tag.startsWith('v') ? match.tag.slice(1) : match.tag}`
+          : `Matches published version ${match.tag.startsWith('v') ? match.tag.slice(1) : match.tag}`;
+      }
+    }
+    if (!matchHint && tag === 'latest' && latestReleaseTag) {
+      matchHint = `Tracks latest release ${latestReleaseTag.startsWith('v') ? latestReleaseTag.slice(1) : latestReleaseTag}`;
+    }
+
     releaseEntries.push({
       id: tag,
-      displayVersion: 'Testing',
-      channelBadges: ['testing'],
+      displayVersion: tag === 'testing' ? 'Testing' : tag,
+      channelBadges: tag === 'testing' ? ['testing'] : undefined,
       category: 'official_release',
       availability: img ? 'installed' : 'available',
       installability: cacheEntry?.status === 'installable' ? 'installable' : cacheEntry?.status === 'not_yet_available' ? 'not_yet_available' : 'unknown',
@@ -886,7 +914,7 @@ async function buildDerivedState(options = {}) {
 
   // Local builds (canonical + custom) derived from local images not represented above.
   const officialTagSet = new Set();
-  officialTagSet.add('testing');
+  for (const tag of CHANNEL_TAGS) officialTagSet.add(tag);
   for (const r of releasesForUi) {
     if (isSemverReleaseTag(r?.tag)) officialTagSet.add(r.tag);
   }
@@ -904,14 +932,6 @@ async function buildDerivedState(options = {}) {
     if (ac === 0 && bc === 0) return CANONICAL_LOCAL_TAGS.indexOf(a) - CANONICAL_LOCAL_TAGS.indexOf(b);
     return a.localeCompare(b);
   });
-
-  const knownRemoteDigests = [];
-  for (const t of Object.keys(entries)) {
-    const e = entries[t];
-    if (e && e.status === 'installable' && typeof e.digest === 'string' && e.digest) {
-      knownRemoteDigests.push({ tag: t, digest: e.digest });
-    }
-  }
 
   for (const tag of localBuildTags) {
     const img = localByTag.get(tag) || null;
@@ -974,7 +994,7 @@ async function buildDerivedState(options = {}) {
 
   // Warm layer size manifests for visible tags in the background (best-effort).
   if (!offline && releasesForUi.length) {
-    const warmTags = ['testing', latestReleaseTag, ...releasesForUi.map((r) => r?.tag || '')].filter(Boolean);
+    const warmTags = [...CHANNEL_TAGS, latestReleaseTag, ...releasesForUi.map((r) => r?.tag || '')].filter(Boolean);
     scheduleLayerSizesWarmup(docker, imageRepo, warmTags);
   }
 

@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 let statusListener = null;
 let errorListener = null;
 let launcherUpdateListener = null;
+let launcherUpdateStatusListener = null;
 let launcherOpeningAppListener = null;
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -36,6 +37,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('launcher-update-available', launcherUpdateListener);
       launcherUpdateListener = null;
     }
+    if (launcherUpdateStatusListener) {
+      ipcRenderer.removeListener('launcher-update-status', launcherUpdateStatusListener);
+      launcherUpdateStatusListener = null;
+    }
     if (launcherOpeningAppListener) {
       ipcRenderer.removeListener('launcher-opening-app', launcherOpeningAppListener);
       launcherOpeningAppListener = null;
@@ -51,6 +56,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     launcherUpdateListener = (_event, info) => callback(info);
     ipcRenderer.on('launcher-update-available', launcherUpdateListener);
   },
+  onLauncherUpdateStatus: (callback) => {
+    if (launcherUpdateStatusListener) {
+      ipcRenderer.removeListener('launcher-update-status', launcherUpdateStatusListener);
+    }
+    launcherUpdateStatusListener = (_event, info) => callback(info);
+    ipcRenderer.on('launcher-update-status', launcherUpdateStatusListener);
+  },
   onLauncherOpeningApp: (callback) => {
     if (launcherOpeningAppListener) {
       ipcRenderer.removeListener('launcher-opening-app', launcherOpeningAppListener);
@@ -58,9 +70,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
     launcherOpeningAppListener = (_event) => callback();
     ipcRenderer.on('launcher-opening-app', launcherOpeningAppListener);
   },
-  openLauncherUpdate: () => ipcRenderer.invoke('open-launcher-update'),
+  checkLauncherUpdate: () => ipcRenderer.invoke('check-launcher-update'),
+  beginLauncherUpdate: () => ipcRenderer.invoke('begin-launcher-update'),
+  downloadLauncherUpdate: () => ipcRenderer.invoke('download-launcher-update'),
+  installLauncherUpdate: () => ipcRenderer.invoke('install-launcher-update'),
+  debugLauncherReinstall: (version = '') => ipcRenderer.invoke('launcher-debug-reinstall', { version }),
   continueAfterLauncherUpdate: () => ipcRenderer.invoke('continue-after-launcher-update')
 });
+
+ipcRenderer.on('launcher-update-status', (_event, payload) => {
+  window.dispatchEvent(new CustomEvent('launcher-update-status', {
+    detail: payload
+  }));
+});
+
+const launcherUpdaterDebugAPI = {
+  platform: process.platform,
+  arch: process.arch,
+  checkForUpdates: () => ipcRenderer.invoke('check-launcher-update'),
+  downloadUpdate: () => ipcRenderer.invoke('download-launcher-update'),
+  installUpdate: () => ipcRenderer.invoke('install-launcher-update'),
+  debugReinstall: (version = '') => ipcRenderer.invoke('launcher-debug-reinstall', { version })
+};
+
+contextBridge.exposeInMainWorld('space', launcherUpdaterDebugAPI);
+contextBridge.exposeInMainWorld('launcherUpdater', launcherUpdaterDebugAPI);
 
 contextBridge.exposeInMainWorld('dockerManagerAPI', {
   getState: () => ipcRenderer.invoke('docker-manager:getState'),

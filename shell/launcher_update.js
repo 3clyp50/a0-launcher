@@ -40,18 +40,18 @@ function updateAssetPatterns(platform, arch) {
   const a = String(arch || '').trim();
 
   if (p === 'darwin') {
-    if (a === 'arm64') return [/macos-arm\.dmg$/i, /macos-arm\.zip$/i];
-    return [/macos-x86\.dmg$/i, /macos-x86\.zip$/i];
+    if (a === 'arm64') return [/macos-arm64\.dmg$/i, /macos-arm64-update\.zip$/i];
+    return [/macos-x64\.dmg$/i, /macos-x64-update\.zip$/i];
   }
 
   if (p === 'win32') {
-    if (a === 'arm64') return [/windows-arm-setup\.exe$/i];
-    return [/windows-x86-setup\.exe$/i];
+    if (a === 'arm64') return [/windows-arm64\.exe$/i];
+    return [/windows-x64\.exe$/i];
   }
 
   if (p === 'linux') {
-    if (a === 'arm64' || a === 'arm') return [/linux-arm\.deb$/i];
-    return [/linux-x86\.deb$/i];
+    if (a === 'arm64' || a === 'arm') return [/linux-arm64\.AppImage$/i];
+    return [/linux-x64\.AppImage$/i];
   }
 
   return [];

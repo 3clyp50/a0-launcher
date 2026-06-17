@@ -15,7 +15,17 @@
     "premake:win": "node scripts/write-build-info.js",
     "make:win": "electron-forge make --platform win32",
     "premake:linux": "node scripts/write-build-info.js",
-    "make:linux": "electron-forge make --platform linux"
+    "make:linux": "electron-forge make --platform linux",
+    "predesktop:dist": "node scripts/write-build-info.js",
+    "desktop:dist": "node packaging/scripts/host-package.js",
+    "predesktop:dist:mac": "node scripts/write-build-info.js",
+    "desktop:dist:mac": "node packaging/scripts/macos-package.js",
+    "predesktop:dist:win": "node scripts/write-build-info.js",
+    "desktop:dist:win": "node packaging/scripts/windows-package.js",
+    "predesktop:dist:linux": "node scripts/write-build-info.js",
+    "desktop:dist:linux": "node packaging/scripts/linux-package.js",
+    "predesktop:dir": "node scripts/write-build-info.js",
+    "desktop:dir": "node packaging/scripts/host-package.js --dir"
   },
   "author": "Agent Zero Team",
   "license": "MIT",
@@ -30,15 +40,57 @@
   "dependencies": {
     "dockerode": "^4.0.9",
     "electron-squirrel-startup": "^1.0.1",
+    "electron-updater": "^6.8.9",
     "semver": "^7.7.3"
   },
   "build": {
+    "appId": "ai.agent0.launcher",
+    "artifactName": "a0-launcher-${version}.${ext}",
+    "productName": "A0 Launcher",
+    "npmRebuild": false,
+    "publish": {
+      "provider": "github",
+      "owner": "agent0ai",
+      "repo": "a0-launcher",
+      "releaseType": "release"
+    },
+    "files": [
+      "app/**/*",
+      "shell/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "app": ".",
+      "buildResources": "shell/assets"
+    },
     "mac": {
-      "category": "public.app-category.productivity",
+      "icon": "shell/assets/icon.icns",
+      "category": "public.app-category.developer-tools",
       "target": [
         "dmg",
         "zip"
+      ],
+      "hardenedRuntime": true,
+      "entitlements": "shell/assets/entitlements.mac.plist",
+      "entitlementsInherit": "shell/assets/entitlements.mac.plist"
+    },
+    "win": {
+      "icon": "shell/assets/icon.ico",
+      "target": [
+        "nsis"
       ]
+    },
+    "linux": {
+      "icon": "shell/assets/icon.png",
+      "category": "Development",
+      "maintainer": "Agent Zero Team",
+      "target": [
+        "AppImage"
+      ]
+    },
+    "nsis": {
+      "guid": "d7397e9a-6c3d-45ea-afc5-f4a979358e62",
+      "createDesktopShortcut": "always"
     }
   }
 }

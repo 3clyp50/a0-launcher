@@ -1,0 +1,9 @@
+{
+  "name": "@a0-launcher/packaging",
+  "private": true,
+  "description": "Native desktop packaging toolchain for A0 Launcher.",
+  "dependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^26.0.12"
+  }
+}

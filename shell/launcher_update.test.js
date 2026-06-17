@@ -30,8 +30,8 @@ test('launcher update resolves when latest release is newer than app version', (
   const info = resolveLauncherUpdate(
     release('v0.5', [
       {
-        name: 'a0-launcher-0.5.0-linux-x86.deb',
-        browser_download_url: 'https://github.com/agent0ai/a0-launcher/releases/download/v0.5/a0-launcher-0.5.0-linux-x86.deb'
+        name: 'a0-launcher-0.5-linux-x64.AppImage',
+        browser_download_url: 'https://github.com/agent0ai/a0-launcher/releases/download/v0.5/a0-launcher-0.5-linux-x64.AppImage'
       }
     ]),
     '0.4.0',
@@ -40,8 +40,8 @@ test('launcher update resolves when latest release is newer than app version', (
 
   assert.equal(info.available, true);
   assert.equal(info.version, 'v0.5');
-  assert.equal(info.assetName, 'a0-launcher-0.5.0-linux-x86.deb');
-  assert.match(info.url, /linux-x86\.deb$/);
+  assert.equal(info.assetName, 'a0-launcher-0.5-linux-x64.AppImage');
+  assert.match(info.url, /linux-x64\.AppImage$/);
 });
 
 test('launcher update is null when installed version already matches latest', () => {
@@ -74,7 +74,7 @@ test('launcher update ignores draft, prerelease, and unsafe download URLs', () =
   const selected = selectLauncherUpdateAsset(
     [
       {
-        name: 'a0-launcher-0.6.0-windows-x86-setup.exe',
+        name: 'a0-launcher-0.6-windows-x64.exe',
         browser_download_url: 'http://example.test/a0-launcher.exe'
       }
     ],

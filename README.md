@@ -41,10 +41,10 @@ Packaged and normal non-local runs load `content.json` from the latest configure
 GitHub Release and cache it under Electron `userData`. Local UI work should opt
 into local content explicitly.
 
-Packaged runs also compare the installed launcher version with the latest
-launcher GitHub Release. When a newer executable exists, the startup screen can
-offer an `Update` button that opens the matching release asset or release page,
-plus `Continue` for launching without updating.
+Packaged runs also use `electron-updater` metadata from the latest launcher
+GitHub Release. When a newer executable exists, the startup screen can offer an
+`Update` button that downloads the updater payload, then restarts to install it
+once the payload is ready. `Continue` opens the launcher without updating.
 
 ## Requirements
 
@@ -130,39 +130,55 @@ A0_LAUNCHER_LOCAL_REPO=. npm start
 ## Build Executables
 
 ```bash
-npm run make
-npm run make:mac
-npm run make:win
-npm run make:linux
+npm install --prefix packaging
+npm run desktop:dist
+npm run desktop:dist:mac
+npm run desktop:dist:win
+npm run desktop:dist:linux
 ```
 
 Platform-specific examples:
 
 ```bash
-npm run make:mac -- --arch=arm64
-npm run make:mac -- --arch=x64
-npm run make:win -- --arch=arm64
-npm run make:win -- --arch=x64
-npm run make:linux -- --arch=arm64
-npm run make:linux -- --arch=x64
+npm run desktop:dist:mac -- --arch arm64
+npm run desktop:dist:mac -- --arch x64
+npm run desktop:dist:win -- --arch arm64
+npm run desktop:dist:win -- --arch x64
+npm run desktop:dist:linux -- --arch arm64
+npm run desktop:dist:linux -- --arch x64
 ```
 
 Release artifacts are:
 
-- macOS arm/x86 DMG and ZIP
-- Windows arm/x86 Squirrel setup EXE and NuGet package
-- Linux arm/x86 DEB packages
+- macOS x64/arm64 DMG and updater ZIP
+- Windows x64/arm64 NSIS setup EXE
+- Linux x64/arm64 AppImage
+- `electron-updater` metadata files
 - `content.json`
 
-Linux RPM artifacts are intentionally not published unless the product decision
+Linux DEB/RPM and Windows Squirrel/NuGet artifacts are intentionally not
+published in the updater-capable release path unless the product decision
 changes.
+
+Packaged updater debugging follows the Space Agent flow. Open DevTools in a
+packaged launcher and use:
+
+```js
+space.checkForUpdates()
+space.debugReinstall('v0.4')
+space.installUpdate()
+```
+
+`debugReinstall(version)` stages and downloads the requested release metadata,
+including downgrades. After it finishes, click `Restart` on the startup screen or
+run `space.installUpdate()`.
 
 ## macOS Signing
 
 For local or fork builds, unsigned macOS artifacts are usually enough:
 
 ```bash
-SKIP_SIGNING=1 npm run make:mac
+SKIP_SIGNING=1 npm run desktop:dist:mac
 ```
 
 Release-grade macOS signing and notarization in GitHub Actions require:
@@ -181,14 +197,14 @@ artifacts.
 GitHub Actions owns the release path:
 
 1. Create or move a `v*` tag intentionally.
-2. Create or update the GitHub Release for that tag.
+2. Push the tag. `build.yml` builds updater-capable executable artifacts,
+   stages canonical release asset names, creates or updates the GitHub Release,
+   and uploads installers plus updater metadata.
 3. `bundle-content.yml` checks out the tag, bundles `app/` into `content.json`,
    and uploads it to the release.
-4. `build.yml` builds executable artifacts from the tagged source and uploads
-   them to the release.
 
 Two-segment tags such as `v0.3` are normalized to full semver versions such as
-`0.3.0` during executable builds.
+`0.3.0` during executable builds while public asset names may keep `0.3`.
 
 After publishing, verify release assets with:
 
@@ -209,6 +225,7 @@ a0-launcher/
 │   ├── docker_manager.js    # Renderer state coordinator and action facade
 │   └── index.html           # Renderer entrypoint
 ├── docs/                    # Supplemental user-facing docs and release notes
+├── packaging/               # electron-builder release and updater metadata tooling
 ├── scripts/                 # Build metadata and bootstrap helpers
 ├── shell/                   # Electron shell, preload, content loading, IPC
 │   ├── docker_adapter/      # Docker and registry abstraction layer

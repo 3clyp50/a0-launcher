@@ -132,6 +132,45 @@
         const updatePanel = document.getElementById('launcherUpdatePanel');
         const updateBtn = document.getElementById('launcherUpdateBtn');
         const continueBtn = document.getElementById('launcherContinueBtn');
+        let latestLauncherUpdateState = { state: 'idle', readyToContinue: false };
+
+        function isActionableUpdateState(state) {
+            return ['update-available', 'downloading', 'downloaded', 'installing'].includes(state);
+        }
+
+        function renderLauncherUpdate(info = {}) {
+            const state = typeof info.state === 'string' ? info.state : 'idle';
+            const version = typeof info.version === 'string' ? info.version : '';
+            latestLauncherUpdateState = { ...latestLauncherUpdateState, ...info, state, version };
+
+            if (!isActionableUpdateState(state)) {
+                return;
+            }
+
+            if (state === 'downloaded') {
+                updateBtn.textContent = 'Restart';
+                updateBtn.disabled = false;
+            } else if (state === 'downloading') {
+                updateBtn.textContent = 'Downloading';
+                updateBtn.disabled = true;
+            } else if (state === 'installing') {
+                updateBtn.textContent = 'Restarting';
+                updateBtn.disabled = true;
+            } else {
+                updateBtn.textContent = version ? `Update ${version}` : 'Update';
+                updateBtn.disabled = false;
+            }
+
+            if (typeof info.message === 'string' && info.message) {
+                statusEl.textContent = info.message;
+            } else if (version) {
+                statusEl.textContent = `Update ${version} is available.`;
+            }
+
+            continueBtn.disabled = !info.readyToContinue || state === 'installing';
+            updatePanel.hidden = false;
+            document.body.classList.add('requires-action');
+        }
 
         window.electronAPI?.onStatusUpdate?.((status) => {
             statusEl.textContent = status;
@@ -143,14 +182,10 @@
             document.body.classList.add('requires-action');
         });
         window.electronAPI?.onLauncherUpdateAvailable?.((info) => {
-            const version = typeof info?.version === 'string' ? info.version : '';
-            updateBtn.textContent = version ? `Update ${version}` : 'Update';
-            updatePanel.hidden = false;
-            document.body.classList.add('requires-action');
-            if (info?.readyToContinue) {
-                spinnerEl.style.display = 'none';
-                continueBtn.disabled = false;
-            }
+            renderLauncherUpdate(info);
+        });
+        window.electronAPI?.onLauncherUpdateStatus?.((info) => {
+            renderLauncherUpdate(info);
         });
         window.electronAPI?.onLauncherOpeningApp?.(() => {
             document.body.classList.add('is-opening-app');
@@ -158,15 +193,20 @@
 
         updateBtn.addEventListener('click', async () => {
             updateBtn.disabled = true;
-            statusEl.textContent = 'Opening update...';
-            const result = await window.electronAPI?.openLauncherUpdate?.();
+            const state = latestLauncherUpdateState.state;
+            statusEl.textContent = state === 'downloaded' ? 'Restarting to install update...' : 'Preparing update...';
+            const result = await window.electronAPI?.beginLauncherUpdate?.();
             if (!result?.ok) {
-                statusEl.textContent = result?.message || 'Could not open update.';
+                statusEl.textContent = result?.message || 'Could not start update.';
                 updateBtn.disabled = false;
                 return;
             }
-            statusEl.textContent = 'Update opened in your browser.';
-            updateBtn.disabled = false;
+            if (result.status === 'installing') {
+                updateBtn.textContent = 'Restarting';
+            } else if (result.status === 'downloaded') {
+                updateBtn.textContent = 'Restart';
+                updateBtn.disabled = false;
+            }
         });
 
         continueBtn.addEventListener('click', async () => {

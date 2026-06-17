@@ -16,8 +16,14 @@ This scope owns:
   event forwarding.
 - `shell/preload.js`: safe renderer bridge exposed through `contextBridge`.
 - `shell/loading.html`: loading/error shell while content initializes.
-- `shell/launcher_update.js`: packaged launcher executable update detection,
-  version comparison, and platform release-asset selection.
+- `shell/launcher_update.js`: launcher update version formatting and legacy
+  platform release-asset selection helpers.
+- `shell/launcher_updater_debug_release.js`: packaged updater metadata staging
+  for DevTools-triggered upgrade, reinstall, and downgrade tests.
+- `shell/launcher_updater_artifacts.js`: updater cache cleanup marker and
+  pending-download cleanup helpers.
+- `shell/launcher_updater_install_options.js`: updater diagnostic log path and
+  install-option helpers.
 - `shell/assets/`: application icons and platform entitlements.
 - `shell/docker_manager/`: Agent Zero image and instance orchestration.
 - `shell/docker_adapter/`: Docker and registry abstraction layer.
@@ -53,11 +59,18 @@ This scope owns:
   environment variables may be gone.
 - Non-local content comes from the configured GitHub Release `content.json`
   asset and is unpacked under Electron `userData`.
-- Packaged launcher executable update prompts use that same latest launcher
-  release metadata to compare `app.getVersion()` with the release tag. A newer
-  executable may hold `shell/loading.html` with `Update` and `Continue`; the
-  update action opens the platform release asset or release page, while real
-  installation remains user-owned until a native self-updater is introduced.
+- Packaged launcher executable update prompts use `electron-updater` metadata
+  from the launcher GitHub Release. A newer executable may hold
+  `shell/loading.html` with `Update` and `Continue`; `Update` downloads the
+  updater payload, then becomes a restart/install action once downloaded.
+- `electron-updater` stays configured with `autoDownload: false`,
+  `autoInstallOnAppQuit: false`, web installers disabled, and differential
+  download disabled. User intent must start download and install.
+- The preload bridge intentionally exposes a DevTools debugging surface at
+  `window.space` and `window.launcherUpdater` with `checkForUpdates()`,
+  `downloadUpdate()`, `installUpdate()`, and `debugReinstall(version)`.
+  `debugReinstall` may stage upgrades, reinstalls, or downgrades by reading the
+  requested release metadata; keep it package-only and updater-owned.
 - Startup begins in a transparent, frameless splash window that shows only the
   launcher icon and title. Before app content opens, `shell/main.js` sends the
   splash exit event, replaces that splash with the normal framed app window,
@@ -118,6 +131,7 @@ After shell changes, run:
 node --check shell/main.js
 node --check shell/preload.js
 node --test shell/launcher_update.test.js
+node --test shell/launcher_updater_debug_release.test.js
 node --test shell/instance_tabs.test.js
 git diff --check
 ```

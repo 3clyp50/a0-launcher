@@ -5,6 +5,9 @@ const os = require('node:os');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const childProcess = require('node:child_process');
+const { createHash } = require('node:crypto');
+const { Readable, Transform } = require('node:stream');
+const { pipeline } = require('node:stream/promises');
 const dockerManager = require('./docker_manager');
 const {
   normalizeHttpUrl,
@@ -13,7 +16,18 @@ const {
   makeTabKey,
   makeTabsSnapshot
 } = require('./instance_tabs');
-const { resolveLauncherUpdate } = require('./launcher_update');
+const { formatLauncherVersion } = require('./launcher_update');
+const {
+  cleanupLauncherUpdaterArtifacts,
+  writeLauncherUpdaterInstallMarker
+} = require('./launcher_updater_artifacts');
+const { resolveLauncherUpdaterLogPath } = require('./launcher_updater_install_options');
+const {
+  resolveLauncherWindowsReleaseArchFallback,
+  resolveLauncherDebugReleaseAssetUrl,
+  resolveLauncherDebugReleaseTag,
+  stageLauncherDebugRelease
+} = require('./launcher_updater_debug_release');
 
 // Handle Squirrel.Windows startup events
 if (require('electron-squirrel-startup')) {
@@ -135,8 +149,16 @@ let instanceTabs = new Map();
 let activeInstanceTabId = '';
 let instanceTabBounds = null;
 let instanceTabSeq = 0;
-let launcherUpdateInfo = null;
 let launcherUpdateDismissed = false;
+let launcherAutoUpdater = null;
+let launcherUpdateCheckPromise = null;
+let launcherUpdateDownloadPromise = null;
+let launcherUpdateState = {
+  state: 'idle',
+  message: '',
+  progress: null,
+  version: ''
+};
 let mainWindowMode = '';
 let mainWindowCreatedAt = 0;
 
@@ -212,28 +234,673 @@ function getRemoteContentTimestamp(latestRelease, contentAsset) {
   );
 }
 
-function publishLauncherUpdateInfo(extra = {}) {
-  if (!launcherUpdateInfo || !mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.webContents.send('launcher-update-available', {
-    ...launcherUpdateInfo,
+function isLauncherUpdateActionable(state = launcherUpdateState.state) {
+  return ['update-available', 'downloading', 'downloaded', 'installing'].includes(state);
+}
+
+function publishLauncherUpdateState(extra = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  const payload = {
+    ...launcherUpdateState,
+    readyToContinue: contentInitialized,
     ...extra
+  };
+
+  mainWindow.webContents.send('launcher-update-status', payload);
+  if (isLauncherUpdateActionable(payload.state)) {
+    mainWindow.webContents.send('launcher-update-available', payload);
+  }
+}
+
+function setLauncherUpdateState(patch = {}) {
+  launcherUpdateState = {
+    ...launcherUpdateState,
+    ...patch
+  };
+
+  if (!Object.prototype.hasOwnProperty.call(patch, 'progress')) {
+    launcherUpdateState.progress = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(patch, 'version')) {
+    launcherUpdateState.version = launcherUpdateState.version || '';
+  }
+  if (!Object.prototype.hasOwnProperty.call(patch, 'message')) {
+    launcherUpdateState.message = launcherUpdateState.message || '';
+  }
+
+  publishLauncherUpdateState();
+}
+
+function shouldEnableLauncherAutoUpdate() {
+  return app.isPackaged;
+}
+
+function loadLauncherAutoUpdater() {
+  if (launcherAutoUpdater) return launcherAutoUpdater;
+
+  try {
+    ({ autoUpdater: launcherAutoUpdater } = require('electron-updater'));
+  } catch (error) {
+    console.warn('[launcher-update] electron-updater is unavailable.', error);
+    launcherAutoUpdater = null;
+  }
+
+  return launcherAutoUpdater;
+}
+
+async function appendLauncherUpdaterPersistentLog(logPath, message, details = null) {
+  const resolvedLogPath = String(logPath || '').trim();
+  const normalizedMessage = String(message || '').trim();
+  if (!resolvedLogPath || !normalizedMessage) return;
+
+  const lines = [
+    `${new Date().toISOString()} [a0-launcher/updater] ${normalizedMessage}`
+  ];
+
+  if (details && typeof details === 'object') {
+    try {
+      lines.push(JSON.stringify(details));
+    } catch {
+      // Best-effort diagnostics only.
+    }
+  }
+
+  try {
+    await fs.mkdir(path.dirname(resolvedLogPath), { recursive: true });
+    await fs.appendFile(resolvedLogPath, `${lines.join('\n')}\n`, 'utf8');
+  } catch {
+    // Persistent updater logging must never block launch or install handoff.
+  }
+}
+
+function resolveLauncherUpdaterLogPathForCurrentRun() {
+  return resolveLauncherUpdaterLogPath({
+    userDataPath: app.getPath('userData')
   });
 }
 
-function maybeCaptureLauncherUpdate(latestRelease) {
-  if (!app.isPackaged) return null;
+function isLauncherNetworkOnline() {
+  try {
+    return !net || typeof net.isOnline !== 'function' || net.isOnline();
+  } catch {
+    return true;
+  }
+}
 
-  const info = resolveLauncherUpdate(latestRelease, app.getVersion(), {
-    arch: process.arch,
-    githubRepo: GITHUB_REPO,
-    platform: process.platform
+function formatLauncherUpdateError(context, error) {
+  const detail = error && typeof error.message === 'string' ? error.message : String(error || 'Unknown error');
+  return `${context} ${detail}`;
+}
+
+function reportLauncherUpdateFailure(context, error) {
+  const message = formatLauncherUpdateError(context, error);
+  console.warn('[launcher-update]', message);
+  setLauncherUpdateState({
+    state: 'error',
+    message,
+    progress: null,
+    version: ''
   });
-  if (!info) return null;
+  return { summary: message };
+}
 
-  launcherUpdateInfo = info;
-  publishLauncherUpdateInfo();
-  console.log(`Launcher update available: ${info.version}${info.assetName ? ` (${info.assetName})` : ''}`);
-  return info;
+function resolveLauncherDebugReinstallRequestVersion(payload = {}) {
+  if (typeof payload === 'string') {
+    return payload.trim();
+  }
+
+  if (payload && typeof payload === 'object') {
+    return String(payload.version || '').trim();
+  }
+
+  return '';
+}
+
+async function fetchLauncherUpdateMetadataText(metadataUrl) {
+  const response = await net.fetch(metadataUrl, {
+    headers: {
+      accept: 'text/yaml, text/x-yaml, text/plain, */*'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Could not download launcher update metadata ${metadataUrl} (${response.status} ${response.statusText || 'Unknown'}).`
+    );
+  }
+
+  return await response.text();
+}
+
+async function downloadLauncherUpdateAssetToFile(assetUrl, destinationPath, { onProgress } = {}) {
+  const response = await net.fetch(assetUrl, {
+    headers: {
+      accept: 'application/octet-stream, */*'
+    }
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(
+      `Could not download launcher update asset ${assetUrl} (${response.status} ${response.statusText || 'Unknown'}).`
+    );
+  }
+
+  const totalBytes = Number(response.headers.get('content-length')) || 0;
+  const destinationDir = path.dirname(destinationPath);
+  const temporaryPath = path.join(destinationDir, `temp-${path.basename(destinationPath)}`);
+  const hash = createHash('sha512');
+  let downloadedBytes = 0;
+
+  await fs.mkdir(destinationDir, { recursive: true });
+  await fs.rm(temporaryPath, { force: true });
+  await fs.rm(destinationPath, { force: true });
+
+  const hashAndProgress = new Transform({
+    transform(chunk, _encoding, callback) {
+      hash.update(chunk);
+      downloadedBytes += chunk.length;
+      onProgress?.({
+        downloadedBytes,
+        totalBytes,
+        progress: totalBytes > 0 ? downloadedBytes / totalBytes : null
+      });
+      callback(null, chunk);
+    }
+  });
+
+  try {
+    await pipeline(Readable.fromWeb(response.body), hashAndProgress, fsSync.createWriteStream(temporaryPath));
+    await fs.rename(temporaryPath, destinationPath);
+  } catch (error) {
+    await fs.rm(temporaryPath, { force: true });
+    throw error;
+  }
+
+  return {
+    sha512: hash.digest('base64'),
+    size: downloadedBytes
+  };
+}
+
+async function downloadLauncherWindowsUpdateWithArchFallback(autoUpdater) {
+  if (process.platform !== 'win32') return null;
+
+  const updateInfoAndProvider = autoUpdater?.updateInfoAndProvider;
+  const updateInfo = updateInfoAndProvider?.info || null;
+  const fallback = resolveLauncherWindowsReleaseArchFallback(updateInfo, process.arch);
+  if (!fallback) return null;
+
+  const publishConfig = await autoUpdater.configOnDisk.value;
+  const tag = resolveLauncherDebugReleaseTag(updateInfo?.version || '');
+  const installerUrl = resolveLauncherDebugReleaseAssetUrl({
+    publishConfig,
+    tag,
+    fileName: fallback.expectedFileName
+  });
+  const downloadedUpdateHelper = await autoUpdater.getOrCreateDownloadHelper();
+  const pendingDir = downloadedUpdateHelper.cacheDirForPendingUpdate;
+  const destinationPath = path.join(pendingDir, fallback.expectedFileName);
+  const logPath = resolveLauncherUpdaterLogPathForCurrentRun();
+
+  await appendLauncherUpdaterPersistentLog(logPath, 'Windows update metadata is missing the current arch installer; using the canonical release asset fallback.', {
+    actualFiles: fallback.actualFiles,
+    currentArch: process.arch,
+    expectedArch: fallback.expectedArch,
+    expectedFileName: fallback.expectedFileName,
+    installerUrl,
+    targetVersion: updateInfo?.version || ''
+  });
+
+  await downloadedUpdateHelper.clear();
+
+  setLauncherUpdateState({
+    state: 'downloading',
+    message: 'Downloading update...',
+    progress: null,
+    version: formatLauncherVersion(updateInfo?.version || '')
+  });
+
+  const downloadedFile = await downloadLauncherUpdateAssetToFile(installerUrl, destinationPath, {
+    onProgress({ progress }) {
+      if (!Number.isFinite(progress)) return;
+      const percent = Math.max(0, Math.min(100, Math.round(progress * 100)));
+      setLauncherUpdateState({
+        state: 'downloading',
+        message: `Downloading update ${percent}%`,
+        progress,
+        version: formatLauncherVersion(updateInfo?.version || '')
+      });
+    }
+  });
+
+  const fileInfo = {
+    url: new URL(installerUrl),
+    info: {
+      url: fallback.expectedFileName,
+      sha512: downloadedFile.sha512,
+      size: String(downloadedFile.size)
+    }
+  };
+  const normalizedUpdateInfo = {
+    ...updateInfo,
+    files: [fileInfo.info],
+    path: fallback.expectedFileName,
+    sha512: downloadedFile.sha512
+  };
+
+  await downloadedUpdateHelper.setDownloadedFile(
+    destinationPath,
+    null,
+    normalizedUpdateInfo,
+    fileInfo,
+    fallback.expectedFileName,
+    true
+  );
+  autoUpdater.updateInfoAndProvider = {
+    info: normalizedUpdateInfo,
+    provider: updateInfoAndProvider.provider
+  };
+
+  const version = formatLauncherVersion(normalizedUpdateInfo.version);
+  setLauncherUpdateState({
+    state: 'downloaded',
+    message: version ? `Update ${version} is ready to install.` : 'Update ready to install.',
+    progress: null,
+    version
+  });
+
+  return {
+    ok: true,
+    status: 'downloaded',
+    version
+  };
+}
+
+async function checkForLauncherUpdates({ userInitiated = false } = {}) {
+  if (!shouldEnableLauncherAutoUpdate()) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  const autoUpdater = loadLauncherAutoUpdater();
+  if (!autoUpdater) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  if (launcherUpdateCheckPromise) {
+    return launcherUpdateCheckPromise;
+  }
+
+  if (!isLauncherNetworkOnline()) {
+    const message = 'Update check skipped while offline.';
+    setLauncherUpdateState({
+      state: 'offline',
+      message,
+      progress: null,
+      version: ''
+    });
+    return { ok: false, reason: 'offline', message };
+  }
+
+  launcherUpdateCheckPromise = (async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      const version = formatLauncherVersion(result?.updateInfo?.version);
+      return {
+        ok: true,
+        status: launcherUpdateState.state || 'checked',
+        version
+      };
+    } catch (error) {
+      const formattedError = reportLauncherUpdateFailure(
+        userInitiated ? 'Launcher update check failed.' : 'Launcher auto-update check failed.',
+        error
+      );
+      return {
+        ok: false,
+        reason: 'error',
+        message: formattedError.summary
+      };
+    } finally {
+      launcherUpdateCheckPromise = null;
+    }
+  })();
+
+  return launcherUpdateCheckPromise;
+}
+
+async function downloadLauncherUpdate() {
+  if (!shouldEnableLauncherAutoUpdate()) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  const autoUpdater = loadLauncherAutoUpdater();
+  if (!autoUpdater) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  if (launcherUpdateState.state === 'downloaded') {
+    return { ok: true, status: 'downloaded', version: launcherUpdateState.version || '' };
+  }
+
+  if (launcherUpdateDownloadPromise) {
+    return launcherUpdateDownloadPromise;
+  }
+
+  if (launcherUpdateState.state !== 'update-available') {
+    return { ok: false, reason: 'not-ready', message: 'No launcher update is ready to download yet.' };
+  }
+
+  launcherUpdateDownloadPromise = (async () => {
+    try {
+      const windowsArchFallbackResult = await downloadLauncherWindowsUpdateWithArchFallback(autoUpdater);
+      if (windowsArchFallbackResult) {
+        return windowsArchFallbackResult;
+      }
+
+      await autoUpdater.downloadUpdate();
+      return {
+        ok: true,
+        status: 'downloading',
+        version: launcherUpdateState.version || ''
+      };
+    } catch (error) {
+      const formattedError = reportLauncherUpdateFailure('Launcher update download failed.', error);
+      return {
+        ok: false,
+        reason: 'error',
+        message: formattedError.summary
+      };
+    } finally {
+      launcherUpdateDownloadPromise = null;
+    }
+  })();
+
+  return launcherUpdateDownloadPromise;
+}
+
+async function installLauncherUpdate() {
+  if (!shouldEnableLauncherAutoUpdate()) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  const autoUpdater = loadLauncherAutoUpdater();
+  if (!autoUpdater) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  if (launcherUpdateState.state !== 'downloaded') {
+    return { ok: false, reason: 'not-ready', message: 'No downloaded launcher update is ready to install yet.' };
+  }
+
+  setLauncherUpdateState({
+    state: 'installing',
+    message: 'Restarting to install update...',
+    progress: null
+  });
+
+  const logPath = resolveLauncherUpdaterLogPathForCurrentRun();
+  const useSilentWindowsInstall = process.platform === 'win32';
+
+  try {
+    await writeLauncherUpdaterInstallMarker({
+      fromVersion: app.getVersion(),
+      targetVersion: launcherUpdateState.version || '',
+      userDataPath: app.getPath('userData')
+    });
+    await appendLauncherUpdaterPersistentLog(logPath, 'Updater cleanup marker written.', {
+      fromVersion: app.getVersion(),
+      targetVersion: launcherUpdateState.version || ''
+    });
+  } catch (error) {
+    await appendLauncherUpdaterPersistentLog(logPath, 'Could not persist the updater cleanup marker.', {
+      message: error && typeof error.message === 'string' ? error.message : String(error || 'Unknown error')
+    });
+  }
+
+  await appendLauncherUpdaterPersistentLog(logPath, 'Installing downloaded launcher update with electron-updater.', {
+    installerPath: autoUpdater?.installerPath || '',
+    isForceRunAfter: useSilentWindowsInstall,
+    isSilent: useSilentWindowsInstall,
+    packagePath: autoUpdater?.downloadedUpdateHelper?.packageFile || '',
+    targetVersion: launcherUpdateState.version || ''
+  });
+
+  isQuitting = true;
+  setImmediate(() => {
+    autoUpdater.quitAndInstall(useSilentWindowsInstall, useSilentWindowsInstall);
+  });
+
+  return { ok: true, status: 'installing', version: launcherUpdateState.version || '' };
+}
+
+async function beginLauncherUpdate() {
+  if (launcherUpdateState.state === 'downloaded') {
+    return installLauncherUpdate();
+  }
+
+  if (launcherUpdateState.state === 'update-available') {
+    return downloadLauncherUpdate();
+  }
+
+  if (launcherUpdateState.state === 'downloading' || launcherUpdateState.state === 'installing') {
+    return { ok: true, status: launcherUpdateState.state, version: launcherUpdateState.version || '' };
+  }
+
+  const checkResult = await checkForLauncherUpdates({ userInitiated: true });
+  if (launcherUpdateState.state === 'update-available') {
+    return downloadLauncherUpdate();
+  }
+  return checkResult;
+}
+
+async function stageLauncherDebugReinstall(payload = {}) {
+  if (!shouldEnableLauncherAutoUpdate()) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  const autoUpdater = loadLauncherAutoUpdater();
+  if (!autoUpdater) {
+    return { ok: false, reason: 'unavailable' };
+  }
+
+  if (!isLauncherNetworkOnline()) {
+    const message = 'Debug reinstall skipped while offline.';
+    setLauncherUpdateState({
+      state: 'offline',
+      message,
+      progress: null,
+      version: ''
+    });
+    return { ok: false, reason: 'offline', message };
+  }
+
+  const requestedVersion = resolveLauncherDebugReinstallRequestVersion(payload);
+  const currentVersion = app.getVersion();
+  const requestedLabel = requestedVersion || currentVersion;
+
+  setLauncherUpdateState({
+    state: 'checking',
+    message: 'Preparing debug reinstall...',
+    progress: null,
+    version: ''
+  });
+
+  try {
+    const publishConfig = await autoUpdater.configOnDisk.value;
+    const stagedRelease = await stageLauncherDebugRelease({
+      requestedVersion,
+      currentVersion,
+      platform: process.platform,
+      arch: process.arch,
+      publishConfig,
+      fetchText: fetchLauncherUpdateMetadataText
+    });
+    const targetVersion = formatLauncherVersion(stagedRelease.info?.version || stagedRelease.requestedVersion);
+    const action =
+      stagedRelease.comparison < 0
+        ? 'downgrade'
+        : stagedRelease.comparison === 0
+          ? 'reinstall'
+          : 'update';
+    const logPath = resolveLauncherUpdaterLogPathForCurrentRun();
+
+    autoUpdater.allowDowngrade = stagedRelease.comparison < 0;
+    autoUpdater.updateInfoAndProvider = {
+      info: stagedRelease.info,
+      provider: stagedRelease.provider
+    };
+
+    await appendLauncherUpdaterPersistentLog(logPath, 'Prepared launcher debug reinstall staging.', {
+      action,
+      currentVersion,
+      metadataFileName: stagedRelease.metadataFileName,
+      metadataUrl: stagedRelease.metadataUrl,
+      requestedVersion: requestedLabel,
+      targetVersion: stagedRelease.info?.version || stagedRelease.requestedVersion,
+      tag: stagedRelease.tag
+    });
+
+    setLauncherUpdateState({
+      state: 'update-available',
+      message: targetVersion ? `Update ${targetVersion} is available.` : 'A launcher update is available.',
+      progress: null,
+      version: targetVersion
+    });
+
+    const downloadResult = await downloadLauncherUpdate();
+    if (!downloadResult?.ok) {
+      return downloadResult;
+    }
+
+    return {
+      ok: true,
+      action,
+      metadataUrl: stagedRelease.metadataUrl,
+      status: launcherUpdateState.state,
+      tag: stagedRelease.tag,
+      version: launcherUpdateState.version || targetVersion
+    };
+  } catch (error) {
+    const formattedError = reportLauncherUpdateFailure(
+      `Launcher debug reinstall preparation failed for ${requestedLabel}.`,
+      error
+    );
+    return {
+      ok: false,
+      reason: 'error',
+      message: formattedError.summary
+    };
+  }
+}
+
+function configureLauncherAutoUpdate() {
+  if (!shouldEnableLauncherAutoUpdate()) {
+    return;
+  }
+
+  const autoUpdater = loadLauncherAutoUpdater();
+  if (!autoUpdater) {
+    return;
+  }
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.disableWebInstaller = true;
+  autoUpdater.disableDifferentialDownload = true;
+  autoUpdater.logger = console;
+
+  autoUpdater.on('checking-for-update', () => {
+    setLauncherUpdateState({
+      state: 'checking',
+      message: 'Checking for updates...',
+      progress: null,
+      version: ''
+    });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    const version = formatLauncherVersion(info?.version);
+    setLauncherUpdateState({
+      state: 'update-available',
+      message: version ? `Update ${version} is available.` : 'A launcher update is available.',
+      progress: null,
+      version
+    });
+    console.log(version ? `Launcher update available: ${version}` : 'Launcher update available.');
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    setLauncherUpdateState({
+      state: 'up-to-date',
+      message: '',
+      progress: null,
+      version: ''
+    });
+  });
+
+  autoUpdater.on('error', (error) => {
+    reportLauncherUpdateFailure('Launcher auto-update failed.', error);
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = Number(progress && progress.percent);
+    if (!Number.isFinite(percent)) {
+      setLauncherUpdateState({
+        state: 'downloading',
+        message: 'Downloading update...',
+        progress: null
+      });
+      return;
+    }
+
+    const boundedPercent = Math.max(0, Math.min(100, Math.round(percent)));
+    setLauncherUpdateState({
+      state: 'downloading',
+      message: `Downloading update ${boundedPercent}%`,
+      progress: boundedPercent / 100
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    const version = formatLauncherVersion(info?.version);
+    setLauncherUpdateState({
+      state: 'downloaded',
+      message: version ? `Update ${version} is ready to install.` : 'Update ready to install.',
+      progress: null,
+      version
+    });
+  });
+}
+
+async function cleanupStaleLauncherUpdaterArtifacts() {
+  try {
+    const result = await cleanupLauncherUpdaterArtifacts({
+      isPackaged: app.isPackaged,
+      userDataPath: app.getPath('userData')
+    });
+    if (result.cleaned) {
+      console.log('[launcher-update] Cleaned stale updater artifacts.');
+    }
+  } catch (error) {
+    console.warn('[launcher-update] Could not clean stale updater artifacts.', error);
+  }
+}
+
+function shouldHoldStartupForLauncherUpdate() {
+  if (launcherUpdateDismissed || !isLauncherUpdateActionable()) {
+    return false;
+  }
+
+  publishLauncherUpdateState({ readyToContinue: contentInitialized });
+  if (launcherUpdateState.message) {
+    sendStatus(launcherUpdateState.message);
+  } else if (launcherUpdateState.version) {
+    sendStatus(`Launcher ${launcherUpdateState.version} is available.`);
+  } else {
+    sendStatus('A launcher update is available.');
+  }
+  return true;
 }
 
 function resolveContentBundlePath(filePath) {
@@ -371,8 +1038,6 @@ async function initializeAppContent() {
     sendStatus('Using cached content (offline mode)');
     return true;
   }
-
-  maybeCaptureLauncherUpdate(latestRelease);
 
   const contentAsset = latestRelease.assets?.find(
     asset => asset.name === CONTENT_ASSET_NAME
@@ -725,20 +1390,11 @@ ipcMain.handle('get-shell-icon-data-url', () => {
   }
 });
 
-ipcMain.handle('open-launcher-update', async () => {
-  try {
-    const url = launcherUpdateInfo?.url || launcherUpdateInfo?.releaseUrl || '';
-    if (!url) return { ok: false, reason: 'unavailable' };
-    await shell.openExternal(url);
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: 'error',
-      message: error && typeof error.message === 'string' ? error.message : 'Could not open launcher update.'
-    };
-  }
-});
+ipcMain.handle('check-launcher-update', () => checkForLauncherUpdates({ userInitiated: true }));
+ipcMain.handle('begin-launcher-update', () => beginLauncherUpdate());
+ipcMain.handle('download-launcher-update', () => downloadLauncherUpdate());
+ipcMain.handle('install-launcher-update', () => installLauncherUpdate());
+ipcMain.handle('launcher-debug-reinstall', (_event, payload) => stageLauncherDebugReinstall(payload));
 
 ipcMain.handle('continue-after-launcher-update', async () => {
   try {
@@ -2354,20 +3010,23 @@ app.whenReady().then(async () => {
     console.log(`[a0app] ${request.url} -> ${fileUrl}`);
     return net.fetch(fileUrl);
   });
+  await cleanupStaleLauncherUpdaterArtifacts();
+  configureLauncherAutoUpdate();
   createWindow();
   createTray();
 
   // Wait a moment for loading screen to render
   await new Promise(resolve => setTimeout(resolve, 500));
 
+  const launcherUpdateCheck = checkForLauncherUpdates({ userInitiated: false });
+
   // Initialize content
   const success = await initializeAppContent();
 
   if (success) {
+    await launcherUpdateCheck;
     contentInitialized = true;
-    if (launcherUpdateInfo && !launcherUpdateDismissed) {
-      publishLauncherUpdateInfo({ readyToContinue: true });
-      sendStatus(`Launcher ${launcherUpdateInfo.version} is available.`);
+    if (shouldHoldStartupForLauncherUpdate()) {
       return;
     }
     // Small delay for visual feedback
@@ -2392,10 +3051,7 @@ app.on('activate', async () => {
       // Verify content still exists before loading
       const hasContent = await checkExistingContent();
       if (hasContent) {
-        if (launcherUpdateInfo && !launcherUpdateDismissed) {
-          publishLauncherUpdateInfo({ readyToContinue: true });
-          sendStatus(`Launcher ${launcherUpdateInfo.version} is available.`);
-        } else {
+        if (!shouldHoldStartupForLauncherUpdate()) {
           await continueToAppContent();
         }
       } else {
@@ -2404,10 +3060,7 @@ app.on('activate', async () => {
         const success = await initializeAppContent();
         if (success) {
           contentInitialized = true;
-          if (launcherUpdateInfo && !launcherUpdateDismissed) {
-            publishLauncherUpdateInfo({ readyToContinue: true });
-            sendStatus(`Launcher ${launcherUpdateInfo.version} is available.`);
-          } else {
+          if (!shouldHoldStartupForLauncherUpdate()) {
             await continueToAppContent({ delayMs: 800 });
           }
         }
@@ -2419,10 +3072,7 @@ app.on('activate', async () => {
 
       if (success) {
         contentInitialized = true;
-        if (launcherUpdateInfo && !launcherUpdateDismissed) {
-          publishLauncherUpdateInfo({ readyToContinue: true });
-          sendStatus(`Launcher ${launcherUpdateInfo.version} is available.`);
-        } else {
+        if (!shouldHoldStartupForLauncherUpdate()) {
           await continueToAppContent({ delayMs: 800 });
         }
       }

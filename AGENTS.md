@@ -23,8 +23,8 @@ Root-owned files and folders:
 - `README.md`: public product overview and user/developer quick start.
 - `package.json` and `package-lock.json`: Electron app version, dependencies,
   npm scripts, and local-dev fallback metadata.
-- `forge.config.js`: Electron Forge makers, signing, notarization, and
-  executable packaging configuration.
+- `forge.config.js`: legacy Electron Forge makers for local/manual executable
+  packaging.
 - `.gitignore`, `LICENSE`: repository metadata.
 - Child-owned areas listed in the Child DOX Index below.
 
@@ -78,11 +78,15 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   the current release line so local `npm start` runs do not show stale metadata.
 - Packaged or non-local runs fetch `content.json` from the latest GitHub Release
   for the configured launcher repo and unpack it under Electron `userData`.
-- Packaged startup also compares Electron `app.getVersion()` with the latest
-  launcher GitHub Release tag. When a newer launcher executable is available,
-  the loading screen may hold with `Update` and `Continue` actions; `Update`
-  opens the matching release asset or release page and does not silently replace
-  the running app.
+- Packaged startup uses `electron-updater` GitHub metadata to compare Electron
+  `app.getVersion()` with the latest launcher executable release. When a newer
+  launcher executable is available, the loading screen may hold with `Update`
+  and `Continue` actions; `Update` downloads the updater payload and then
+  restarts through `quitAndInstall()` once the payload is ready.
+- Packaged DevTools expose `window.space.debugReinstall(version)` plus
+  `checkForUpdates()`, `downloadUpdate()`, and `installUpdate()` for targeted
+  updater testing against a specific release version. This is a debugging
+  surface, not product UI.
 - `A0_LAUNCHER_GITHUB_REPO` can override the launcher content repository.
 - `A0_LAUNCHER_USE_LOCAL_CONTENT=true` can use the current working directory as
   local content when it contains `app/index.html` and `package.json`.
@@ -92,9 +96,11 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   for testing.
 - `v*` tags are release inputs for executable builds.
 - Two-segment tags such as `v0.1` become semver `0.1.0` in the workflow.
-- Release artifacts are macOS arm/x86 DMG and ZIP, Windows arm/x86 Squirrel
-  setup and NuGet packages, Linux arm/x86 DEB packages, and `content.json`.
-  Linux RPMs are intentionally omitted unless the product decision changes.
+- Release executable artifacts are macOS x64/arm64 DMG plus updater ZIP,
+  Windows x64/arm64 NSIS setup EXE, Linux x64/arm64 AppImage, and
+  `electron-updater` metadata files. Release content remains `content.json`.
+  Linux DEB/RPM and Windows Squirrel/NuGet artifacts are intentionally omitted
+  from the updater-capable release path unless the product decision changes.
 - If a release tag is moved to include a metadata fix, keep `main`, the tag, and
   both remotes intentionally aligned.
 
@@ -171,6 +177,7 @@ node --check shell/main.js
 node --check shell/preload.js
 node --check shell/docker_manager/index.js
 node --check app/docker_manager.js
+node --test shell/launcher_updater_debug_release.test.js
 git diff --check
 ```
 
@@ -198,6 +205,8 @@ This index must stay exhaustive.
   - `/app/components/docker-manager/AGENTS.md`: Docker Manager renderer
     components and component store.
 - `/docs/AGENTS.md`: supplemental user-facing documentation.
+- `/packaging/AGENTS.md`: electron-builder packaging, release artifact staging,
+  and updater metadata helpers.
 - `/scripts/AGENTS.md`: developer and build helper scripts.
 - `/shell/AGENTS.md`: Electron main/preload host, content loading, IPC, windows,
   tray, and privileged orchestration.

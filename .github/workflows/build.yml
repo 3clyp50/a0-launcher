@@ -1,86 +1,185 @@
 name: Build Executables
-run-name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
+run-name: ${{ github.event.inputs.version || github.ref_name }}
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v1.0.0)'
+        description: Existing Git v* tag to rebuild and publish
         required: true
         type: string
 
+permissions:
+  contents: write
+
+concurrency:
+  group: build-executables-${{ github.event.inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  check-major-change:
+  prepare:
     runs-on: ubuntu-latest
     outputs:
-      current_tag: ${{ steps.tags.outputs.current_tag }}
-      version: ${{ steps.tags.outputs.version }}
-      major_changed: ${{ steps.compare-majors.outputs.major_changed }}
-      previous_tag: ${{ steps.tags.outputs.previous_tag }}
+      should_release: ${{ steps.release_gate.outputs.should_release }}
+      release_tag: ${{ steps.release_version.outputs.release_tag }}
+      build_version: ${{ steps.release_version.outputs.build_version }}
+      release_version: ${{ steps.release_version.outputs.release_version }}
+      previous_tag: ${{ steps.release_context.outputs.previous_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
-      - name: Determine tag and version
-        id: tags
+      - name: Resolve release version
+        id: release_version
         shell: bash
+        env:
+          REQUESTED_RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            CURRENT_TAG="${{ github.event.inputs.version }}"
-          elif [ "${{ github.event_name }}" = "release" ]; then
-            CURRENT_TAG="${{ github.event.release.tag_name }}"
-          else
-            CURRENT_TAG="${GITHUB_REF#refs/tags/}"
-          fi
+          release_json="$(node packaging/scripts/release-version.js "$REQUESTED_RELEASE_TAG" --json)"
+          echo "release_tag=$(node -e 'const value = JSON.parse(process.argv[1]); process.stdout.write(value.releaseTag);' "$release_json")" >> "$GITHUB_OUTPUT"
+          echo "build_version=$(node -e 'const value = JSON.parse(process.argv[1]); process.stdout.write(value.semver);' "$release_json")" >> "$GITHUB_OUTPUT"
+          echo "release_version=$(node -e 'const value = JSON.parse(process.argv[1]); process.stdout.write(value.releaseVersion);' "$release_json")" >> "$GITHUB_OUTPUT"
 
-          if [[ ! "$CURRENT_TAG" =~ ^v ]]; then
-            CURRENT_TAG="v$CURRENT_TAG"
-          fi
-
-          VERSION="${CURRENT_TAG#v}"
-          if [[ $VERSION =~ ^[0-9]+\.[0-9]+$ ]]; then
-            VERSION="${VERSION}.0"
-          fi
-
-          echo "current_tag=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-          PREV_TAG=""
-          if [ "${{ github.event_name }}" = "release" ]; then
-            if git rev-parse --verify "$CURRENT_TAG" >/dev/null 2>&1; then
-              PREV_TAG="$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)"
-            fi
-          fi
-          echo "previous_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Select build strategy
-        id: compare-majors
+      - name: Gate release tag
+        id: release_gate
         shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release_version.outputs.release_tag }}
         run: |
-          echo "Building fresh artifacts for ${{ steps.tags.outputs.current_tag }}"
-          echo "major_changed=true" >> "$GITHUB_OUTPUT"
+          git fetch --force origin \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "+refs/tags/*:refs/tags/*"
 
-  build-macos:
-    needs: check-major-change
-    if: needs.check-major-change.outputs.major_changed == 'true'
-    runs-on: macos-latest
+          tag_ref="refs/tags/$RELEASE_TAG"
+          if ! git rev-parse --verify --quiet "$tag_ref^{commit}" >/dev/null; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping executable release because tag $RELEASE_TAG does not exist." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          tag_commit="$(git rev-parse "$tag_ref^{commit}")"
+          main_commit="$(git rev-parse refs/remotes/origin/main^{commit})"
+
+          if ! git merge-base --is-ancestor "$tag_commit" "$main_commit"; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping executable release because tag $RELEASE_TAG is not on origin/main history." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Find previous release
+        id: release_context
+        if: steps.release_gate.outputs.should_release == 'true'
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ steps.release_version.outputs.release_tag }}
+        with:
+          script: |
+            const currentTag = process.env.RELEASE_TAG;
+            const { spawnSync } = require("node:child_process");
+
+            function gitSucceeds(args) {
+              return spawnSync("git", args, { stdio: "ignore" }).status === 0;
+            }
+
+            function tagCommitExists(tagName) {
+              return gitSucceeds(["rev-parse", "--verify", "--quiet", `refs/tags/${tagName}^{commit}`]);
+            }
+
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+
+            const previousRelease = releases.find((release) => {
+              const previousTag = release.tag_name;
+              return (
+                !release.draft &&
+                !release.prerelease &&
+                previousTag !== currentTag &&
+                tagCommitExists(previousTag) &&
+                gitSucceeds([
+                  "merge-base",
+                  "--is-ancestor",
+                  `refs/tags/${previousTag}^{commit}`,
+                  `refs/tags/${currentTag}^{commit}`
+                ])
+              );
+            });
+
+            core.setOutput("previous_tag", previousRelease?.tag_name || "");
+            core.notice(`Building fresh executable artifacts for ${currentTag}.`);
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ${{ matrix.runner }}
     env:
       HAS_MACOS_SIGNING_CERT: ${{ (secrets.MACOS_CERT_P12 != '' && secrets.MACOS_CERT_PASSPHRASE != '') && '1' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact_name: linux-x64
+            arch: x64
+            platform_dir: linux
+            runner: ubuntu-latest
+            script: linux-package.js
+          - artifact_name: linux-arm64
+            arch: arm64
+            platform_dir: linux
+            runner: ubuntu-24.04-arm
+            script: linux-package.js
+          - artifact_name: windows-x64
+            arch: x64
+            platform_dir: windows
+            runner: windows-latest
+            script: windows-package.js
+          - artifact_name: windows-arm64
+            arch: arm64
+            platform_dir: windows
+            runner: windows-11-arm
+            script: windows-package.js
+          - artifact_name: macos-x64
+            arch: x64
+            platform_dir: macos
+            runner: macos-15-intel
+            script: macos-package.js
+          - artifact_name: macos-arm64
+            arch: arm64
+            platform_dir: macos
+            runner: macos-latest
+            script: macos-package.js
     steps:
-      - name: Checkout repository
+      - name: Checkout release tag
         uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.prepare.outputs.release_tag }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            packaging/package-lock.json
 
-      - name: Import macOS code signing certificate
-        if: ${{ env.HAS_MACOS_SIGNING_CERT == '1' }}
+      - name: Import macOS signing certificate
+        if: runner.os == 'macOS' && env.HAS_MACOS_SIGNING_CERT == '1'
+        shell: bash
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSPHRASE: ${{ secrets.MACOS_CERT_PASSPHRASE }}
         run: |
           echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
           security create-keychain -p "" build.keychain
@@ -90,162 +189,144 @@ jobs:
           security unlock-keychain -p "" build.keychain
           security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
           security find-identity -p codesigning -v
+
+      - name: Install repo dependencies
+        run: npm ci --omit=optional
+
+      - name: Install packaging dependencies
+        run: npm ci --prefix packaging
+
+      - name: Write build metadata
+        run: node scripts/write-build-info.js
+
+      - name: Build executable artifacts
         env:
-          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          MACOS_CERT_PASSPHRASE: ${{ secrets.MACOS_CERT_PASSPHRASE }}
-
-      - name: Set version from tag
-        run: |
-          VERSION="${{ needs.check-major-change.outputs.version }}"
-          echo "Setting version to $VERSION"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build macOS
-        run: |
-          mkdir -p dist
-
-          # ARM64 -> arm
-          npm run make:mac -- --arch=arm64
-          mv "out/make/A0 Launcher.dmg" "dist/a0-launcher-${{ env.VERSION }}-macos-arm.dmg"
-          mv "out/make/zip/darwin/arm64/"*.zip "dist/a0-launcher-${{ env.VERSION }}-macos-arm.zip"
-
-          # x64 -> x86
-          npm run make:mac -- --arch=x64
-          mv "out/make/A0 Launcher.dmg" "dist/a0-launcher-${{ env.VERSION }}-macos-x86.dmg"
-          mv "out/make/zip/darwin/x64/"*.zip "dist/a0-launcher-${{ env.VERSION }}-macos-x86.zip"
-        env:
-          SKIP_SIGNING: ${{ (secrets.MACOS_CERT_P12 == '' || secrets.MACOS_CERT_PASSPHRASE == '') && '1' || '' }}
+          A0_LAUNCHER_APP_VERSION: ${{ needs.prepare.outputs.build_version }}
+          A0_LAUNCHER_RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CI: "true"
-          DEBUG: electron-forge:*
+          SKIP_SIGNING: ${{ runner.os == 'macOS' && env.HAS_MACOS_SIGNING_CERT != '1' && '1' || '' }}
+        run: node packaging/scripts/${{ matrix.script }} --arch ${{ matrix.arch }}
 
-      - name: Upload macOS artifacts
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build
-          path: dist/*
+          name: ${{ matrix.artifact_name }}
+          path: dist/desktop/${{ matrix.platform_dir }}/
+          if-no-files-found: error
 
-  build-windows:
-    needs: check-major-change
-    runs-on: windows-latest
-    if: needs.check-major-change.outputs.major_changed == 'true'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Set version from tag
-        shell: bash
-        run: |
-          VERSION="${{ needs.check-major-change.outputs.version }}"
-          echo "Setting version to $VERSION"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Windows
-        shell: bash
-        run: |
-          mkdir -p dist
-
-          # x64 -> x86
-          npm run make:win -- --arch=x64
-          mv "out/make/squirrel.windows/x64/A0 Launcher-${{ env.VERSION }} Setup.exe" "dist/a0-launcher-${{ env.VERSION }}-windows-x86-setup.exe"
-          mv "out/make/squirrel.windows/x64/A0Launcher-${{ env.VERSION }}-full.nupkg" "dist/a0-launcher-${{ env.VERSION }}-windows-x86.nupkg"
-
-          # arm64 -> arm
-          npm run make:win -- --arch=arm64
-          mv "out/make/squirrel.windows/arm64/A0 Launcher-${{ env.VERSION }} Setup.exe" "dist/a0-launcher-${{ env.VERSION }}-windows-arm-setup.exe"
-          mv "out/make/squirrel.windows/arm64/A0Launcher-${{ env.VERSION }}-full.nupkg" "dist/a0-launcher-${{ env.VERSION }}-windows-arm.nupkg"
-        env:
-          DEBUG: electron-forge:*
-
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: dist/*
-
-  build-linux:
-    needs: check-major-change
+  publish:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
-    if: needs.check-major-change.outputs.major_changed == 'true'
     steps:
-      - name: Checkout repository
+      - name: Checkout release tag
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          ref: refs/tags/${{ needs.prepare.outputs.release_tag }}
 
-      - name: Set version from tag
-        run: |
-          VERSION="${{ needs.check-major-change.outputs.version }}"
-          echo "Setting version to $VERSION"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Linux
-        run: |
-          mkdir -p dist
-
-          # x64 -> x86
-          npm run make:linux -- --arch=x64
-          mv "out/make/deb/x64/"*.deb "dist/a0-launcher-${{ env.VERSION }}-linux-x86.deb"
-
-          # arm64 -> arm
-          npm run make:linux -- --arch=arm64
-          mv "out/make/deb/arm64/"*.deb "dist/a0-launcher-${{ env.VERSION }}-linux-arm.deb"
-        env:
-          DEBUG: electron-forge:*
-
-      - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-build
-          path: dist/*
-
-  upload-to-release:
-    needs: [check-major-change, build-macos, build-windows, build-linux]
-    runs-on: ubuntu-latest
-    if: always() && startsWith(github.ref, 'refs/tags/') && needs.check-major-change.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download newly built artifacts
-        if: needs.check-major-change.outputs.major_changed == 'true'
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: release-assets
 
-      - name: Upload executables to release
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Merge updater metadata
+        run: node packaging/scripts/release-metadata-merge.js release-assets
+
+      - name: Create or update release
+        uses: actions/github-script@v7
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          VERSION="${TAG#v}"
-          echo "Processing version: $VERSION"
-          echo "Uploading freshly built artifacts."
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = process.env.RELEASE_TAG;
 
-          # Upload all files found in artifacts dirs (flattened)
-          find artifacts -type f | while read -r file; do
-            echo "Uploading: $file"
-            gh release upload "$TAG" "$file" --clobber --repo "$GITHUB_REPOSITORY"
+            try {
+              const existing = await github.rest.repos.getReleaseByTag({
+                owner,
+                repo,
+                tag,
+              });
+
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: existing.data.id,
+                tag_name: tag,
+                name: existing.data.name || tag,
+                draft: false,
+                prerelease: false,
+                make_latest: "true",
+              });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+
+              await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                name: tag,
+                draft: false,
+                prerelease: false,
+                generate_release_notes: true,
+                make_latest: "true",
+              });
+            }
+
+      - name: Upload release artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+        run: |
+          upload_dir="release-upload"
+          node packaging/scripts/release-assets-stage.js release-assets "$upload_dir" "$RELEASE_VERSION"
+
+          manifest_path="$upload_dir/.manifest.json"
+          if [ ! -f "$manifest_path" ]; then
+            echo "Release upload manifest was not generated." >&2
+            exit 1
+          fi
+
+          mapfile -t stale_asset_names < <(
+            node -e '
+              const fs = require("node:fs");
+              const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              for (const name of manifest.staleAssetNames || []) {
+                process.stdout.write(String(name) + "\n");
+              }
+            ' "$manifest_path"
+          )
+
+          mapfile -t upload_files < <(
+            node -e '
+              const fs = require("node:fs");
+              const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              for (const filePath of manifest.uploadFiles || []) {
+                process.stdout.write(String(filePath) + "\n");
+              }
+            ' "$manifest_path"
+          )
+
+          if [ "${#upload_files[@]}" -eq 0 ]; then
+            echo "No release artifacts were staged for upload." >&2
+            exit 1
+          fi
+
+          for stale_asset_name in "${stale_asset_names[@]}"; do
+            [ -n "$stale_asset_name" ] || continue
+            gh release delete-asset "$RELEASE_TAG" "$stale_asset_name" --yes >/dev/null 2>&1 || true
           done
+
+          gh release upload "$RELEASE_TAG" "${upload_files[@]}" --clobber

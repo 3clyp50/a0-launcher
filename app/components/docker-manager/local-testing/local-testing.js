@@ -2,17 +2,6 @@ import { createVersionVisual } from "../card-visuals.js";
 
 function byId(id) { return document.getElementById(id); }
 
-function fmtUptime(started) {
-  if (!started) return "";
-  const ms = Date.now() - Date.parse(started);
-  if (!Number.isFinite(ms) || ms < 0) return "";
-  const mins = Math.floor(ms / 60000);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ${mins % 60}m`;
-  return `${Math.floor(hrs / 24)}d ${hrs % 24}h`;
-}
-
 function normalizeUrlInput(value) {
   let raw = String(value || "").trim();
   if (!raw) return null;
@@ -244,14 +233,8 @@ function renderDockerInstance(list, c, state) {
   const meta = document.createElement("div");
   meta.className = "dm-card-meta";
   const parts = [];
-  if (c?.imageRef) parts.push(c.imageRef);
   if (c?.uiUrl) parts.push(c.uiUrl);
-  const startedAt = c?.startedAt || c?.createdAt;
-  if (c?.state === "running" && startedAt) {
-    const up = fmtUptime(startedAt);
-    if (up) parts.push("Up " + up);
-  }
-  if (c?.status) parts.push(c.status);
+  else if (c?.status) parts.push(c.status);
   meta.textContent = parts.join(" \u00B7 ");
   body.appendChild(meta);
 

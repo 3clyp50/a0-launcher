@@ -154,30 +154,16 @@ function setBanner(type, message) {
 async function loadMeta() {
   try {
     const v = await window.electronAPI?.getContentVersion?.();
-    store.meta.contentVersion = v ? `Content: ${v}` : "";
+    store.meta.contentVersion = v || "";
   } catch {
     store.meta.contentVersion = "";
   }
 
   try {
     const v = await window.electronAPI?.getAppVersion?.();
-    store.meta.appVersion = v ? `App: ${v}` : "";
+    store.meta.appVersion = v || "";
   } catch {
     store.meta.appVersion = "";
-  }
-}
-
-async function loadHeaderLogo() {
-  const img = document.getElementById("headerLogo");
-  if (!img) return;
-  try {
-    const dataUrl = await window.electronAPI?.getShellIconDataUrl?.();
-    if (typeof dataUrl === "string" && dataUrl.startsWith("data:image/")) {
-      img.src = dataUrl;
-      img.classList.remove("hidden");
-    }
-  } catch {
-    // ignore
   }
 }
 
@@ -739,7 +725,6 @@ function initSubscriptions() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadMeta();
-  await loadHeaderLogo();
   emitState();
   initSubscriptions();
   initInstanceTabBoundsObserver();

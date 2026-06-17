@@ -1,5 +1,24 @@
 function byId(id) { return document.getElementById(id); }
 
+function formatLauncherVersion(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const version = raw.replace(/^app:\s*/i, "").replace(/^v/i, "");
+  if (!version) return "";
+
+  const parts = version.split(".");
+  if (parts.length === 3 && parts[2] === "0") {
+    return `Launcher v${parts[0]}.${parts[1]}`;
+  }
+  return `Launcher v${version}`;
+}
+
+function hasLauncherUpdate(state) {
+  const meta = state?.meta || {};
+  return meta.launcherUpdateAvailable === true ||
+    meta.contentUpdateAvailable === true ||
+    meta.updateAvailable === true;
+}
+
 function isDockerHubRateLimit(progress) {
   const errorCode = typeof progress?.errorCode === "string" ? progress.errorCode : "";
   const message = `${progress?.error || ""} ${progress?.detail || ""} ${progress?.message || ""}`.trim();
@@ -19,24 +38,32 @@ function progressActionsForState(state) {
 }
 
 function render(state) {
-  const contentVersion = byId("contentVersion");
-  const appVersion = byId("appVersion");
+  const launcherVersion = byId("launcherVersion");
+  const updateBtn = byId("launcherUpdateBtn");
+  const showUpdate = hasLauncherUpdate(state);
 
-  if (contentVersion) contentVersion.textContent = state?.meta?.contentVersion || "";
-  if (appVersion) appVersion.textContent = state?.meta?.appVersion || "";
+  if (launcherVersion) {
+    const label = formatLauncherVersion(state?.meta?.appVersion || "");
+    if (label) launcherVersion.textContent = label;
+  }
+  if (updateBtn) {
+    updateBtn.classList.toggle("is-hidden", !showUpdate);
+    updateBtn.setAttribute("aria-hidden", showUpdate ? "false" : "true");
+    updateBtn.tabIndex = showUpdate ? 0 : -1;
+  }
 }
 
 function bindActions() {
   const refreshBtn = byId("refreshBtn");
-  const homepageBtn = byId("homepageBtn");
+  const updateBtn = byId("launcherUpdateBtn");
 
   if (refreshBtn && !refreshBtn.dataset.bound) {
     refreshBtn.dataset.bound = "1";
     refreshBtn.addEventListener("click", () => window.dockerManagerActions?.refresh?.());
   }
-  if (homepageBtn && !homepageBtn.dataset.bound) {
-    homepageBtn.dataset.bound = "1";
-    homepageBtn.addEventListener("click", () => window.dockerManagerActions?.openHomepage?.());
+  if (updateBtn && !updateBtn.dataset.bound) {
+    updateBtn.dataset.bound = "1";
+    updateBtn.addEventListener("click", () => window.dockerManagerActions?.refresh?.());
   }
 }
 
@@ -51,6 +78,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
 }
 
 export {
+  formatLauncherVersion,
+  hasLauncherUpdate,
   isDockerHubRateLimit,
   progressActionsForState
 };

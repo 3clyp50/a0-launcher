@@ -46,8 +46,9 @@ This scope owns:
 - A0 CLI launch belongs to each local instance card. Pass the card's local UI
   URL through the shell-owned terminal action; do not add a global footer or
   ambiguous active-instance CLI button.
-- `Content: ...` comes from shell content metadata. `App: ...` comes from
-  Electron `app.getVersion()`.
+- The compact header shows `Launcher v...` from Electron `app.getVersion()`.
+  Shell content metadata may remain in renderer state for diagnostics, but it
+  should not reintroduce `Content:` clutter into the header.
 - Keep external navigation intentional. Product destinations such as API
   Dashboard should go through the shell action where one exists; direct
   `window.open` should stay limited to safe public links such as Docker install

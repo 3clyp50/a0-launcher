@@ -181,14 +181,63 @@ body, html {
 
 .sv-brand {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.35rem;
 }
 
 .header-logo {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 0.45rem;
+  display: block;
+  width: 12.75rem;
+  height: auto;
+}
+
+.sv-wordmark {
+  max-width: min(12.75rem, 58vw);
+}
+
+.sv-launcher-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.85rem;
+}
+
+.sv-launcher-version {
+  color: var(--color-text);
+  font-size: 0.82rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.sv-update-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 4.65rem;
+  min-height: 1.85rem;
+}
+
+.sv-update-button {
+  min-width: 4.45rem;
+  min-height: 1.75rem;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.75rem;
+}
+
+.sv-update-button.is-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sv-refresh-button {
+  min-width: 6.2rem;
+  white-space: nowrap;
+}
+
+.sv-refresh-button .material-symbols-outlined {
+  font-size: 1.05rem;
 }
 
 .sv-title {

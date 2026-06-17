@@ -59,8 +59,10 @@ This scope owns:
   future-dated sentinel timestamps.
 - The `a0app://` custom protocol is the renderer content origin; keep URL
   resolution, fetch, and CSP compatible with that scheme.
-- `content_meta.json` owns the downloaded content version shown as `Content:`.
-- `app.getVersion()` owns the app version shown as `App:`.
+- `content_meta.json` owns the downloaded content version exposed through
+  shell metadata.
+- `app.getVersion()` owns the app version shown in the renderer header as
+  `Launcher v...`.
 - `electronAPI` owns shell metadata: status/error listeners, app/content version,
   and icon data URL.
 - `dockerManagerAPI` owns all Docker Manager calls.

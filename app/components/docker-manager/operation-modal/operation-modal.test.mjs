@@ -224,22 +224,40 @@ test('running install shows centered operation modal with cancel action', () => 
       opId: 'op-install',
       type: 'install',
       status: 'running',
-      message: 'Downloading'
+      message: 'Downloading',
+      canCancel: true
     }
   };
 
   const model = normalizedOperationDialog(state);
   assert.equal(model.headline, 'Installing Agent Zero');
   assert.equal(model.primary?.disabled, true);
-  assert.equal(model.secondary?.label, 'Cancel');
+  assert.equal(model.secondary?.label, 'Cancel download');
   assert.equal(shouldShowOperationDialog(state), true);
 
   let canceled = '';
   renderOperationDialog(state, { cancelOperation: (opId) => { canceled = opId; } });
   assert.ok(document.getElementById('operationProgressDialog'));
   assert.equal(document.querySelector('.dm-page').inert, true);
-  buttonByText(document, 'Cancel').dispatchEvent(new MiniEvent('click'));
+  buttonByText(document, 'Cancel download').dispatchEvent(new MiniEvent('click'));
   assert.equal(canceled, 'op-install');
+});
+
+test('running operation without cancel support shows no cancel action', () => {
+  installDom();
+  const state = {
+    progress: {
+      opId: 'op-install',
+      type: 'install',
+      status: 'running',
+      message: 'Checking availability',
+      canCancel: false
+    }
+  };
+
+  const model = normalizedOperationDialog(state);
+  assert.equal(model.primary?.label, 'Installing Agent Zero');
+  assert.equal(model.secondary, null);
 });
 
 test('rate-limited install failure shows docker login and retry actions in modal', () => {

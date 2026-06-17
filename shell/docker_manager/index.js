@@ -623,6 +623,7 @@ function beginOperation(type, targetTag) {
     phase: null,
     steps: null,
     indeterminate: false,
+    canCancel: false,
     error: null,
     errorCode: null
   };
@@ -642,6 +643,8 @@ function finishOperation(status, errorMessage, errorCode = null) {
     ..._currentOperation,
     status,
     finishedAt: nowIso(),
+    canCancel: false,
+    indeterminate: false,
     error: errorMessage || null,
     errorCode: errorCode || null
   };
@@ -1555,10 +1558,9 @@ async function installOrSync(tag) {
         await stateStore.writeInstallabilityCache({ ...cache, entries, updatedAt: nowIso() });
       }
 
-      updateOperationProgress({ message: 'Downloading', progress: null, downloadProgress: 0, extractProgress: 0 });
-
       const controller = new AbortController();
       _abortControllers.set(opId, controller);
+      updateOperationProgress({ message: 'Downloading', progress: null, downloadProgress: 0, extractProgress: 0, canCancel: true });
 
       const imageRef = imageRefForTag(imageRepo, t);
       const result = await docker.pullImage(imageRef, {
@@ -1572,9 +1574,10 @@ async function installOrSync(tag) {
           const message =
             typeof dl === 'number' && dl < 100 ? 'Downloading' : typeof ex === 'number' && ex < 100 ? 'Extracting' : 'Downloading';
 
-          updateOperationProgress({ progress: dl, downloadProgress: dl, extractProgress: ex, message });
+          updateOperationProgress({ progress: dl, downloadProgress: dl, extractProgress: ex, message, canCancel: true });
         }
       });
+      _abortControllers.delete(opId);
 
       if (result?.status === 'aborted_client') {
         finishOperation('canceled', 'Canceled');
@@ -1860,9 +1863,9 @@ async function updateToLatest(dataLossAck) {
       }
 
       // Pull image first (fail-safe ordering).
-      updateOperationProgress({ message: 'Downloading', progress: null, downloadProgress: 0, extractProgress: 0 });
       const controller = new AbortController();
       _abortControllers.set(opId, controller);
+      updateOperationProgress({ message: 'Downloading', progress: null, downloadProgress: 0, extractProgress: 0, canCancel: true });
       const pullResult = await docker.pullImage(imageRefForTag(imageRepo, latest), {
         signal: controller.signal,
         onProgress: (evt) => {
@@ -1874,7 +1877,7 @@ async function updateToLatest(dataLossAck) {
           const message =
             typeof dl === 'number' && dl < 100 ? 'Downloading' : typeof ex === 'number' && ex < 100 ? 'Extracting' : 'Downloading';
 
-          updateOperationProgress({ progress: dl, downloadProgress: dl, extractProgress: ex, message });
+          updateOperationProgress({ progress: dl, downloadProgress: dl, extractProgress: ex, message, canCancel: true });
         }
       });
       _abortControllers.delete(opId);
@@ -1884,7 +1887,7 @@ async function updateToLatest(dataLossAck) {
         return;
       }
 
-      updateOperationProgress({ message: 'Switching versions', progress: null });
+      updateOperationProgress({ message: 'Switching versions', progress: null, canCancel: false });
 
       const containers = await docker.listContainers(imageRepo);
       const activeName = retention.getActiveContainerName(imageRepo);
@@ -2222,6 +2225,14 @@ async function cancelOperation(opId) {
 
   const controller = _abortControllers.get(id);
   if (!controller) return { canceled: false };
+
+  updateOperationProgress({
+    message: 'Canceling',
+    detail: 'Canceling download...',
+    progress: null,
+    indeterminate: true,
+    canCancel: false
+  });
 
   try {
     controller.abort();

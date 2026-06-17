@@ -73,6 +73,8 @@ This scope owns:
   of a dead-end message.
 - Operation progress failures must remain visible with the stable
   renderer-facing error message after the async operation finishes.
+- Operation progress may show a cancel action only when the Docker Manager
+  progress payload marks the current phase as cancelable.
 - Official version cards must distinguish available, installable, installed,
   active, visible channel tags (`latest`, `ready`), local builds, matching
   digest, and differing digest states without exposing raw Docker mechanics as

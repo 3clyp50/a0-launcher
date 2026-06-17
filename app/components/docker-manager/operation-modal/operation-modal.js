@@ -51,12 +51,14 @@ function operationDetail(progress = null) {
 }
 
 function runningAction(progress = null) {
-  if (!asText(progress?.opId)) {
+  if (!asText(progress?.opId) || progress?.canCancel !== true) {
     return { primary: { kind: "wait", label: operationHeadline(progress), disabled: true }, secondary: null };
   }
+  const type = asText(progress?.type);
+  const cancelLabel = type === "install" || type === "update" ? "Cancel download" : "Cancel";
   return {
     primary: { kind: "wait", label: operationHeadline(progress), disabled: true },
-    secondary: { kind: "cancel", label: "Cancel", disabled: false }
+    secondary: { kind: "cancel", label: cancelLabel, disabled: false }
   };
 }
 
@@ -289,7 +291,8 @@ function renderOperationDialog(state = {}, actions = {}) {
   primaryWrap.className = "dm-runtime-gate-primary";
 
   if (model.secondary) {
-    const secondary = makeButton(model.secondary.label, "button", model.secondary.disabled);
+    const secondaryClass = model.secondary.kind === "cancel" ? "button cancel" : "button";
+    const secondary = makeButton(model.secondary.label, secondaryClass, model.secondary.disabled);
     secondary.dataset.operationAction = model.secondary.kind;
     secondary.addEventListener("click", () => runAction(model.secondary.kind, state, actions));
     secondaryWrap.appendChild(secondary);

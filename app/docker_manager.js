@@ -550,7 +550,11 @@ async function cancelOperation(opId = "") {
       setBanner("error", res.message);
       return false;
     }
-    setBanner("info", "Operation cancel requested.");
+    if (!res?.canceled) {
+      setBanner("warning", "This operation cannot be canceled right now.");
+      return false;
+    }
+    setBanner("info", "Cancel requested.");
     return !!res?.canceled;
   } catch (e) {
     setBanner("error", e?.message || "Unable to cancel the current operation");

@@ -66,6 +66,9 @@ This scope owns:
   `indeterminate` in addition to the legacy `message` and numeric progress
   fields. Runtime setup progress uses those fields for the blocking startup
   modal.
+- Progress payloads may include `canCancel`; set it only while a user cancel
+  action can actually abort the current operation phase, such as an active image
+  pull.
 - When a product operation fails for a recoverable reason, progress payloads
   should carry a stable error code so the renderer can show the right recovery
   action without parsing human-readable copy.

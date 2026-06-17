@@ -1721,6 +1721,7 @@ function sanitizeDockerManagerProgress(progress) {
   if (typeof progress.startedAt === 'string') out.startedAt = progress.startedAt;
   if (typeof progress.finishedAt === 'string') out.finishedAt = progress.finishedAt;
   if (typeof progress.targetTag === 'string') out.targetTag = progress.targetTag;
+  if (typeof progress.canCancel === 'boolean') out.canCancel = progress.canCancel;
 
   if (hasNumericValue(progress.progress)) out.progress = Number(progress.progress);
   if (hasNumericValue(progress.downloadProgress)) out.downloadProgress = Number(progress.downloadProgress);

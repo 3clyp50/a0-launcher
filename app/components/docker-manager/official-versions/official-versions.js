@@ -143,6 +143,10 @@ function actionForEntry(entry, state) {
   };
 }
 
+function isAwaitingFirstInventory(state, entries) {
+  return !state?.stateLoaded || (!!state?.loading && !entries.length);
+}
+
 function hasDifferentActive(state, tag) {
   const versions = Array.isArray(state?.versions) ? state.versions : [];
   return versions.some((v) => v?.isActive && v?.id !== tag);
@@ -246,13 +250,21 @@ function render(state) {
   const entries = normalizeVersionEntries(state);
   const installedCount = entries.filter((entry) => entry.availability && entry.availability !== "available").length;
   const availableCount = entries.filter((entry) => entry.availability === "available").length;
+  const awaitingFirstInventory = isAwaitingFirstInventory(state, entries);
   if (subtitle) {
-    subtitle.textContent = entries.length
+    subtitle.textContent = awaitingFirstInventory
+      ? "Checking installs..."
+      : entries.length
       ? `${installedCount} installed · ${availableCount} available`
       : "0 installs detected";
   }
 
   list.innerHTML = "";
+  if (awaitingFirstInventory) {
+    list.innerHTML = '<div class="dm-empty">Checking Agent Zero releases...</div>';
+    return;
+  }
+
   if (!entries.length) {
     list.innerHTML = '<div class="dm-empty">No versions found. Refresh to try again.</div>';
     return;

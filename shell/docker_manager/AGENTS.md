@@ -47,6 +47,10 @@ This scope owns:
 - Persist user preferences and remote instances through `state_store.js`; do not
   invent parallel files.
 - Port preferences are stored as UI and SSH host-port preferences.
+- Runtime endpoint selection is stored as a launcher-local Docker endpoint
+  preference. It may be set from the setup modal when multiple usable endpoints
+  are detected, and all Docker Manager operations should continue through the
+  selected endpoint while it remains reachable.
 - Retention policy is stored as a retained-instance count.
 - Remote instances must normalize and validate URLs before persistence.
 - Retained local containers are rollback targets and should keep enough metadata

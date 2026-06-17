@@ -131,6 +131,18 @@ function getBackendGithubRepo() {
   return DEFAULT_GITHUB_REPO;
 }
 
+async function getRuntimeEndpointPreference() {
+  return await stateStore.readRuntimeEndpointPreference().catch(() => null);
+}
+
+async function getManagedDocker(imageRepo, options = {}) {
+  return await getDocker({
+    imageRepo,
+    forceRefresh: !!options.forceRefresh,
+    runtimePreference: await getRuntimeEndpointPreference()
+  });
+}
+
 function isSafeTag(tag) {
   const t = (tag || '').trim();
   if (!t) return false;
@@ -259,6 +271,8 @@ function normalizeRuntimeAssessment(assessment, env = null) {
     detail,
     dockerFlavor: typeof env?.dockerFlavor === 'string' ? env.dockerFlavor : null,
     dockerHost: typeof env?.dockerHost?.raw === 'string' ? env.dockerHost.raw : null,
+    selectedRuntimeEndpointId: typeof env?.selectedRuntimeEndpointId === 'string' ? env.selectedRuntimeEndpointId : null,
+    runtimeCandidates: Array.isArray(env?.runtimeCandidates) ? env.runtimeCandidates : [],
     canProvision: assessment?.canProvision === true || state === 'not_provisioned' || state === 'needs_group_membership' || state === 'engine_stopped',
     action: actionByState[state] || ''
   };
@@ -630,7 +644,7 @@ async function buildDerivedState(options = {}) {
   const imageRepo = getBackendImageRepo();
   const githubRepo = getBackendGithubRepo();
 
-  const docker = await getDocker({ imageRepo });
+  const docker = await getManagedDocker(imageRepo, { forceRefresh });
 
   const env = await docker.getEnvironment();
   const runtime = await assessRuntime(env);
@@ -1183,6 +1197,41 @@ async function setPortPreferences(portPreferences) {
   return prefs;
 }
 
+function assertRuntimeEndpointId(value) {
+  const id = String(value || '').trim();
+  if (!id || id.length > 160 || !/^[A-Za-z0-9_.:-]+$/.test(id)) {
+    const err = new Error('Invalid runtime endpoint');
+    err.code = 'INVALID_RUNTIME_ENDPOINT';
+    throw err;
+  }
+  return id;
+}
+
+async function selectRuntimeEndpoint(id) {
+  const endpointId = assertRuntimeEndpointId(id);
+  const imageRepo = getBackendImageRepo();
+  const docker = await getManagedDocker(imageRepo, { forceRefresh: true });
+  const env = await docker.getEnvironment();
+  const candidates = Array.isArray(env?.runtimeCandidates) ? env.runtimeCandidates : [];
+  const candidate = candidates.find((item) => item?.id === endpointId && item.available === true);
+
+  if (!candidate) {
+    const err = new Error('Selected runtime is not available.');
+    err.code = 'RUNTIME_ENDPOINT_UNAVAILABLE';
+    throw err;
+  }
+
+  const preference = await stateStore.writeRuntimeEndpointPreference({
+    id: candidate.id,
+    dockerHost: candidate.dockerHost,
+    label: candidate.label,
+    provider: candidate.provider
+  });
+  resetDocker();
+  await refreshDockerManager({ forceRefresh: true }).catch(() => {});
+  return preference;
+}
+
 async function provisionRuntime() {
   requireNoRunningOperation();
   const opId = beginOperation('runtime_setup', null);
@@ -1439,7 +1488,7 @@ async function installOrSync(tag) {
     try {
       updateOperationProgress({ message: 'Checking availability', progress: null });
 
-      docker = await getDocker({ imageRepo });
+      docker = await getManagedDocker(imageRepo);
       const cache = await stateStore.readInstallabilityCache();
       const entries = cache?.entries && typeof cache.entries === 'object' ? cache.entries : {};
 
@@ -1539,7 +1588,7 @@ async function stopActiveInstance() {
   (async () => {
     try {
       updateOperationProgress({ message: 'Stopping', progress: null });
-      const docker = await getDocker({ imageRepo });
+      const docker = await getManagedDocker(imageRepo);
       const containers = await docker.listContainers(imageRepo);
       const activeName = retention.getActiveContainerName(imageRepo);
       const active = (containers || []).find((c) => c && c.containerName === activeName) || null;
@@ -1578,7 +1627,7 @@ async function stopLocalInstance(containerId) {
   (async () => {
     try {
       updateOperationProgress({ message: 'Stopping', progress: null });
-      const docker = await getDocker({ imageRepo });
+      const docker = await getManagedDocker(imageRepo);
       const containers = await docker.listContainers(imageRepo);
       const target = (containers || []).find((c) => c && c.containerId === id) || null;
 
@@ -1615,7 +1664,7 @@ async function startActiveInstance() {
   (async () => {
     try {
       updateOperationProgress({ message: 'Starting', progress: null });
-      const docker = await getDocker({ imageRepo });
+      const docker = await getManagedDocker(imageRepo);
       const containers = await docker.listContainers(imageRepo);
       const activeName = retention.getActiveContainerName(imageRepo);
       const active = (containers || []).find((c) => c && c.containerName === activeName) || null;
@@ -1672,7 +1721,7 @@ async function deleteRetainedInstance(containerId) {
 
   (async () => {
     try {
-      const docker = await getDocker({ imageRepo });
+      const docker = await getManagedDocker(imageRepo);
       const containers = await docker.listContainers(imageRepo);
       const activeName = retention.getActiveContainerName(imageRepo);
       const active = (containers || []).find((c) => c && c.containerName === activeName) || null;
@@ -1719,7 +1768,7 @@ async function deleteLocalInstance(containerId) {
   (async () => {
     try {
       updateOperationProgress({ message: 'Deleting', progress: null });
-      const docker = await getDocker({ imageRepo });
+      const docker = await getManagedDocker(imageRepo);
       const containers = await docker.listContainers(imageRepo);
       const target = (containers || []).find((c) => c && c.containerId === id) || null;
 
@@ -1762,7 +1811,7 @@ async function updateToLatest(dataLossAck) {
     let createdNew = null;
 
     try {
-      docker = await getDocker({ imageRepo });
+      docker = await getManagedDocker(imageRepo);
       policy = await stateStore.readRetentionPolicy();
       keep = effectiveRetentionCount(policy);
       portPreferences = await stateStore.readPortPreferences();
@@ -1925,7 +1974,7 @@ async function activateRetainedInstance(containerId, dataLossAck) {
     let target = null;
 
     try {
-      docker = await getDocker({ imageRepo });
+      docker = await getManagedDocker(imageRepo);
       policy = await stateStore.readRetentionPolicy();
 
       updateOperationProgress({ message: 'Preparing rollback', progress: null });
@@ -2034,7 +2083,7 @@ async function activateTag(tag, dataLossAck, options = {}) {
     let createdNew = null;
 
     try {
-      docker = await getDocker({ imageRepo });
+      docker = await getManagedDocker(imageRepo);
       policy = await stateStore.readRetentionPolicy();
       portPreferences = await stateStore.readPortPreferences();
 
@@ -2166,7 +2215,7 @@ async function cancelOperation(opId) {
 async function getDockerInventory() {
   const imageRepo = getBackendImageRepo();
   const remoteInstances = await stateStore.readRemoteInstances();
-  const docker = await getDocker({ imageRepo });
+  const docker = await getManagedDocker(imageRepo);
   const env = await docker.getEnvironment();
   const runtime = await assessRuntime(env);
 
@@ -2212,14 +2261,14 @@ async function removeVolume(volumeName) {
     throw err;
   }
   const imageRepo = getBackendImageRepo();
-  const docker = await getDocker({ imageRepo });
+  const docker = await getManagedDocker(imageRepo);
   await docker.removeVolume(name);
   return { removed: true };
 }
 
 async function pruneVolumes() {
   const imageRepo = getBackendImageRepo();
-  const docker = await getDocker({ imageRepo });
+  const docker = await getManagedDocker(imageRepo);
   const result = await docker.pruneVolumes();
   return result && typeof result === 'object' ? result : {};
 }
@@ -2227,7 +2276,7 @@ async function pruneVolumes() {
 async function getContainerUiUrl(containerId) {
   const imageRepo = getBackendImageRepo();
   const id = assertContainerId(containerId);
-  const docker = await getDocker({ imageRepo });
+  const docker = await getManagedDocker(imageRepo);
   const inspect = await docker.inspectContainer(id);
   const candidate = bestEffortUiUrlFromInspect(inspect);
   if (!candidate) return null;
@@ -2267,6 +2316,7 @@ module.exports = {
   stopLocalInstance,
   setRetentionPolicy,
   setPortPreferences,
+  selectRuntimeEndpoint,
   provisionRuntime,
   resumeRuntimeSetupIfPending,
   addRemoteInstance,

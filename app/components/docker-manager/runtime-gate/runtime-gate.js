@@ -196,6 +196,27 @@ function setupTagOptions(state = {}) {
   return out;
 }
 
+function runtimeEndpointOptions(state = {}) {
+  const candidates = Array.isArray(state?.runtime?.runtimeCandidates)
+    ? state.runtime.runtimeCandidates
+    : Array.isArray(state?.environment?.runtimeCandidates) ? state.environment.runtimeCandidates : [];
+  const out = [];
+  const seen = new Set();
+
+  for (const candidate of candidates) {
+    const id = asText(candidate?.id);
+    if (!id || seen.has(id) || candidate?.available !== true) continue;
+    seen.add(id);
+    out.push({
+      id,
+      label: asText(candidate?.label) || "Container runtime",
+      isSelected: candidate?.isSelected === true || id === asText(state?.runtime?.selectedRuntimeEndpointId)
+    });
+  }
+
+  return out.length >= 2 ? out : [];
+}
+
 function isRuntimeReady(state = {}) {
   return !!state?.stateLoaded && !!state?.dockerAvailable && (!state.runtime || state.runtime.state === "ready");
 }
@@ -248,6 +269,8 @@ function normalizedRuntimeGate(state = {}) {
     success,
     setupOptions: success ? setupTagOptions(state) : [],
     setupTag: "latest",
+    runtimeOptions: success ? runtimeEndpointOptions(state) : [],
+    runtimeEndpointId: asText(state?.runtime?.selectedRuntimeEndpointId),
     action: success ? { kind: "complete", label: "Setup Agent Zero" } : actionForRuntime(runtime, progress)
   };
 }
@@ -315,6 +338,38 @@ function renderSuccess(model, parent) {
   row.appendChild(icon);
   row.appendChild(text);
   parent.appendChild(row);
+}
+
+function renderRuntimeChoice(model, parent, selectedEndpointId = "") {
+  const options = Array.isArray(model.runtimeOptions) ? model.runtimeOptions : [];
+  if (!model.success || options.length < 2) return null;
+
+  const selected = options.some((option) => option.id === selectedEndpointId)
+    ? selectedEndpointId
+    : (options.find((option) => option.isSelected)?.id || model.runtimeEndpointId || options[0].id);
+
+  const field = document.createElement("div");
+  field.className = "dm-field";
+
+  const label = document.createElement("label");
+  label.setAttribute("for", "runtimeEndpointChoice");
+  label.textContent = "Run Agent Zero with";
+  field.appendChild(label);
+
+  const select = document.createElement("select");
+  select.id = "runtimeEndpointChoice";
+  select.className = "dm-select";
+  for (const option of options) {
+    const el = document.createElement("option");
+    el.value = option.id;
+    el.textContent = option.label;
+    if (option.id === selected) el.selected = true;
+    select.appendChild(el);
+  }
+  select.value = selected;
+  field.appendChild(select);
+  parent.appendChild(field);
+  return select;
 }
 
 function renderSetupChoice(model, parent, selectedTag = "") {
@@ -416,7 +471,7 @@ function bindBlockingKeys() {
   blockingKeyHandlerDocument = document;
 }
 
-function runAction(action, runtime, actions, root = null) {
+async function runAction(action, runtime, actions, root = null) {
   if (!action || action.disabled) return;
   if (action.kind === "setup") {
     actions?.provisionRuntime?.();
@@ -427,6 +482,11 @@ function runAction(action, runtime, actions, root = null) {
   } else if (action.kind === "complete") {
     const state = typeof window !== "undefined" ? window.__dmLastState || {} : {};
     const selectedTag = asText(root?.querySelector?.("#runtimeSetupTag")?.value) || "latest";
+    const selectedEndpointId = asText(root?.querySelector?.("#runtimeEndpointChoice")?.value);
+    if (selectedEndpointId && typeof actions?.selectRuntimeEndpoint === "function") {
+      const ok = await actions.selectRuntimeEndpoint(selectedEndpointId);
+      if (ok === false) return;
+    }
     acknowledgedRuntimeSetupKey = runtimeSetupKey(state.progress);
     removeRuntimeGate();
     actions?.installOrSync?.(selectedTag);
@@ -451,6 +511,7 @@ function renderRuntimeGate(state = {}, actions = {}) {
   const runtime = state?.runtime || null;
   const existing = document.getElementById(RUNTIME_GATE_ID);
   const previousSetupTag = asText(existing?.querySelector?.("#runtimeSetupTag")?.value);
+  const previousRuntimeEndpointId = asText(existing?.querySelector?.("#runtimeEndpointChoice")?.value);
   const model = normalizedRuntimeGate(state);
   if (existing) existing.remove();
 
@@ -484,6 +545,7 @@ function renderRuntimeGate(state = {}, actions = {}) {
   body.className = "dm-dialog-body";
   appendText(body, "dm-runtime-gate-detail", model.detail);
   renderSuccess(model, body);
+  renderRuntimeChoice(model, body, previousRuntimeEndpointId);
   renderSetupChoice(model, body, previousSetupTag);
   if (!model.success) renderProgress(model, body);
 
@@ -504,7 +566,7 @@ function renderRuntimeGate(state = {}, actions = {}) {
 
   const primary = makeButton(model.action.label, "button confirm", model.action.disabled);
   primary.dataset.runtimeAction = model.action.kind;
-  primary.addEventListener("click", () => runAction(model.action, runtime, actions, backdrop));
+  primary.addEventListener("click", () => { void runAction(model.action, runtime, actions, backdrop); });
   primaryWrap.appendChild(primary);
 
   footer.appendChild(secondary);

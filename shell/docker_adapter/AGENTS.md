@@ -42,8 +42,16 @@ This scope owns:
 - Environment detection should probe likely platform endpoints when
   `DOCKER_HOST` is unset, including Linux native Engine, Docker Desktop for
   Linux, and rootless sockets.
+- Environment detection should build a deduplicated runtime endpoint registry
+  before provisioning. Include launcher preference, `DOCKER_HOST`, Docker
+  contexts, and known Docker-compatible provider sockets as candidates, then
+  mark a candidate usable only after a Docker API probe succeeds.
 - `DOCKER_HOST` parsing must preserve enough detail to diagnose Unix socket,
   named pipe, TCP, HTTP, HTTPS, and invalid host configurations.
+- Provider names such as Docker Desktop, Colima, OrbStack, Rancher Desktop, and
+  Podman are labels around Docker-compatible endpoints. Do not treat Portainer
+  as a runtime endpoint, and do not expose containerd/nerdctl-only paths as
+  usable Docker endpoints.
 - Runtime provisioners are consulted only after the Docker Manager has tried to
   reuse an existing Docker endpoint. They should classify repairable states
   before proposing installation.

@@ -49,6 +49,9 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     return ipcRenderer.invoke('docker-manager:setPortPreferences', { ui: p.ui, ssh: p.ssh });
   },
   provisionRuntime: () => ipcRenderer.invoke('docker-manager:provisionRuntime'),
+  selectRuntimeEndpoint: (id) => ipcRenderer.invoke('docker-manager:selectRuntimeEndpoint', {
+    id: typeof id === 'string' ? id : ''
+  }),
   addRemoteInstance: (remote) => {
     const r = remote && typeof remote === 'object' ? remote : {};
     return ipcRenderer.invoke('docker-manager:addRemoteInstance', {

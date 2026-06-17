@@ -4,6 +4,10 @@ The launcher talks to a Docker-compatible runtime through a local socket. It
 tries existing runtimes first, then offers automatic setup only when the
 platform supports it.
 
+When more than one usable local runtime is already available, the setup flow can
+ask where Agent Zero should run. If there is only one usable runtime, the
+launcher chooses it automatically.
+
 ## Quick Checks
 
 Run these from a terminal when the launcher says the runtime is unavailable:
@@ -20,6 +24,12 @@ launcher:
 ```bash
 unset DOCKER_HOST
 ```
+
+Docker contexts are also reused when they point to a reachable Docker-compatible
+endpoint. Tools such as OrbStack, Rancher Desktop, Colima, rootless Docker, and
+Podman can work when their Docker API endpoint is running. Portainer is a
+management UI for existing runtimes, so the launcher still needs the underlying
+Docker-compatible endpoint.
 
 ## Docker Desktop
 

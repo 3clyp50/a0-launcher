@@ -134,6 +134,47 @@ function normalizeRuntimeSetupResume(value) {
   };
 }
 
+function normalizeRuntimeEndpointPreference(value) {
+  if (!value || typeof value !== 'object') return null;
+  const id = typeof value.id === 'string' ? value.id.trim() : '';
+  const dockerHost = typeof value.dockerHost === 'string' ? value.dockerHost.trim() : '';
+  if (!id || !dockerHost) return null;
+  return {
+    id,
+    dockerHost,
+    label: typeof value.label === 'string' ? value.label.trim() : '',
+    provider: typeof value.provider === 'string' ? value.provider.trim() : '',
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : ''
+  };
+}
+
+async function readRuntimeEndpointPreference() {
+  const state = await readJson(stateFile(), {});
+  return normalizeRuntimeEndpointPreference(state?.runtimeEndpointPreference);
+}
+
+async function writeRuntimeEndpointPreference(runtimeEndpointPreference) {
+  const input = runtimeEndpointPreference && typeof runtimeEndpointPreference === 'object' ? runtimeEndpointPreference : {};
+  const id = typeof input.id === 'string' ? input.id.trim() : '';
+  const dockerHost = typeof input.dockerHost === 'string' ? input.dockerHost.trim() : '';
+  if (!id || !dockerHost) {
+    const err = new Error('Invalid runtime endpoint');
+    err.code = 'INVALID_RUNTIME_ENDPOINT';
+    throw err;
+  }
+  const now = new Date().toISOString();
+  const preference = {
+    id,
+    dockerHost,
+    label: typeof input.label === 'string' ? input.label.trim() : '',
+    provider: typeof input.provider === 'string' ? input.provider.trim() : '',
+    updatedAt: now
+  };
+  const state = await readJson(stateFile(), {});
+  await writeJson(stateFile(), { ...state, runtimeEndpointPreference: preference, updatedAt: now });
+  return preference;
+}
+
 async function readRuntimeSetupResume() {
   const state = await readJson(stateFile(), {});
   return normalizeRuntimeSetupResume(state?.runtimeSetupResume);
@@ -336,6 +377,8 @@ module.exports = {
   readRuntimeSetupResume,
   writeRuntimeSetupResume,
   clearRuntimeSetupResume,
+  readRuntimeEndpointPreference,
+  writeRuntimeEndpointPreference,
 
   // Installability cache
   readInstallabilityCache,

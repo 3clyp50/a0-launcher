@@ -1882,6 +1882,16 @@ ipcMain.handle('docker-manager:provisionRuntime', async () => {
   }
 });
 
+ipcMain.handle('docker-manager:selectRuntimeEndpoint', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const id = typeof body.id === 'string' ? body.id.trim() : '';
+    return await dockerManager.selectRuntimeEndpoint(id);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
 ipcMain.handle('docker-manager:addRemoteInstance', async (_event, body) => {
   try {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });

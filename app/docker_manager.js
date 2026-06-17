@@ -377,6 +377,24 @@ async function provisionRuntime() {
   );
 }
 
+async function selectRuntimeEndpoint(id) {
+  const api = window.dockerManagerAPI;
+  const endpointId = typeof id === "string" ? id.trim() : "";
+  if (!endpointId) return true;
+  if (!api || typeof api.selectRuntimeEndpoint !== "function") return false;
+  try {
+    const res = await api.selectRuntimeEndpoint(endpointId);
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to select runtime");
+    return false;
+  }
+}
+
 async function installOrSync(tag) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.installOrSync !== "function") return;
@@ -621,6 +639,7 @@ window.dockerManagerActions = {
   pruneVolumes,
   openDockerDownload,
   provisionRuntime,
+  selectRuntimeEndpoint,
   installOrSync,
   startActive,
   stopActive,

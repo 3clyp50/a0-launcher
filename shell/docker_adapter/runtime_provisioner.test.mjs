@@ -379,7 +379,9 @@ test('DockerInterface classifies Windows npipe and loopback WSL endpoints', asyn
   const dockerDesktop = await DockerInterface.detectEnvironment({
     dockerHost: 'npipe:////./pipe/docker_engine',
     timeoutMs: 250,
-    enableWindowsWslProxy: false
+    enableWindowsWslProxy: false,
+    discoverDockerContexts: false,
+    dockerodeClass: fakeDockerodeClass()
   });
   assert.equal(dockerDesktop.dockerHost.kind, 'npipe');
   assert.equal(dockerDesktop.dockerHost.socketPath, '//./pipe/docker_engine');
@@ -388,12 +390,137 @@ test('DockerInterface classifies Windows npipe and loopback WSL endpoints', asyn
   const wslEngine = await DockerInterface.detectEnvironment({
     dockerHost: 'tcp://127.0.0.1:23750',
     timeoutMs: 250,
-    enableWindowsWslProxy: false
+    enableWindowsWslProxy: false,
+    discoverDockerContexts: false,
+    dockerodeClass: fakeDockerodeClass()
   });
   assert.equal(wslEngine.dockerHost.kind, 'tcp');
   assert.equal(wslEngine.dockerHost.host, '127.0.0.1');
   assert.equal(wslEngine.dockerHost.port, 23750);
   assert.equal(wslEngine.dockerFlavor, 'wsl_engine');
+});
+
+test('DockerInterface selects a single available native endpoint without extra choices', async () => {
+  const env = await DockerInterface.detectEnvironment({
+    platform: 'linux',
+    homeDir: '/home/a0',
+    runtimeDir: '/run/user/1000',
+    discoverDockerContexts: false,
+    candidateHosts: [
+      { provider: 'docker_engine', label: 'Docker Engine', dockerHost: 'unix:///var/run/docker.sock' }
+    ],
+    dockerodeClass: fakeDockerodeClass(['/var/run/docker.sock'])
+  });
+
+  assert.equal(env.dockerAvailable, true);
+  assert.equal(env.dockerHost.socketPath, '/var/run/docker.sock');
+  assert.equal(env.runtimeCandidates.length, 1);
+  assert.equal(env.runtimeCandidates[0].available, true);
+  assert.equal(env.runtimeCandidates[0].isSelected, true);
+});
+
+test('DockerInterface dedupes endpoints and selects the highest-priority reachable runtime', async () => {
+  const env = await DockerInterface.detectEnvironment({
+    platform: 'darwin',
+    homeDir: '/Users/a0',
+    discoverDockerContexts: false,
+    candidateHosts: [
+      { provider: 'orbstack', label: 'OrbStack', dockerHost: 'unix:///Users/a0/.orbstack/run/docker.sock', priority: 50 },
+      { provider: 'orbstack', label: 'OrbStack duplicate', dockerHost: 'unix:///Users/a0/.orbstack/run/docker.sock', priority: 70 },
+      { provider: 'rancher_desktop', label: 'Rancher Desktop', dockerHost: 'unix:///Users/a0/.rd/docker.sock', priority: 60 }
+    ],
+    dockerodeClass: fakeDockerodeClass([
+      '/Users/a0/.orbstack/run/docker.sock',
+      '/Users/a0/.rd/docker.sock'
+    ])
+  });
+
+  assert.equal(env.dockerAvailable, true);
+  assert.equal(env.dockerFlavor, 'orbstack');
+  assert.equal(env.runtimeCandidates.length, 2);
+  assert.deepEqual(env.runtimeCandidates.filter((candidate) => candidate.available).map((candidate) => candidate.label), [
+    'OrbStack',
+    'Rancher Desktop'
+  ]);
+  assert.equal(env.runtimeCandidates.find((candidate) => candidate.label === 'OrbStack')?.isSelected, true);
+});
+
+test('DockerInterface falls back when a persisted runtime endpoint is stale', async () => {
+  const env = await DockerInterface.detectEnvironment({
+    platform: 'linux',
+    runtimePreference: {
+      id: 'runtime-stale',
+      label: 'Old runtime',
+      provider: 'docker_engine',
+      dockerHost: 'unix:///tmp/missing-docker.sock'
+    },
+    discoverDockerContexts: false,
+    candidateHosts: [
+      { provider: 'docker_engine', label: 'Docker Engine', dockerHost: 'unix:///var/run/docker.sock' }
+    ],
+    dockerodeClass: fakeDockerodeClass(['/var/run/docker.sock'])
+  });
+
+  assert.equal(env.dockerAvailable, true);
+  assert.equal(env.dockerHost.socketPath, '/var/run/docker.sock');
+  assert.equal(env.runtimeCandidates.find((candidate) => candidate.id === 'runtime-stale')?.available, false);
+  assert.equal(env.runtimeCandidates.find((candidate) => candidate.label === 'Docker Engine')?.isSelected, true);
+});
+
+test('DockerInterface parses Docker context endpoints into provider-labeled candidates', async () => {
+  const env = await DockerInterface.detectEnvironment({
+    platform: 'darwin',
+    homeDir: '/Users/a0',
+    candidateHosts: [],
+    dockerContexts: [
+      {
+        Name: 'orbstack',
+        Current: true,
+        Endpoints: { docker: { Host: 'unix:///Users/a0/.orbstack/run/docker.sock' } }
+      },
+      {
+        Name: 'rancher-desktop',
+        Endpoints: { docker: { Host: 'unix:///Users/a0/.rd/docker.sock' } }
+      }
+    ],
+    dockerodeClass: fakeDockerodeClass(['/Users/a0/.orbstack/run/docker.sock'])
+  });
+
+  assert.equal(env.dockerAvailable, true);
+  assert.deepEqual(env.runtimeCandidates.map((candidate) => candidate.provider), ['orbstack', 'rancher_desktop']);
+  assert.equal(env.runtimeCandidates[0].label, 'orbstack (current)');
+  assert.equal(env.runtimeCandidates[0].isSelected, true);
+  assert.equal(env.runtimeCandidates[1].available, false);
+});
+
+test('DockerInterface only accepts Podman when its Docker-compatible API responds', async () => {
+  const unavailable = await DockerInterface.detectEnvironment({
+    platform: 'linux',
+    runtimeDir: '/run/user/1000',
+    discoverDockerContexts: false,
+    candidateHosts: [
+      { provider: 'podman', label: 'Podman', dockerHost: 'unix:///run/user/1000/podman/podman.sock' }
+    ],
+    dockerodeClass: fakeDockerodeClass()
+  });
+
+  assert.equal(unavailable.dockerAvailable, false);
+  assert.equal(unavailable.runtimeCandidates[0].provider, 'podman');
+  assert.equal(unavailable.runtimeCandidates[0].available, false);
+
+  const available = await DockerInterface.detectEnvironment({
+    platform: 'linux',
+    runtimeDir: '/run/user/1000',
+    discoverDockerContexts: false,
+    candidateHosts: [
+      { provider: 'podman', label: 'Podman', dockerHost: 'unix:///run/user/1000/podman/podman.sock' }
+    ],
+    dockerodeClass: fakeDockerodeClass(['/run/user/1000/podman/podman.sock'])
+  });
+
+  assert.equal(available.dockerAvailable, true);
+  assert.equal(available.dockerFlavor, 'podman');
+  assert.equal(available.runtimeCandidates[0].isSelected, true);
 });
 
 test('WindowsWslDockerProxy keepalive holds the selected WSL distro open', { skip: process.platform !== 'win32' }, () => {
@@ -438,6 +565,28 @@ test('WindowsWslDockerProxy keepalive holds the selected WSL distro open', { ski
   assert.equal(calls[1].options.windowsHide, true);
   assert.equal(calls[1].options.detached, true);
 });
+
+function fakeDockerodeClass(availableSocketPaths = []) {
+  const available = new Set(availableSocketPaths);
+  return class FakeDockerode {
+    constructor(options = {}) {
+      this.options = options;
+    }
+
+    async ping() {
+      const socketPath = this.options.socketPath || '';
+      const tcpHost = this.options.host ? `${this.options.host}:${this.options.port || 2375}` : '';
+      if (available.has(socketPath) || available.has(tcpHost)) return true;
+      const error = new Error('Docker endpoint is not reachable');
+      error.code = socketPath ? 'ENOENT' : 'ECONNREFUSED';
+      throw error;
+    }
+
+    async version() {
+      return { Version: 'test' };
+    }
+  };
+}
 
 test('selectLatestDockerCliAsset chooses the newest static macOS Docker CLI tarball', () => {
   const html = `

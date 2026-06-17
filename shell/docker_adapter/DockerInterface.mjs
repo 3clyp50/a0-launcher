@@ -7,7 +7,12 @@
  * - Concrete implementations live in `./impl/*` and are loaded on demand (DI-002).
  */
 
+import { execFile } from 'node:child_process';
 import os from 'node:os';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+const DOCKER_CONTEXT_TIMEOUT_MS = 1200;
 
 /**
  * @typedef {Object} DockerHostInfo
@@ -26,11 +31,26 @@ import os from 'node:os';
  * @property {string} arch
  * @property {DockerHostInfo} dockerHost
  * @property {boolean} dockerAvailable
- * @property {"docker_desktop"|"docker_engine"|"colima"|"wsl_engine"|"unknown"} dockerFlavor
+ * @property {"docker_desktop"|"docker_engine"|"colima"|"orbstack"|"rancher_desktop"|"podman"|"wsl_engine"|"unknown"} dockerFlavor
  * @property {string|null} daemonVersion
  * @property {string|null} diagnosticCode
  * @property {string|null} diagnosticMessage
  * @property {Object|null} diagnosticDetails
+ * @property {RuntimeEndpointCandidate[]} runtimeCandidates
+ * @property {string|null} selectedRuntimeEndpointId
+ */
+
+/**
+ * @typedef {Object} RuntimeEndpointCandidate
+ * @property {string} id
+ * @property {string} label
+ * @property {string} provider
+ * @property {string} dockerHost
+ * @property {string} source
+ * @property {boolean} available
+ * @property {boolean} isSelected
+ * @property {string|null} diagnosticCode
+ * @property {string|null} diagnosticMessage
  */
 
 /**
@@ -63,6 +83,7 @@ import os from 'node:os';
  * @typedef {Object} DockerInterfaceOptions
  * @property {string=} imageRepo
  * @property {string=} dockerHost
+ * @property {Object=} runtimePreference
  * @property {boolean=} forceRefresh
  */
 
@@ -71,6 +92,17 @@ import os from 'node:os';
  * @property {number=} timeoutMs
  * @property {string=} dockerHost
  * @property {boolean=} enableWindowsWslProxy
+ * @property {Object=} runtimePreference
+ * @property {Object=} env
+ * @property {NodeJS.Platform=} platform
+ * @property {string=} arch
+ * @property {string=} homeDir
+ * @property {string=} runtimeDir
+ * @property {Array<Object|string>=} candidateHosts
+ * @property {Array<Object>=} dockerContexts
+ * @property {boolean=} discoverDockerContexts
+ * @property {Function=} runCommand
+ * @property {Function=} dockerodeClass
  */
 
 export class DockerInterface {
@@ -90,67 +122,110 @@ export class DockerInterface {
         ? Math.max(250, Math.floor(options.timeoutMs))
         : 1500;
 
-    const explicitDockerHostRaw = (options.dockerHost || process.env.DOCKER_HOST || '').trim();
-    const candidates = explicitDockerHostRaw ? [explicitDockerHostRaw] : this.#candidateDockerHosts();
+    const context = this.#detectionContext(options);
+    const explicitDockerHostRaw = (options.dockerHost || context.env.DOCKER_HOST || '').trim();
+    const candidates = await this.#runtimeEndpointCandidates({
+      ...context,
+      explicitDockerHostRaw,
+      runtimePreference: options.runtimePreference
+    });
 
     let Dockerode;
     try {
-      const imported = await import('dockerode');
-      Dockerode = imported?.default || imported;
+      if (typeof options.dockerodeClass === 'function') {
+        Dockerode = options.dockerodeClass;
+      } else {
+        const imported = await import('dockerode');
+        Dockerode = imported?.default || imported;
+      }
     } catch (error) {
-      const info = this.#baseEnvironmentInfo(this.#parseDockerHost(explicitDockerHostRaw));
+      const info = this.#baseEnvironmentInfo(this.#parseDockerHost(explicitDockerHostRaw), context);
       info.diagnosticCode = 'DOCKERODE_MISSING';
       info.diagnosticMessage = 'dockerode dependency is not available';
       info.diagnosticDetails = { message: error?.message || String(error) };
+      info.runtimeCandidates = this.#publicRuntimeCandidates(candidates, '');
+      return info;
+    }
+
+    const probed = await Promise.all(candidates.map((candidate) =>
+      this.#probeRuntimeCandidate(candidate, Dockerode, timeoutMs, options, context)
+    ));
+    const selected = this.#selectRuntimeCandidate(probed);
+
+    if (selected?.available) {
+      const dockerHost = this.#parseDockerHost(selected.dockerHost);
+      const info = this.#baseEnvironmentInfo(dockerHost, context, selected);
+      info.dockerAvailable = true;
+      info.daemonVersion = selected.daemonVersion || null;
+      info.diagnosticCode = null;
+      info.diagnosticMessage = null;
+      info.diagnosticDetails = null;
+      info.runtimeCandidates = this.#publicRuntimeCandidates(probed, selected.id);
+      info.selectedRuntimeEndpointId = selected.id;
       return info;
     }
 
     let bestFailure = null;
-
-    for (const candidate of candidates) {
-      const dockerHost = this.#parseDockerHost(candidate);
-      const info = this.#baseEnvironmentInfo(dockerHost);
-
-      if (dockerHost.kind === 'invalid') {
-        info.diagnosticCode = 'INVALID_DOCKER_HOST';
-        info.diagnosticMessage = dockerHost.error || 'Invalid DOCKER_HOST';
-        if (explicitDockerHostRaw) return info;
-        bestFailure = this.#preferDiagnostic(bestFailure, info);
-        continue;
-      }
-
-      const candidateTimeoutMs = this.#isWindowsWslProxyHost(dockerHost)
-        ? Math.max(timeoutMs, 10000)
-        : timeoutMs;
-
-      if (options.enableWindowsWslProxy !== false) {
-        await this.#prepareDockerHost(dockerHost).catch(() => {});
-      }
-
-      const docker = new Dockerode(this.#dockerodeOptionsFromHost(dockerHost, candidateTimeoutMs));
-
-      try {
-        await this.#withTimeout(Promise.resolve(docker.ping()), candidateTimeoutMs);
-        info.dockerAvailable = true;
-
-        try {
-          const v = await this.#withTimeout(Promise.resolve(docker.version()), candidateTimeoutMs);
-          info.daemonVersion = typeof v?.Version === 'string' ? v.Version : null;
-        } catch {
-          // best-effort only
-        }
-
-        return info;
-      } catch (error) {
-        const normalized = this.#normalizeDockerodeError(error);
-        info.diagnosticCode = normalized.code;
-        info.diagnosticMessage = normalized.message;
-        info.diagnosticDetails = normalized.details;
-        bestFailure = this.#preferDiagnostic(bestFailure, info);
-      }
+    for (const candidate of probed) {
+      const dockerHost = this.#parseDockerHost(candidate.dockerHost);
+      const info = this.#baseEnvironmentInfo(dockerHost, context, candidate);
+      info.diagnosticCode = candidate.diagnosticCode || null;
+      info.diagnosticMessage = candidate.diagnosticMessage || null;
+      info.diagnosticDetails = candidate.diagnosticDetails || null;
+      bestFailure = this.#preferDiagnostic(bestFailure, info);
     }
 
-    return bestFailure || this.#baseEnvironmentInfo(this.#parseDockerHost(explicitDockerHostRaw));
+    const fallback = bestFailure || this.#baseEnvironmentInfo(this.#parseDockerHost(explicitDockerHostRaw), context);
+    fallback.runtimeCandidates = this.#publicRuntimeCandidates(probed, '');
+    return fallback;
+  }
+
+  static async #probeRuntimeCandidate(candidate, Dockerode, timeoutMs, options, context) {
+    const dockerHost = this.#parseDockerHost(candidate.dockerHost);
+    const result = {
+      ...candidate,
+      available: false,
+      daemonVersion: null,
+      diagnosticCode: null,
+      diagnosticMessage: null,
+      diagnosticDetails: null
+    };
+
+    if (dockerHost.kind === 'invalid') {
+      result.diagnosticCode = 'INVALID_DOCKER_HOST';
+      result.diagnosticMessage = dockerHost.error || 'Invalid DOCKER_HOST';
+      return result;
+    }
+
+    const candidateTimeoutMs = this.#isWindowsWslProxyHost(dockerHost, context.platform)
+      ? Math.max(timeoutMs, 10000)
+      : timeoutMs;
+
+    const shouldPrepareHost = ['preference', 'env', 'active_context'].includes(candidate.source);
+    if (options.enableWindowsWslProxy !== false && shouldPrepareHost) {
+      await this.#prepareDockerHost(dockerHost, context.platform).catch(() => {});
+    }
+
+    const docker = new Dockerode(this.#dockerodeOptionsFromHost(dockerHost, candidateTimeoutMs));
+
+    try {
+      await this.#withTimeout(Promise.resolve(docker.ping()), candidateTimeoutMs);
+      result.available = true;
+
+      try {
+        const v = await this.#withTimeout(Promise.resolve(docker.version()), candidateTimeoutMs);
+        result.daemonVersion = typeof v?.Version === 'string' ? v.Version : null;
+      } catch {
+        // best-effort only
+      }
+    } catch (error) {
+      const normalized = this.#normalizeDockerodeError(error);
+      result.diagnosticCode = normalized.code;
+      result.diagnosticMessage = normalized.message;
+      result.diagnosticDetails = normalized.details;
+    }
+
+    return result;
   }
 
   /**
@@ -164,7 +239,10 @@ export class DockerInterface {
     if (this.#instancePromise) return this.#instancePromise;
 
     this.#instancePromise = (async () => {
-      const env = await this.detectEnvironment({ dockerHost: options?.dockerHost });
+      const env = await this.detectEnvironment({
+        dockerHost: options?.dockerHost,
+        runtimePreference: options?.runtimePreference
+      });
       const { DockerodeDocker } = await import('./impl/DockerodeDocker.mjs');
       const instance = new DockerodeDocker({
         env,
@@ -199,6 +277,9 @@ export class DockerInterface {
    * @returns {Promise<DockerEnvironmentInfo>}
    */
   async getEnvironment() {
+    if (this.env && Array.isArray(this.env.runtimeCandidates)) {
+      return this.env;
+    }
     const dockerHost = typeof this.env?.dockerHost?.raw === 'string' ? this.env.dockerHost.raw : '';
     return DockerInterface.detectEnvironment(this.env?.dockerAvailable && dockerHost ? { dockerHost } : {});
   }
@@ -420,79 +501,336 @@ export class DockerInterface {
     throw new Error('DockerInterface.deleteContainer is abstract');
   }
 
-  static #baseEnvironmentInfo(dockerHost) {
+  static #detectionContext(options = {}) {
+    const env = options.env && typeof options.env === 'object' ? options.env : process.env;
+    const platform = options.platform || process.platform;
+    const arch = options.arch || process.arch;
+    const homeDir = typeof options.homeDir === 'string' ? options.homeDir : os.homedir();
+    const uid = typeof process.getuid === 'function' ? process.getuid() : '';
+    const runtimeDir = typeof options.runtimeDir === 'string'
+      ? options.runtimeDir
+      : env.XDG_RUNTIME_DIR || (uid !== '' ? `/run/user/${uid}` : '');
+    return { env, platform, arch, homeDir, runtimeDir, options };
+  }
+
+  static #baseEnvironmentInfo(dockerHost, context = {}, candidate = null) {
     return {
-      platform: process.platform,
-      arch: process.arch,
+      platform: context.platform || process.platform,
+      arch: context.arch || process.arch,
       dockerHost,
       dockerAvailable: false,
-      dockerFlavor: this.#detectDockerFlavor(dockerHost),
+      dockerFlavor: this.#detectDockerFlavor(dockerHost, candidate, context.platform || process.platform),
       daemonVersion: null,
       diagnosticCode: null,
       diagnosticMessage: null,
-      diagnosticDetails: null
+      diagnosticDetails: null,
+      runtimeCandidates: [],
+      selectedRuntimeEndpointId: null
     };
   }
 
-  static #candidateDockerHosts() {
-    const home = os.homedir();
-    const unique = (items) => {
-      const seen = new Set();
-      return items.filter((item) => {
-        const value = String(item || '').trim();
-        if (!value || seen.has(value)) return false;
-        seen.add(value);
-        return true;
-      });
-    };
-
-    if (process.platform === 'darwin') {
-      return unique([
-        `unix://${home}/.colima/a0/docker.sock`,
-        `unix://${home}/.colima/default/docker.sock`,
-        `unix://${home}/.docker/run/docker.sock`,
-        'unix:///var/run/docker.sock'
-      ]);
+  static async #runtimeEndpointCandidates(context) {
+    const out = [];
+    const preference = this.#normalizeRuntimePreference(context.runtimePreference);
+    if (preference?.dockerHost) {
+      out.push(this.#makeCandidate({
+        dockerHost: preference.dockerHost,
+        provider: preference.provider || this.#providerForHost(preference.dockerHost, preference.label),
+        label: preference.label || '',
+        source: 'preference',
+        id: preference.id || '',
+        priority: 0
+      }));
     }
 
-    if (process.platform === 'win32') {
-      return unique([
-        'npipe:////./pipe/docker_engine',
-        'tcp://127.0.0.1:23750'
-      ]);
+    if (context.explicitDockerHostRaw) {
+      out.push(this.#makeCandidate({
+        dockerHost: context.explicitDockerHostRaw,
+        provider: this.#providerForHost(context.explicitDockerHostRaw, 'Environment'),
+        label: 'Environment runtime',
+        source: 'env',
+        priority: 10
+      }));
     }
 
-    if (process.platform === 'linux') {
-      const uid = typeof process.getuid === 'function' ? process.getuid() : '';
-      const runtimeDir = process.env.XDG_RUNTIME_DIR || (uid !== '' ? `/run/user/${uid}` : '');
-      return unique([
-        'unix:///var/run/docker.sock',
-        `unix://${home}/.docker/desktop/docker.sock`,
-        runtimeDir ? `unix://${runtimeDir}/docker.sock` : ''
-      ]);
+    for (const candidate of await this.#dockerContextCandidates(context)) {
+      out.push(candidate);
+    }
+
+    const fallbackHosts = Array.isArray(context.options?.candidateHosts)
+      ? context.options.candidateHosts
+      : this.#platformRuntimeCandidates(context);
+    let priority = 50;
+    for (const item of fallbackHosts) {
+      if (!item) continue;
+      if (typeof item === 'string') {
+        out.push(this.#makeCandidate({
+          dockerHost: item,
+          provider: this.#providerForHost(item, ''),
+          source: 'known_socket',
+          priority: priority++
+        }));
+      } else if (typeof item === 'object') {
+        out.push(this.#makeCandidate({
+          ...item,
+          priority: Number.isFinite(Number(item.priority)) ? Number(item.priority) : priority++
+        }));
+      }
+    }
+
+    return this.#dedupeRuntimeCandidates(out);
+  }
+
+  static #platformRuntimeCandidates(context) {
+    const home = context.homeDir || os.homedir();
+    const runtimeDir = context.runtimeDir || '';
+
+    if (context.platform === 'darwin') {
+      return [
+        { provider: 'orbstack', label: 'OrbStack', dockerHost: `unix://${home}/.orbstack/run/docker.sock`, source: 'known_socket' },
+        { provider: 'colima', label: 'Colima', dockerHost: `unix://${home}/.colima/a0/docker.sock`, source: 'known_socket' },
+        { provider: 'colima', label: 'Colima default', dockerHost: `unix://${home}/.colima/default/docker.sock`, source: 'known_socket' },
+        { provider: 'docker_desktop', label: 'Docker Desktop', dockerHost: `unix://${home}/.docker/run/docker.sock`, source: 'known_socket' },
+        { provider: 'rancher_desktop', label: 'Rancher Desktop', dockerHost: `unix://${home}/.rd/docker.sock`, source: 'known_socket' },
+        { provider: 'podman', label: 'Podman', dockerHost: `unix://${home}/.local/share/containers/podman/machine/podman-machine-default/podman.sock`, source: 'known_socket' },
+        { provider: 'podman', label: 'Podman', dockerHost: `unix://${home}/.local/share/containers/podman/machine/qemu/podman.sock`, source: 'known_socket' },
+        { provider: 'docker_engine', label: 'Docker Engine', dockerHost: 'unix:///var/run/docker.sock', source: 'known_socket' }
+      ];
+    }
+
+    if (context.platform === 'win32') {
+      return [
+        { provider: 'docker_desktop', label: 'Docker Desktop', dockerHost: 'npipe:////./pipe/docker_engine', source: 'known_socket' },
+        { provider: 'wsl_engine', label: 'Agent Zero local runtime', dockerHost: 'tcp://127.0.0.1:23750', source: 'known_socket' }
+      ];
+    }
+
+    if (context.platform === 'linux') {
+      return [
+        { provider: 'docker_engine', label: 'Docker Engine', dockerHost: 'unix:///var/run/docker.sock', source: 'known_socket' },
+        { provider: 'docker_desktop', label: 'Docker Desktop', dockerHost: `unix://${home}/.docker/desktop/docker.sock`, source: 'known_socket' },
+        runtimeDir ? { provider: 'docker_engine', label: 'Rootless Docker', dockerHost: `unix://${runtimeDir}/docker.sock`, source: 'known_socket' } : null,
+        runtimeDir ? { provider: 'podman', label: 'Podman', dockerHost: `unix://${runtimeDir}/podman/podman.sock`, source: 'known_socket' } : null,
+        { provider: 'rancher_desktop', label: 'Rancher Desktop', dockerHost: `unix://${home}/.rd/docker.sock`, source: 'known_socket' }
+      ].filter(Boolean);
     }
 
     return [''];
   }
 
-  static #detectDockerFlavor(hostInfo = null) {
+  static async #dockerContextCandidates(context) {
+    const contexts = Array.isArray(context.options?.dockerContexts)
+      ? context.options.dockerContexts
+      : context.options?.discoverDockerContexts === false
+        ? []
+        : await this.#discoverDockerContexts(context);
+    const out = [];
+    let priority = 20;
+
+    for (const entry of contexts) {
+      const name = typeof entry?.Name === 'string' ? entry.Name : typeof entry?.name === 'string' ? entry.name : '';
+      const dockerHost = entry?.Endpoints?.docker?.Host || entry?.endpoints?.docker?.host || entry?.dockerHost || '';
+      if (!dockerHost) continue;
+      const active = entry?.Current === true || entry?.current === true || entry?.active === true;
+      const label = active ? `${name || 'Docker context'} (current)` : name || 'Docker context';
+      out.push(this.#makeCandidate({
+        dockerHost,
+        provider: this.#providerForHost(dockerHost, name),
+        label,
+        source: active ? 'active_context' : 'docker_context',
+        priority: active ? priority++ : priority + 20
+      }));
+    }
+
+    return out;
+  }
+
+  static async #discoverDockerContexts(context) {
+    const runCommand = typeof context.options?.runCommand === 'function'
+      ? context.options.runCommand
+      : (cmd, args, options = {}) => execFileAsync(cmd, args, options);
+
+    let current = '';
+    try {
+      const result = await runCommand('docker', ['context', 'show'], { timeout: DOCKER_CONTEXT_TIMEOUT_MS });
+      current = String(result?.stdout || '').trim();
+    } catch {
+      return [];
+    }
+
+    let names = [];
+    try {
+      const result = await runCommand('docker', ['context', 'ls', '--format', '{{.Name}}'], { timeout: DOCKER_CONTEXT_TIMEOUT_MS });
+      names = String(result?.stdout || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim().replace(/^\*\s*/, ''))
+        .filter(Boolean);
+    } catch {
+      names = current ? [current] : [];
+    }
+
+    if (current && !names.includes(current)) names.unshift(current);
+    const uniqueNames = [...new Set(names)].slice(0, 24);
+    const contexts = [];
+
+    for (const name of uniqueNames) {
+      try {
+        const result = await runCommand('docker', ['context', 'inspect', name], { timeout: DOCKER_CONTEXT_TIMEOUT_MS });
+        const parsed = JSON.parse(String(result?.stdout || '[]'));
+        const entries = Array.isArray(parsed) ? parsed : [parsed];
+        for (const entry of entries) {
+          if (entry && typeof entry === 'object') {
+            contexts.push({ ...entry, Current: entry.Current === true || entry.Name === current });
+          }
+        }
+      } catch {
+        // Context discovery is advisory; ignore unreadable contexts.
+      }
+    }
+
+    return contexts;
+  }
+
+  static #normalizeRuntimePreference(value) {
+    if (!value || typeof value !== 'object') return null;
+    const dockerHost = typeof value.dockerHost === 'string' ? value.dockerHost.trim() : '';
+    if (!dockerHost) return null;
+    return {
+      id: typeof value.id === 'string' ? value.id.trim() : '',
+      label: typeof value.label === 'string' ? value.label.trim() : '',
+      provider: typeof value.provider === 'string' ? value.provider.trim() : '',
+      dockerHost
+    };
+  }
+
+  static #makeCandidate(input = {}) {
+    const dockerHost = String(input.dockerHost || '').trim();
+    const provider = String(input.provider || this.#providerForHost(dockerHost, input.label || '') || 'unknown').trim();
+    const label = String(input.label || this.#labelForProvider(provider)).trim() || 'Container runtime';
+    const id = String(input.id || this.#candidateId(provider, dockerHost)).trim();
+    return {
+      id,
+      label,
+      provider,
+      dockerHost,
+      source: String(input.source || 'known_socket').trim(),
+      priority: Number.isFinite(Number(input.priority)) ? Number(input.priority) : 100,
+      available: false,
+      isSelected: false,
+      diagnosticCode: null,
+      diagnosticMessage: null
+    };
+  }
+
+  static #dedupeRuntimeCandidates(candidates) {
+    const byKey = new Map();
+    for (const candidate of candidates) {
+      if (!candidate?.dockerHost) continue;
+      const key = this.#hostKey(this.#parseDockerHost(candidate.dockerHost));
+      if (!key) continue;
+      const existing = byKey.get(key);
+      if (!existing || Number(candidate.priority) < Number(existing.priority)) {
+        byKey.set(key, candidate);
+      }
+    }
+    return [...byKey.values()].sort((a, b) => Number(a.priority) - Number(b.priority));
+  }
+
+  static #selectRuntimeCandidate(candidates) {
+    return candidates
+      .filter((candidate) => candidate?.available)
+      .sort((a, b) => Number(a.priority) - Number(b.priority))[0] || null;
+  }
+
+  static #publicRuntimeCandidates(candidates, selectedId) {
+    return candidates.map((candidate) => ({
+      id: candidate.id,
+      label: candidate.label,
+      provider: candidate.provider,
+      dockerHost: candidate.dockerHost,
+      source: candidate.source,
+      available: candidate.available === true,
+      isSelected: !!selectedId && candidate.id === selectedId,
+      diagnosticCode: candidate.diagnosticCode || null,
+      diagnosticMessage: candidate.diagnosticMessage || null
+    }));
+  }
+
+  static #candidateId(provider, dockerHost) {
+    const basis = `${provider || 'runtime'}-${dockerHost || 'default'}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 96);
+    return `runtime-${basis || 'default'}`;
+  }
+
+  static #hostKey(hostInfo) {
+    if (!hostInfo || hostInfo.kind === 'invalid') return '';
+    if (hostInfo.kind === 'default') return 'default';
+    if (hostInfo.kind === 'unix' || hostInfo.kind === 'npipe') return `${hostInfo.kind}:${hostInfo.socketPath}`;
+    if (hostInfo.kind === 'tcp' || hostInfo.kind === 'http' || hostInfo.kind === 'https') {
+      return `${hostInfo.kind}:${hostInfo.protocol}:${hostInfo.host}:${hostInfo.port}`;
+    }
+    return `${hostInfo.kind}:${hostInfo.raw}`;
+  }
+
+  static #providerForHost(dockerHost, hint = '') {
+    const raw = `${dockerHost || ''} ${hint || ''}`.toLowerCase();
+    if (raw.includes('orbstack')) return 'orbstack';
+    if (raw.includes('rancher') || raw.includes('/.rd/')) return 'rancher_desktop';
+    if (raw.includes('podman')) return 'podman';
+    if (raw.includes('colima')) return 'colima';
+    if (raw.includes('desktop') || raw.includes('/.docker/run/docker.sock') || raw.includes('/.docker/desktop/')) return 'docker_desktop';
+    if (raw.includes('127.0.0.1:23750')) return 'wsl_engine';
+    if (raw.includes('npipe:')) return 'docker_desktop';
+    if (raw.includes('rootless')) return 'docker_engine';
+    return 'docker_engine';
+  }
+
+  static #labelForProvider(provider) {
+    switch (provider) {
+      case 'orbstack':
+        return 'OrbStack';
+      case 'rancher_desktop':
+        return 'Rancher Desktop';
+      case 'podman':
+        return 'Podman';
+      case 'colima':
+        return 'Colima';
+      case 'docker_desktop':
+        return 'Docker Desktop';
+      case 'wsl_engine':
+        return 'Agent Zero local runtime';
+      case 'docker_engine':
+        return 'Docker Engine';
+      default:
+        return 'Container runtime';
+    }
+  }
+
+  static #detectDockerFlavor(hostInfo = null, candidate = null, platform = process.platform) {
+    if (candidate?.provider) return candidate.provider;
     const raw = `${hostInfo?.raw || ''} ${hostInfo?.socketPath || ''}`.toLowerCase();
+    if (raw.includes('/.orbstack/')) return 'orbstack';
+    if (raw.includes('/.rd/')) return 'rancher_desktop';
+    if (raw.includes('podman')) return 'podman';
     if (raw.includes('/.colima/')) return 'colima';
     if (raw.includes('/.docker/desktop/') || raw.includes('/.docker/run/docker.sock')) return 'docker_desktop';
     if (hostInfo?.kind === 'npipe') return 'docker_desktop';
     if (hostInfo?.kind === 'tcp' && hostInfo.host === '127.0.0.1' && Number(hostInfo.port) === 23750) return 'wsl_engine';
-    if (process.platform === 'darwin' || process.platform === 'win32') return 'docker_desktop';
-    if (process.platform === 'linux') return 'docker_engine';
+    if (platform === 'darwin' || platform === 'win32') return 'docker_desktop';
+    if (platform === 'linux') return 'docker_engine';
     return 'unknown';
   }
 
-  static #isWindowsWslProxyHost(hostInfo) {
-    return process.platform === 'win32' && hostInfo?.kind === 'tcp' && hostInfo.host === '127.0.0.1' && Number(hostInfo.port) === 23750;
+  static #isWindowsWslProxyHost(hostInfo, platform = process.platform) {
+    return platform === 'win32' && hostInfo?.kind === 'tcp' && hostInfo.host === '127.0.0.1' && Number(hostInfo.port) === 23750;
   }
 
-  static async #prepareDockerHost(hostInfo) {
-    if (process.platform !== 'win32') return;
-    if (!this.#isWindowsWslProxyHost(hostInfo)) return;
+  static async #prepareDockerHost(hostInfo, platform = process.platform) {
+    if (platform !== 'win32') return;
+    if (!this.#isWindowsWslProxyHost(hostInfo, platform)) return;
     const { ensureWindowsWslDockerProxy } = await import('./impl/WindowsWslDockerProxy.mjs');
     await ensureWindowsWslDockerProxy();
   }

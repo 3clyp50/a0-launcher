@@ -61,6 +61,10 @@ This scope owns:
 - Runtime setup success should stay in the same modal shell long enough to
   offer first Agent Zero image setup. The selector defaults to `latest`, and the
   primary `Setup Agent Zero` action starts the selected image install.
+- If two or more usable local runtime endpoints are detected during setup
+  completion, the same modal may show a compact `Run Agent Zero with` selector.
+  Hide that selector for zero or one usable endpoint, and do not add a runtime
+  picker to Settings or the global chrome.
 - Post-runtime image, activation, update, rollback, start, stop, and delete
   progress should use the centered operation modal rather than a top-page
   status strip.

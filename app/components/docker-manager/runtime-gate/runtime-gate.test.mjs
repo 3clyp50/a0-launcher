@@ -332,6 +332,7 @@ test('completed runtime setup shows success without a refresh button or step lis
   assert.equal(renderRuntimeGate(state, { installOrSync: (tag) => { installTag = tag; } }), true);
   assert.ok(document.querySelector('.dm-runtime-success'));
   assert.equal(document.querySelector('#runtimeSetupTag')?.value, 'latest');
+  assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
   assert.equal(buttonByText(document, 'Refresh'), null);
   assert.equal(document.querySelector('.dm-runtime-steps'), null);
 
@@ -339,6 +340,96 @@ test('completed runtime setup shows success without a refresh button or step lis
   assert.equal(installTag, 'latest');
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
   assert.equal(document.querySelector('.dm-page').inert, false);
+});
+
+test('runtime selector is hidden unless multiple available endpoints exist', () => {
+  let document = installDom();
+  const base = {
+    stateLoaded: true,
+    dockerAvailable: true,
+    versions: [{ id: 'v1.20' }],
+    progress: {
+      opId: 'op-runtime-choice',
+      type: 'runtime_setup',
+      status: 'completed',
+      detail: 'Runtime ready',
+      phase: 'ready',
+      progress: 100
+    }
+  };
+
+  renderRuntimeGate({
+    ...base,
+    runtime: { platform: 'linux', state: 'ready', runtimeCandidates: [] }
+  }, {});
+  assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
+
+  document = installDom();
+  renderRuntimeGate({
+    ...base,
+    runtime: {
+      platform: 'linux',
+      state: 'ready',
+      runtimeCandidates: [
+        { id: 'runtime-one', label: 'Docker Engine', available: true, isSelected: true }
+      ]
+    }
+  }, {});
+  assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
+});
+
+test('runtime selector appears for multiple endpoints and submits before image install', async () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: true,
+    runtime: {
+      platform: 'darwin',
+      state: 'ready',
+      selectedRuntimeEndpointId: 'runtime-one',
+      runtimeCandidates: [
+        { id: 'runtime-one', label: 'OrbStack', available: true, isSelected: true },
+        { id: 'runtime-two', label: 'Rancher Desktop', available: true, isSelected: false },
+        { id: 'runtime-three', label: 'Podman', available: false, isSelected: false }
+      ]
+    },
+    versions: [
+      { id: 'v1.20', displayVersion: '1.20' }
+    ],
+    progress: {
+      opId: 'op-runtime-choice-submit',
+      type: 'runtime_setup',
+      status: 'completed',
+      detail: 'Runtime ready',
+      phase: 'ready',
+      progress: 100
+    }
+  };
+  window.__dmLastState = state;
+
+  const calls = [];
+  renderRuntimeGate(state, {
+    selectRuntimeEndpoint: async (id) => {
+      calls.push(`select:${id}`);
+      return true;
+    },
+    installOrSync: (tag) => {
+      calls.push(`install:${tag}`);
+    }
+  });
+
+  const selector = document.querySelector('#runtimeEndpointChoice');
+  assert.ok(selector);
+  assert.equal(selector.value, 'runtime-one');
+  assert.deepEqual(selector.querySelectorAll('option').map((option) => option.value), ['runtime-one', 'runtime-two']);
+
+  selector.value = 'runtime-two';
+  buttonByText(document, 'Setup Agent Zero').dispatchEvent(new MiniEvent('click'));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual(calls, ['select:runtime-two', 'install:latest']);
+  assert.equal(document.getElementById('runtimeSetupDialog'), null);
 });
 
 test('manual and relogin states stay blocked with recovery actions', () => {

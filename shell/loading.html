@@ -55,6 +55,38 @@
         body.is-opening-app .container {
             animation: splash-close 180ms cubic-bezier(0.2, 0, 0.18, 1) both;
         }
+        .update-panel {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            min-height: 38px;
+            margin: 2px 0 14px;
+            -webkit-app-region: no-drag;
+        }
+        .update-panel[hidden] {
+            display: none;
+        }
+        .update-button {
+            min-width: 104px;
+            height: 36px;
+            border: 0;
+            border-radius: 7px;
+            padding: 0 16px;
+            color: #08111f;
+            background: #8fd3ff;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .update-button.secondary {
+            color: #dbeafe;
+            background: rgba(255,255,255,0.12);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16);
+        }
+        .update-button:disabled {
+            cursor: default;
+            opacity: 0.65;
+        }
         .status {
             font-size: 14px;
             color: rgba(255,255,255,0.72);
@@ -77,26 +109,74 @@
         .error.visible {
             display: block;
         }
+        body.requires-action .status {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <img class="logo" src="assets/icon.png" alt="A0 Launcher" onerror="this.style.display='none'">
+        <div class="update-panel" id="launcherUpdatePanel" hidden>
+            <button class="update-button" id="launcherUpdateBtn" type="button">Update</button>
+            <button class="update-button secondary" id="launcherContinueBtn" type="button" disabled>Continue</button>
+        </div>
         <p class="status" id="status">Checking for updates...</p>
         <div class="spinner" id="spinner"></div>
         <p class="error" id="error"></p>
     </div>
     <script>
+        const statusEl = document.getElementById('status');
+        const spinnerEl = document.getElementById('spinner');
+        const errorEl = document.getElementById('error');
+        const updatePanel = document.getElementById('launcherUpdatePanel');
+        const updateBtn = document.getElementById('launcherUpdateBtn');
+        const continueBtn = document.getElementById('launcherContinueBtn');
+
         window.electronAPI?.onStatusUpdate?.((status) => {
-            document.getElementById('status').textContent = status;
+            statusEl.textContent = status;
         });
         window.electronAPI?.onError?.((error) => {
-            document.getElementById('spinner').style.display = 'none';
-            document.getElementById('error').textContent = error;
-            document.getElementById('error').classList.add('visible');
+            spinnerEl.style.display = 'none';
+            errorEl.textContent = error;
+            errorEl.classList.add('visible');
+            document.body.classList.add('requires-action');
+        });
+        window.electronAPI?.onLauncherUpdateAvailable?.((info) => {
+            const version = typeof info?.version === 'string' ? info.version : '';
+            updateBtn.textContent = version ? `Update ${version}` : 'Update';
+            updatePanel.hidden = false;
+            document.body.classList.add('requires-action');
+            if (info?.readyToContinue) {
+                spinnerEl.style.display = 'none';
+                continueBtn.disabled = false;
+            }
         });
         window.electronAPI?.onLauncherOpeningApp?.(() => {
             document.body.classList.add('is-opening-app');
+        });
+
+        updateBtn.addEventListener('click', async () => {
+            updateBtn.disabled = true;
+            statusEl.textContent = 'Opening update...';
+            const result = await window.electronAPI?.openLauncherUpdate?.();
+            if (!result?.ok) {
+                statusEl.textContent = result?.message || 'Could not open update.';
+                updateBtn.disabled = false;
+                return;
+            }
+            statusEl.textContent = 'Update opened in your browser.';
+            updateBtn.disabled = false;
+        });
+
+        continueBtn.addEventListener('click', async () => {
+            continueBtn.disabled = true;
+            statusEl.textContent = 'Opening launcher...';
+            const result = await window.electronAPI?.continueAfterLauncherUpdate?.();
+            if (!result?.ok) {
+                statusEl.textContent = result?.message || 'Could not continue.';
+                continueBtn.disabled = false;
+            }
         });
     </script>
 </body>

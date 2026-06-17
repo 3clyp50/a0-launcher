@@ -16,6 +16,8 @@ This scope owns:
   event forwarding.
 - `shell/preload.js`: safe renderer bridge exposed through `contextBridge`.
 - `shell/loading.html`: loading/error shell while content initializes.
+- `shell/launcher_update.js`: packaged launcher executable update detection,
+  version comparison, and platform release-asset selection.
 - `shell/assets/`: application icons and platform entitlements.
 - `shell/docker_manager/`: Agent Zero image and instance orchestration.
 - `shell/docker_adapter/`: Docker and registry abstraction layer.
@@ -51,10 +53,15 @@ This scope owns:
   environment variables may be gone.
 - Non-local content comes from the configured GitHub Release `content.json`
   asset and is unpacked under Electron `userData`.
+- Packaged launcher executable update prompts use that same latest launcher
+  release metadata to compare `app.getVersion()` with the release tag. A newer
+  executable may hold `shell/loading.html` with `Update` and `Continue`; the
+  update action opens the platform release asset or release page, while real
+  installation remains user-owned until a native self-updater is introduced.
 - Startup begins in a transparent, frameless splash window that shows only the
-  launcher icon. Before app content opens, `shell/main.js` sends the splash
-  exit event, replaces that splash with the normal framed app window, then
-  loads `a0app://content/index.html`.
+  launcher icon and title. Before app content opens, `shell/main.js` sends the
+  splash exit event, replaces that splash with the normal framed app window,
+  then loads `a0app://content/index.html`.
 - Release bundles may contain legacy string file entries or structured
   `{ encoding, data }` entries. The loader must preserve `utf8` text and decode
   `base64` binary assets while rejecting unsafe paths.
@@ -110,6 +117,7 @@ After shell changes, run:
 ```bash
 node --check shell/main.js
 node --check shell/preload.js
+node --test shell/launcher_update.test.js
 node --test shell/instance_tabs.test.js
 git diff --check
 ```

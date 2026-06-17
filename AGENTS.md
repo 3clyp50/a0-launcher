@@ -78,6 +78,11 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   the current release line so local `npm start` runs do not show stale metadata.
 - Packaged or non-local runs fetch `content.json` from the latest GitHub Release
   for the configured launcher repo and unpack it under Electron `userData`.
+- Packaged startup also compares Electron `app.getVersion()` with the latest
+  launcher GitHub Release tag. When a newer launcher executable is available,
+  the loading screen may hold with `Update` and `Continue` actions; `Update`
+  opens the matching release asset or release page and does not silently replace
+  the running app.
 - `A0_LAUNCHER_GITHUB_REPO` can override the launcher content repository.
 - `A0_LAUNCHER_USE_LOCAL_CONTENT=true` can use the current working directory as
   local content when it contains `app/index.html` and `package.json`.

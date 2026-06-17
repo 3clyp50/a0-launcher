@@ -13,6 +13,7 @@ const {
   makeTabKey,
   makeTabsSnapshot
 } = require('./instance_tabs');
+const { resolveLauncherUpdate } = require('./launcher_update');
 
 // Handle Squirrel.Windows startup events
 if (require('electron-squirrel-startup')) {
@@ -134,6 +135,8 @@ let instanceTabs = new Map();
 let activeInstanceTabId = '';
 let instanceTabBounds = null;
 let instanceTabSeq = 0;
+let launcherUpdateInfo = null;
+let launcherUpdateDismissed = false;
 let mainWindowMode = '';
 let mainWindowCreatedAt = 0;
 
@@ -207,6 +210,30 @@ function getRemoteContentTimestamp(latestRelease, contentAsset) {
     parseTimestamp(latestRelease?.published_at),
     parseTimestamp(contentAsset?.updated_at)
   );
+}
+
+function publishLauncherUpdateInfo(extra = {}) {
+  if (!launcherUpdateInfo || !mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('launcher-update-available', {
+    ...launcherUpdateInfo,
+    ...extra
+  });
+}
+
+function maybeCaptureLauncherUpdate(latestRelease) {
+  if (!app.isPackaged) return null;
+
+  const info = resolveLauncherUpdate(latestRelease, app.getVersion(), {
+    arch: process.arch,
+    githubRepo: GITHUB_REPO,
+    platform: process.platform
+  });
+  if (!info) return null;
+
+  launcherUpdateInfo = info;
+  publishLauncherUpdateInfo();
+  console.log(`Launcher update available: ${info.version}${info.assetName ? ` (${info.assetName})` : ''}`);
+  return info;
 }
 
 function resolveContentBundlePath(filePath) {
@@ -345,6 +372,8 @@ async function initializeAppContent() {
     return true;
   }
 
+  maybeCaptureLauncherUpdate(latestRelease);
+
   const contentAsset = latestRelease.assets?.find(
     asset => asset.name === CONTENT_ASSET_NAME
   );
@@ -433,6 +462,19 @@ async function loadAppContent() {
   }
 }
 
+async function continueToAppContent(options = {}) {
+  const delayMs = Number.isFinite(Number(options.delayMs)) ? Math.max(0, Number(options.delayMs)) : 0;
+  if (delayMs > 0) {
+    await wait(delayMs);
+  }
+  if (mainWindowMode === 'splash') {
+    const remainingEntryMs = SPLASH_ENTRY_ANIMATION_MS - Math.max(0, Date.now() - mainWindowCreatedAt);
+    if (remainingEntryMs > 0) await wait(remainingEntryMs);
+  }
+  await loadAppContent();
+  scheduleRuntimeSetupResume();
+}
+
 /**
  * Create the main browser window
  */
@@ -518,8 +560,6 @@ function createWindow(mode = 'splash') {
 
 async function playSplashExitAnimation(splashWindow) {
   if (!splashWindow || splashWindow.isDestroyed()) return;
-  const remainingEntryMs = SPLASH_ENTRY_ANIMATION_MS - Math.max(0, Date.now() - mainWindowCreatedAt);
-  if (remainingEntryMs > 0) await wait(remainingEntryMs);
   try {
     splashWindow.webContents.send('launcher-opening-app');
   } catch {
@@ -682,6 +722,39 @@ ipcMain.handle('get-shell-icon-data-url', () => {
     return image.resize({ width: 32, height: 32 }).toDataURL();
   } catch {
     return '';
+  }
+});
+
+ipcMain.handle('open-launcher-update', async () => {
+  try {
+    const url = launcherUpdateInfo?.url || launcherUpdateInfo?.releaseUrl || '';
+    if (!url) return { ok: false, reason: 'unavailable' };
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: 'error',
+      message: error && typeof error.message === 'string' ? error.message : 'Could not open launcher update.'
+    };
+  }
+});
+
+ipcMain.handle('continue-after-launcher-update', async () => {
+  try {
+    launcherUpdateDismissed = true;
+    const hasContent = await checkExistingContent();
+    if (!hasContent) {
+      return { ok: false, reason: 'no-content', message: 'No launcher content is available yet.' };
+    }
+    await continueToAppContent();
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: 'error',
+      message: error && typeof error.message === 'string' ? error.message : 'Could not continue.'
+    };
   }
 });
 
@@ -2292,10 +2365,13 @@ app.whenReady().then(async () => {
 
   if (success) {
     contentInitialized = true;
+    if (launcherUpdateInfo && !launcherUpdateDismissed) {
+      publishLauncherUpdateInfo({ readyToContinue: true });
+      sendStatus(`Launcher ${launcherUpdateInfo.version} is available.`);
+      return;
+    }
     // Small delay for visual feedback
-    await new Promise(resolve => setTimeout(resolve, 800));
-    await loadAppContent();
-    scheduleRuntimeSetupResume();
+    await continueToAppContent({ delayMs: 800 });
   }
 });
 
@@ -2316,15 +2392,24 @@ app.on('activate', async () => {
       // Verify content still exists before loading
       const hasContent = await checkExistingContent();
       if (hasContent) {
-        await loadAppContent();
+        if (launcherUpdateInfo && !launcherUpdateDismissed) {
+          publishLauncherUpdateInfo({ readyToContinue: true });
+          sendStatus(`Launcher ${launcherUpdateInfo.version} is available.`);
+        } else {
+          await continueToAppContent();
+        }
       } else {
         // Content was deleted - reinitialize
         contentInitialized = false;
         const success = await initializeAppContent();
         if (success) {
           contentInitialized = true;
-          await new Promise(resolve => setTimeout(resolve, 800));
-          await loadAppContent();
+          if (launcherUpdateInfo && !launcherUpdateDismissed) {
+            publishLauncherUpdateInfo({ readyToContinue: true });
+            sendStatus(`Launcher ${launcherUpdateInfo.version} is available.`);
+          } else {
+            await continueToAppContent({ delayMs: 800 });
+          }
         }
       }
     } else {
@@ -2334,8 +2419,12 @@ app.on('activate', async () => {
 
       if (success) {
         contentInitialized = true;
-        await new Promise(resolve => setTimeout(resolve, 800));
-        await loadAppContent();
+        if (launcherUpdateInfo && !launcherUpdateDismissed) {
+          publishLauncherUpdateInfo({ readyToContinue: true });
+          sendStatus(`Launcher ${launcherUpdateInfo.version} is available.`);
+        } else {
+          await continueToAppContent({ delayMs: 800 });
+        }
       }
     }
   }

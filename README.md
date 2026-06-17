@@ -41,6 +41,11 @@ Packaged and normal non-local runs load `content.json` from the latest configure
 GitHub Release and cache it under Electron `userData`. Local UI work should opt
 into local content explicitly.
 
+Packaged runs also compare the installed launcher version with the latest
+launcher GitHub Release. When a newer executable exists, the startup screen can
+offer an `Update` button that opens the matching release asset or release page,
+plus `Continue` for launching without updating.
+
 ## Requirements
 
 - Node.js 20+

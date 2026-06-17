@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Store listener references for cleanup
 let statusListener = null;
 let errorListener = null;
+let launcherUpdateListener = null;
 let launcherOpeningAppListener = null;
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -31,6 +32,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('update-error', errorListener);
       errorListener = null;
     }
+    if (launcherUpdateListener) {
+      ipcRenderer.removeListener('launcher-update-available', launcherUpdateListener);
+      launcherUpdateListener = null;
+    }
     if (launcherOpeningAppListener) {
       ipcRenderer.removeListener('launcher-opening-app', launcherOpeningAppListener);
       launcherOpeningAppListener = null;
@@ -39,13 +44,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getContentVersion: () => ipcRenderer.invoke('get-content-version'),
   getShellIconDataUrl: () => ipcRenderer.invoke('get-shell-icon-data-url'),
+  onLauncherUpdateAvailable: (callback) => {
+    if (launcherUpdateListener) {
+      ipcRenderer.removeListener('launcher-update-available', launcherUpdateListener);
+    }
+    launcherUpdateListener = (_event, info) => callback(info);
+    ipcRenderer.on('launcher-update-available', launcherUpdateListener);
+  },
   onLauncherOpeningApp: (callback) => {
     if (launcherOpeningAppListener) {
       ipcRenderer.removeListener('launcher-opening-app', launcherOpeningAppListener);
     }
     launcherOpeningAppListener = (_event) => callback();
     ipcRenderer.on('launcher-opening-app', launcherOpeningAppListener);
-  }
+  },
+  openLauncherUpdate: () => ipcRenderer.invoke('open-launcher-update'),
+  continueAfterLauncherUpdate: () => ipcRenderer.invoke('continue-after-launcher-update')
 });
 
 contextBridge.exposeInMainWorld('dockerManagerAPI', {

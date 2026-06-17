@@ -27,7 +27,7 @@ function bindNav() {
       const tab = btn.dataset.tab;
       setActiveTab(tab);
       applyTab(tab);
-      window.dispatchEvent(new CustomEvent("dm:nav", { detail: { tab } }));
+      window.dispatchEvent(new CustomEvent("dm:nav", { detail: { tab, userInitiated: true } }));
     });
   });
 }
@@ -36,7 +36,7 @@ function init() {
   bindNav();
   const tab = getActiveTab();
   applyTab(tab);
-  window.dispatchEvent(new CustomEvent("dm:nav", { detail: { tab } }));
+  window.dispatchEvent(new CustomEvent("dm:nav", { detail: { tab, userInitiated: false } }));
 }
 
 if (document.readyState === "loading") {

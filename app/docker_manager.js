@@ -233,6 +233,18 @@ async function refresh() {
   }
 }
 
+const NAV_REFRESH_TABS = new Set(["installs", "sessions"]);
+let navRefreshTimer = 0;
+
+function scheduleNavRefresh(tab) {
+  if (!NAV_REFRESH_TABS.has(tab)) return;
+  window.clearTimeout(navRefreshTimer);
+  navRefreshTimer = window.setTimeout(() => {
+    navRefreshTimer = 0;
+    refresh();
+  }, 0);
+}
+
 async function openInstanceUi(target = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.openInstanceUi !== "function") {
@@ -723,10 +735,19 @@ function initSubscriptions() {
   }
 }
 
+function initNavigationRefresh() {
+  window.addEventListener("dm:nav", (event) => {
+    const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+    if (!detail.userInitiated) return;
+    scheduleNavRefresh(detail.tab || "");
+  });
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   await loadMeta();
   emitState();
   initSubscriptions();
+  initNavigationRefresh();
   initInstanceTabBoundsObserver();
   if (typeof window.dockerManagerAPI?.getInstanceTabs === "function") {
     try {

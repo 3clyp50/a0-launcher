@@ -53,8 +53,10 @@ This scope owns:
 - If runtime state includes `setupActionLabel`, the runtime modal should use it
   for the primary setup button. Docker Desktop states may name Docker Desktop
   plainly; default setup buttons should stay Agent Zero-first.
-- Sidebar navigation publishes `dm:nav`; tab content activation remains owned by
-  the renderer coordinator, not individual tab content components.
+- Sidebar navigation publishes `dm:nav`; click-originated events include
+  `userInitiated` so the renderer coordinator can refresh data-heavy tabs.
+  Tab content activation remains owned by the renderer coordinator, not
+  individual tab content components.
 - Empty, loading, error, success, and disabled states must be explicit enough
   that the user is never left wondering whether Docker or the launcher is still
   working.

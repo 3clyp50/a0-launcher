@@ -317,6 +317,60 @@ function closeLogsPanel() {
   if (panel) panel.remove();
 }
 
+function logsCopyText(lines) {
+  return (Array.isArray(lines) ? lines : [])
+    .map((evt) => {
+      const stream = evt?.stream === "stderr" ? "err" : "out";
+      return `${stream} ${String(evt?.line || "")}`;
+    })
+    .join("\n");
+}
+
+function setLogsCopyState(backdrop, text, title = "No logs to copy") {
+  if (backdrop) backdrop._dmLogsCopyText = text || "";
+  const copyBtn = backdrop?.querySelector("[data-dm-logs-copy]");
+  if (!copyBtn) return;
+  const hasText = !!text;
+  copyBtn.disabled = !hasText;
+  copyBtn.title = hasText ? "Copy logs" : title;
+  copyBtn.setAttribute("aria-label", copyBtn.title);
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall through to the selection-based copy path.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-1000px";
+  textarea.style.top = "-1000px";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("copy failed");
+}
+
+async function copyLogs(backdrop) {
+  const text = backdrop?._dmLogsCopyText || "";
+  if (!text) return;
+  try {
+    await copyText(text);
+    window.toastFrontendSuccess?.("Logs copied.", "Agent Zero", 2, "dm-local-instance-logs");
+  } catch {
+    window.toastFrontendError?.("Unable to copy logs.", "Agent Zero");
+  }
+}
+
 function bindLogsPanelDismissal() {
   if (document.body.dataset.dmLogsPanelDismissalBound) return;
   document.body.dataset.dmLogsPanelDismissalBound = "1";
@@ -363,6 +417,16 @@ function ensureLogsPanel(c) {
 
   const actions = document.createElement("div");
   actions.className = "dm-logs-actions";
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "button";
+  copyBtn.type = "button";
+  copyBtn.disabled = true;
+  copyBtn.dataset.dmLogsCopy = "1";
+  copyBtn.title = "No logs to copy";
+  copyBtn.setAttribute("aria-label", "No logs to copy");
+  copyBtn.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">content_copy</span><span>Copy</span>';
+  copyBtn.addEventListener("click", () => copyLogs(backdrop));
+
   const refreshBtn = document.createElement("button");
   refreshBtn.className = "button";
   refreshBtn.type = "button";
@@ -378,6 +442,7 @@ function ensureLogsPanel(c) {
   closeBtn.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">close</span>';
   closeBtn.addEventListener("click", closeLogsPanel);
 
+  actions.appendChild(copyBtn);
   actions.appendChild(refreshBtn);
   actions.appendChild(closeBtn);
   header.appendChild(titleBlock);
@@ -396,12 +461,14 @@ function ensureLogsPanel(c) {
   panel.appendChild(body);
   backdrop.appendChild(panel);
   document.body.appendChild(backdrop);
+  setLogsCopyState(backdrop, "");
   return backdrop;
 }
 
 function renderLogsLoading(backdrop) {
   const body = backdrop?.querySelector(".dm-logs-body");
   const meta = backdrop?.querySelector(".dm-logs-meta");
+  setLogsCopyState(backdrop, "", "Logs are loading");
   if (meta) meta.textContent = "Loading recent logs...";
   if (!body) return;
   body.innerHTML = "";
@@ -414,6 +481,7 @@ function renderLogsLoading(backdrop) {
 function renderLogsError(backdrop, message) {
   const body = backdrop?.querySelector(".dm-logs-body");
   const meta = backdrop?.querySelector(".dm-logs-meta");
+  setLogsCopyState(backdrop, "", "No logs to copy");
   if (meta) meta.textContent = "";
   if (!body) return;
   body.innerHTML = "";
@@ -434,6 +502,8 @@ function renderLogsResult(backdrop, result) {
   const body = backdrop?.querySelector(".dm-logs-body");
   const meta = backdrop?.querySelector(".dm-logs-meta");
   const lines = Array.isArray(result?.lines) ? result.lines : [];
+  const copy = logsCopyText(lines);
+  setLogsCopyState(backdrop, copy, "No logs to copy");
 
   if (meta) {
     const parts = [`${lines.length} line${lines.length === 1 ? "" : "s"}`];

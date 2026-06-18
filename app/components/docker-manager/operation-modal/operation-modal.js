@@ -34,6 +34,7 @@ function operationHeadline(progress = null) {
     start: { running: "Starting Agent Zero", failed: "Start failed", canceled: "Start canceled" },
     stop: { running: "Stopping Agent Zero", failed: "Stop failed", canceled: "Stop canceled" },
     delete_instance: { running: "Deleting Agent Zero instance", failed: "Delete failed", canceled: "Delete canceled" },
+    clone_instance: { running: "Cloning instance", failed: "Clone failed", canceled: "Clone canceled" },
     developer_run: { running: "Running developer image", failed: "Developer image failed", canceled: "Developer image canceled" },
     operation: { running: "Working on Agent Zero", failed: "Operation failed", canceled: "Operation canceled" }
   };
@@ -41,6 +42,8 @@ function operationHeadline(progress = null) {
 
   if (status === "failed") return entry.failed;
   if (status === "canceled") return entry.canceled;
+  const explicitHeadline = asText(progress?.headline);
+  if (explicitHeadline) return explicitHeadline;
   return entry.running;
 }
 

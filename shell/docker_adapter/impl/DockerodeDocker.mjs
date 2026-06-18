@@ -32,6 +32,19 @@ function tagFromRef(imageRef) {
   return '';
 }
 
+function splitTaggedImageRef(imageRef) {
+  const ref = (imageRef || '').trim();
+  const lastSlash = ref.lastIndexOf('/');
+  const lastColon = ref.lastIndexOf(':');
+  if (!ref || lastColon <= lastSlash || lastColon === ref.length - 1) {
+    throw makeDockerInterfaceError('INVALID_IMAGE', 'imageRef must include a repository and tag');
+  }
+  return {
+    repo: ref.slice(0, lastColon),
+    tag: ref.slice(lastColon + 1)
+  };
+}
+
 function bestUiPortFromList(ports) {
   const candidates = [];
   for (const port of Array.isArray(ports) ? ports : []) {
@@ -632,10 +645,8 @@ export class DockerodeDocker extends DockerInterface {
         const labels = c?.Labels && typeof c.Labels === 'object' ? c.Labels : {};
         const ports = Array.isArray(c?.Ports) ? c.Ports : [];
         const isRepoImage = image.startsWith(`${repo}:`);
-        const isDeveloperContainer =
-          labels['a0.launcher.managed'] === 'true' &&
-          labels['a0.launcher.role'] === 'developer';
-        if (!isRepoImage && !isDeveloperContainer) continue;
+        const isManagedContainer = labels['a0.launcher.managed'] === 'true';
+        if (!isRepoImage && !isManagedContainer) continue;
 
         const uiPort = bestUiPortFromList(ports);
         const tag = isRepoImage
@@ -658,7 +669,7 @@ export class DockerodeDocker extends DockerInterface {
             type: typeof p?.Type === 'string' ? p.Type : null,
             ip: typeof p?.IP === 'string' ? p.IP : null
           })),
-          uiUrl: uiPort ? `http://127.0.0.1:${Number(uiPort.PublicPort)}/` : null
+          uiUrl: uiPort ? `http://127.0.0.1:${uiPort.publicPort}/` : null
         });
       }
 
@@ -747,6 +758,36 @@ export class DockerodeDocker extends DockerInterface {
       return await Promise.resolve(c.inspect());
     } catch (error) {
       throw normalizeDockerError(error, { op: 'inspectContainer', containerId: id, env: this.#envSummary() });
+    }
+  }
+
+  async commitContainer(containerId, imageRef, options = {}) {
+    const id = (containerId || '').trim();
+    if (!id) throw makeDockerInterfaceError('INVALID_INPUT', 'containerId is required');
+
+    const ref = (imageRef || '').trim();
+    const { repo, tag } = splitTaggedImageRef(ref);
+
+    try {
+      const c = this.docker.getContainer(id);
+      const result = await new Promise((resolve, reject) => {
+        c.commit(
+          {
+            repo,
+            tag,
+            pause: options?.pause !== false,
+            comment: typeof options?.comment === 'string' ? options.comment : '',
+            author: typeof options?.author === 'string' ? options.author : ''
+          },
+          (err, image) => (err ? reject(err) : resolve(image))
+        );
+      });
+      return {
+        imageRef: ref,
+        imageId: typeof result?.Id === 'string' ? result.Id : null
+      };
+    } catch (error) {
+      throw normalizeDockerError(error, { op: 'commitContainer', containerId: id, imageRef: ref, env: this.#envSummary() });
     }
   }
 

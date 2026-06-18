@@ -102,6 +102,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   installOrSync: (tag) => ipcRenderer.invoke('docker-manager:install', { tag }),
   startActive: () => ipcRenderer.invoke('docker-manager:startActive'),
   startLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:startLocalInstance', { containerId }),
+  cloneLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:cloneLocalInstance', { containerId }),
   stopActive: () => ipcRenderer.invoke('docker-manager:stopActive'),
   stopLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:stopLocalInstance', { containerId }),
   setRetentionPolicy: (keepCount) => ipcRenderer.invoke('docker-manager:setRetentionPolicy', { keepCount }),
@@ -151,6 +152,13 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     ipcRenderer.invoke('docker-manager:activateRetainedInstance', { containerId, dataLossAck }),
   cancel: (opId) => ipcRenderer.invoke('docker-manager:cancel', { opId }),
   getInventory: () => ipcRenderer.invoke('docker-manager:getInventory'),
+  getLocalInstanceLogs: (containerId, options = {}) => {
+    const opts = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:getLocalInstanceLogs', {
+      containerId,
+      maxLines: opts.maxLines
+    });
+  },
   removeVolume: (volumeName) => ipcRenderer.invoke('docker-manager:removeVolume', { volumeName }),
   pruneVolumes: () => ipcRenderer.invoke('docker-manager:pruneVolumes'),
   installDocker: () => ipcRenderer.invoke('docker-manager:installDocker'),

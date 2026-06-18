@@ -14,8 +14,9 @@ for the renderer.
 This scope owns:
 
 - `index.js`: Docker Manager service, state assembly, install/sync/start/stop,
-  activation, rollback, retained-instance, remote-instance, port, storage,
-  developer custom-image runs, runtime setup, and progress operations.
+  activation, rollback, retained-instance, remote-instance, per-container clone
+  and log inspection, port, storage, developer custom-image runs, runtime setup,
+  and progress operations.
 - `state_store.js`: persisted launcher state under Electron `userData`.
 - `releases_client.js`: GitHub release discovery for Agent Zero backend
   versions.
@@ -97,10 +98,15 @@ This scope owns:
   Linux Engine.
 - Progress messages should be user-oriented: `Starting selected version`, not
   raw Docker implementation chatter.
-- Per-container start/stop/delete actions from the Instances card menu still belong
-  in this product layer. They must target the requested container id, return an
-  operation id, refresh state afterward, and keep storage-volume deletion
-  separate from container deletion.
+- Per-container start/stop/delete/clone actions from the Instances card menu
+  still belong in this product layer. They must target the requested container
+  id, return an operation id, refresh state afterward, and keep storage-volume
+  deletion separate from container deletion.
+- Per-container log inspection belongs in this product layer as a bounded
+  read-only snapshot. It may not expose generic Docker commands to the renderer.
+- Cloning an instance should snapshot the source container, create a new
+  launcher-managed container from that snapshot, and remap published ports to
+  Docker-assigned open host ports.
 - Cancellation should be best-effort and explicit about whether the active Docker
   operation can actually stop.
 - Destructive flows should require renderer acknowledgement when the active

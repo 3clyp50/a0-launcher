@@ -2515,6 +2515,32 @@ function sanitizeDockerManagerState(state) {
   return outState;
 }
 
+function sanitizeContainerLogsResult(result) {
+  if (!isPlainObject(result)) return { lines: [] };
+  const out = {
+    containerId: typeof result.containerId === 'string' ? result.containerId : '',
+    containerName: typeof result.containerName === 'string' ? result.containerName : '',
+    instanceName: typeof result.instanceName === 'string' ? result.instanceName : '',
+    fetchedAt: typeof result.fetchedAt === 'string' ? result.fetchedAt : '',
+    maxLines: Number.isFinite(Number(result.maxLines)) ? Math.max(0, Math.floor(Number(result.maxLines))) : 0,
+    aborted: result.aborted === true,
+    lines: []
+  };
+
+  for (const evt of Array.isArray(result.lines) ? result.lines : []) {
+    if (!isPlainObject(evt)) continue;
+    const stream = evt.stream === 'stderr' ? 'stderr' : 'stdout';
+    const line = typeof evt.line === 'string' ? evt.line.slice(0, 12_000) : '';
+    out.lines.push({
+      stream,
+      line,
+      partial: evt.partial === true
+    });
+  }
+
+  return out;
+}
+
 function sanitizeDockerManagerProgress(progress) {
   if (!isPlainObject(progress)) return null;
   const out = {};
@@ -2660,6 +2686,20 @@ ipcMain.handle('docker-manager:startLocalInstance', async (_event, body) => {
     const accepted = await dockerManager.startLocalInstance(containerId);
     if (!accepted || typeof accepted.opId !== 'string') {
       return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Start did not return an opId' });
+    }
+    return { opId: accepted.opId };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:cloneLocalInstance', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const accepted = await dockerManager.cloneLocalInstance(containerId);
+    if (!accepted || typeof accepted.opId !== 'string') {
+      return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Clone did not return an opId' });
     }
     return { opId: accepted.opId };
   } catch (error) {
@@ -2848,6 +2888,18 @@ ipcMain.handle('docker-manager:cancel', async (_event, body) => {
 ipcMain.handle('docker-manager:getInventory', async () => {
   try {
     return await dockerManager.getDockerInventory();
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:getLocalInstanceLogs', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const maxLines = body.maxLines;
+    const result = await dockerManager.getLocalInstanceLogs(containerId, { maxLines });
+    return sanitizeContainerLogsResult(result);
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

@@ -271,6 +271,25 @@ test('running operation without cancel support shows no cancel action', () => {
   assert.equal(model.secondary, null);
 });
 
+test('running clone operation shows source-specific headline', () => {
+  installDom();
+  const state = {
+    progress: {
+      opId: 'op-clone',
+      type: 'clone_instance',
+      status: 'running',
+      headline: 'Cloning agent-zero-latest',
+      message: 'Snapshotting container',
+      canCancel: false
+    }
+  };
+
+  const model = normalizedOperationDialog(state);
+  assert.equal(model.headline, 'Cloning agent-zero-latest');
+  assert.equal(model.primary?.label, 'Cloning agent-zero-latest');
+  assert.equal(model.detail, 'Snapshotting container');
+});
+
 test('rate-limited install failure shows docker login and retry actions in modal', () => {
   const document = installDom();
   const state = {

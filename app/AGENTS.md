@@ -43,9 +43,11 @@ This scope owns:
 - Long-running non-runtime Docker operations should use the same centered modal
   affordance rather than a top-of-page status strip. Keep the header quiet once
   the modal flow exists.
-- A0 CLI launch belongs to each local instance card. Pass the card's local UI
-  URL through the shell-owned terminal action; do not add a global footer or
-  ambiguous active-instance CLI button.
+- A0 CLI launch and log inspection controls belong to each local instance card.
+  Clone belongs to local containers and may appear on a saved remote card only
+  when that card points at a loopback URL backed by a discovered local
+  container. Pass the card's local UI URL through the shell-owned terminal
+  action; do not add a global footer or ambiguous active-instance CLI button.
 - The compact header shows `Launcher v...` from Electron `app.getVersion()`.
   Shell content metadata may remain in renderer state for diagnostics, but it
   should not reintroduce `Content:` clutter into the header.

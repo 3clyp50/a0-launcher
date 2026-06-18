@@ -16,11 +16,15 @@ const { runtimeSetupProgressPatch } = require('./progress');
 
 const DEFAULT_IMAGE_REPO = 'agent0ai/agent-zero';
 const DEFAULT_GITHUB_REPO = 'agent0ai/agent-zero';
+const CLONE_IMAGE_REPO = 'a0-launcher-clone';
 
 const IMAGE_REPO_ENV_VAR = 'A0_BACKEND_IMAGE_REPO';
 const GITHUB_REPO_ENV_VAR = 'A0_BACKEND_GITHUB_REPO';
 const UI_READY_TIMEOUT_MS = 5 * 60_000;
 const UI_READY_ATTEMPT_TIMEOUT_MS = 2_000;
+const CONTAINER_LOG_DEFAULT_LINES = 400;
+const CONTAINER_LOG_MAX_LINES = 1500;
+const CONTAINER_LOG_MAX_CHARS = 12_000;
 const RUNTIME_SETUP_RESUME_ARG = '--a0-resume-runtime-setup';
 const RUNTIME_SETUP_RUNONCE_VALUE = 'AgentZeroLauncherResumeRuntimeSetup';
 const execFileAsync = promisify(execFile);
@@ -272,6 +276,10 @@ function assertCustomImageSpec(options = {}) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function isoToMs(value) {
@@ -1333,6 +1341,197 @@ function normalizeCustomImageOptions(options = {}) {
   };
 }
 
+function clampContainerLogLines(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return CONTAINER_LOG_DEFAULT_LINES;
+  return Math.max(1, Math.min(CONTAINER_LOG_MAX_LINES, Math.floor(n)));
+}
+
+function normalizeLogLineText(value) {
+  const raw = String(value ?? '');
+  const cleaned = raw.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+  if (cleaned.length <= CONTAINER_LOG_MAX_CHARS) return cleaned;
+  return `${cleaned.slice(0, CONTAINER_LOG_MAX_CHARS)}...`;
+}
+
+function sanitizeContainerLogEvent(evt) {
+  const stream = evt?.stream === 'stderr' ? 'stderr' : 'stdout';
+  const out = {
+    stream,
+    line: normalizeLogLineText(evt?.line)
+  };
+  if (evt?.partial === true) out.partial = true;
+  return out;
+}
+
+function containerNameFromInspect(inspect) {
+  const raw = typeof inspect?.Name === 'string' ? inspect.Name.replace(/^\//, '') : '';
+  return raw || '';
+}
+
+function sourceInstanceNameFromInspect(inspect, fallback = 'instance') {
+  const labels = isPlainObject(inspect?.Config?.Labels) ? inspect.Config.Labels : {};
+  const fromLabel = typeof labels['a0.launcher.instanceName'] === 'string' ? labels['a0.launcher.instanceName'] : '';
+  const fromName = containerNameFromInspect(inspect);
+  const fromHost = typeof inspect?.Config?.Hostname === 'string' ? inspect.Config.Hostname : '';
+  const raw = (fromLabel || fromName || fromHost || fallback).trim();
+  return raw.replace(/\s+/g, ' ').slice(0, 80) || fallback;
+}
+
+function cloneFriendlyInstanceName(sourceName) {
+  const base = String(sourceName || '').trim().replace(/\s+/g, ' ');
+  const label = base ? `${base} clone` : 'Cloned instance';
+  return label.slice(0, 80);
+}
+
+function cloneOperationHeadline(sourceName) {
+  const name = String(sourceName || '').trim().replace(/\s+/g, ' ');
+  return `Cloning ${name || 'instance'}`;
+}
+
+function cloneContainerName(sourceName) {
+  const suffix = Date.now().toString(36);
+  const base = sanitizeInstanceName(`${sourceName || 'instance'}-clone`, 'agent-zero-clone').slice(0, 48);
+  return sanitizeInstanceName(`${base}-${suffix}`, `agent-zero-clone-${suffix}`);
+}
+
+function cloneImageRefForContainer(containerId) {
+  const suffix = Date.now().toString(36);
+  const shortId = String(containerId || '').slice(0, 12).toLowerCase() || 'container';
+  return `${CLONE_IMAGE_REPO}:clone-${suffix}-${shortId}`;
+}
+
+function normalizeDockerLabels(labels) {
+  const out = {};
+  for (const [key, value] of Object.entries(isPlainObject(labels) ? labels : {})) {
+    if (typeof key !== 'string' || !key) continue;
+    if (value === null || value === undefined) continue;
+    out[key] = String(value);
+  }
+  return out;
+}
+
+function clonePortBindings(portBindings) {
+  const out = {};
+  const source = isPlainObject(portBindings) ? portBindings : {};
+  for (const [key, bindings] of Object.entries(source)) {
+    if (!/^\d+\/(?:tcp|udp)$/i.test(key)) continue;
+    const list = Array.isArray(bindings) && bindings.length ? bindings : [{ HostIp: '127.0.0.1' }];
+    out[key] = list.map((binding) => ({
+      HostIp: typeof binding?.HostIp === 'string' && binding.HostIp ? binding.HostIp : '127.0.0.1',
+      HostPort: '0'
+    }));
+  }
+  return out;
+}
+
+function cloneExposedPorts(configExposedPorts, portBindings) {
+  const out = {};
+  const exposed = isPlainObject(configExposedPorts) ? configExposedPorts : {};
+  for (const key of Object.keys(exposed)) {
+    if (/^\d+\/(?:tcp|udp)$/i.test(key)) out[key] = {};
+  }
+  for (const key of Object.keys(isPlainObject(portBindings) ? portBindings : {})) {
+    if (/^\d+\/(?:tcp|udp)$/i.test(key)) out[key] = {};
+  }
+  return out;
+}
+
+function portMapLabelFromBindings(portBindings) {
+  const parts = [];
+  for (const key of Object.keys(isPlainObject(portBindings) ? portBindings : {})) {
+    const containerPort = String(key || '').split('/')[0];
+    if (containerPort) parts.push(`0:${containerPort}`);
+  }
+  return parts.join(',');
+}
+
+function setIfPresent(target, key, value) {
+  if (value === null || value === undefined || value === '') return;
+  if (Array.isArray(value) && !value.length) return;
+  if (isPlainObject(value) && !Object.keys(value).length) return;
+  target[key] = value;
+}
+
+function buildCloneCreateOptions(inspect, containerId, cloneImageRef) {
+  const config = isPlainObject(inspect?.Config) ? inspect.Config : {};
+  const host = isPlainObject(inspect?.HostConfig) ? inspect.HostConfig : {};
+  const sourceLabels = normalizeDockerLabels(config.Labels);
+  const sourceName = sourceInstanceNameFromInspect(inspect, String(containerId || '').slice(0, 12) || 'instance');
+  const sourceImage = typeof config.Image === 'string' ? config.Image : '';
+  const versionTag = sourceLabels['a0.launcher.versionTag'] || splitImageAndTag(sourceImage, '').tag || '';
+
+  const portBindings = clonePortBindings(host.PortBindings);
+  const exposedPorts = cloneExposedPorts(config.ExposedPorts, portBindings);
+  const portMapLabel = portMapLabelFromBindings(portBindings);
+
+  const labels = {
+    ...sourceLabels,
+    'a0.launcher.managed': 'true',
+    'a0.launcher.role': 'clone',
+    'a0.launcher.instanceName': cloneFriendlyInstanceName(sourceName),
+    'a0.launcher.cloneSourceContainerId': String(containerId || ''),
+    'a0.launcher.cloneSourceName': containerNameFromInspect(inspect) || sourceName,
+    'a0.launcher.cloneCreatedAt': nowIso(),
+    'a0.launcher.cloneImageRef': cloneImageRef
+  };
+  if (versionTag) labels['a0.launcher.versionTag'] = versionTag;
+  if (sourceImage) labels['a0.launcher.imageRef'] = sourceImage;
+  if (portMapLabel) labels['a0.launcher.port.map'] = portMapLabel;
+  labels['a0.launcher.port.ui'] = Object.prototype.hasOwnProperty.call(portBindings, '80/tcp') ? '0' : '';
+  labels['a0.launcher.port.ssh'] = Object.prototype.hasOwnProperty.call(portBindings, '22/tcp') ? '0' : '';
+
+  const hostConfig = {};
+  if (Object.keys(portBindings).length) hostConfig.PortBindings = portBindings;
+  if (Array.isArray(host.Binds) && host.Binds.length) hostConfig.Binds = [...host.Binds];
+  if (Array.isArray(host.Mounts) && host.Mounts.length) hostConfig.Mounts = host.Mounts.map((item) => ({ ...item }));
+  if (Array.isArray(host.ExtraHosts) && host.ExtraHosts.length) hostConfig.ExtraHosts = [...host.ExtraHosts];
+  if (Array.isArray(host.Dns) && host.Dns.length) hostConfig.Dns = [...host.Dns];
+  if (Array.isArray(host.DnsOptions) && host.DnsOptions.length) hostConfig.DnsOptions = [...host.DnsOptions];
+  if (Array.isArray(host.DnsSearch) && host.DnsSearch.length) hostConfig.DnsSearch = [...host.DnsSearch];
+  if (Array.isArray(host.CapAdd) && host.CapAdd.length) hostConfig.CapAdd = [...host.CapAdd];
+  if (Array.isArray(host.CapDrop) && host.CapDrop.length) hostConfig.CapDrop = [...host.CapDrop];
+  if (Array.isArray(host.SecurityOpt) && host.SecurityOpt.length) hostConfig.SecurityOpt = [...host.SecurityOpt];
+  if (Array.isArray(host.GroupAdd) && host.GroupAdd.length) hostConfig.GroupAdd = [...host.GroupAdd];
+  if (Array.isArray(host.Devices) && host.Devices.length) hostConfig.Devices = host.Devices.map((item) => ({ ...item }));
+  if (Array.isArray(host.DeviceRequests) && host.DeviceRequests.length) hostConfig.DeviceRequests = host.DeviceRequests.map((item) => ({ ...item }));
+  if (Number.isFinite(Number(host.ShmSize)) && Number(host.ShmSize) > 0) hostConfig.ShmSize = Number(host.ShmSize);
+  if (typeof host.IpcMode === 'string' && host.IpcMode) hostConfig.IpcMode = host.IpcMode;
+  if (typeof host.PidMode === 'string' && host.PidMode) hostConfig.PidMode = host.PidMode;
+  if (host.Privileged === true) hostConfig.Privileged = true;
+  if (isPlainObject(host.RestartPolicy) && Object.keys(host.RestartPolicy).length) hostConfig.RestartPolicy = { ...host.RestartPolicy };
+  if (isPlainObject(host.LogConfig) && Object.keys(host.LogConfig).length) hostConfig.LogConfig = { ...host.LogConfig };
+  if (typeof host.NetworkMode === 'string' && host.NetworkMode && !/^(host|container:)/i.test(host.NetworkMode)) {
+    hostConfig.NetworkMode = host.NetworkMode;
+  }
+
+  const createOptions = {
+    name: cloneContainerName(sourceName),
+    Image: cloneImageRef,
+    Labels: labels,
+    HostConfig: hostConfig
+  };
+
+  setIfPresent(createOptions, 'Env', Array.isArray(config.Env) ? [...config.Env] : null);
+  setIfPresent(createOptions, 'Cmd', Array.isArray(config.Cmd) ? [...config.Cmd] : config.Cmd);
+  setIfPresent(createOptions, 'Entrypoint', Array.isArray(config.Entrypoint) ? [...config.Entrypoint] : config.Entrypoint);
+  setIfPresent(createOptions, 'WorkingDir', typeof config.WorkingDir === 'string' ? config.WorkingDir : '');
+  setIfPresent(createOptions, 'User', typeof config.User === 'string' ? config.User : '');
+  setIfPresent(createOptions, 'ExposedPorts', exposedPorts);
+  setIfPresent(createOptions, 'Volumes', isPlainObject(config.Volumes) ? { ...config.Volumes } : null);
+  setIfPresent(createOptions, 'Healthcheck', isPlainObject(config.Healthcheck) ? { ...config.Healthcheck } : null);
+  if (typeof config.Tty === 'boolean') createOptions.Tty = config.Tty;
+  if (typeof config.OpenStdin === 'boolean') createOptions.OpenStdin = config.OpenStdin;
+  if (typeof config.StdinOnce === 'boolean') createOptions.StdinOnce = config.StdinOnce;
+  if (typeof config.AttachStdin === 'boolean') createOptions.AttachStdin = config.AttachStdin;
+  if (typeof config.AttachStdout === 'boolean') createOptions.AttachStdout = config.AttachStdout;
+  if (typeof config.AttachStderr === 'boolean') createOptions.AttachStderr = config.AttachStderr;
+  if (typeof config.StopSignal === 'string' && config.StopSignal) createOptions.StopSignal = config.StopSignal;
+  if (Number.isFinite(Number(config.StopTimeout))) createOptions.StopTimeout = Math.max(0, Math.floor(Number(config.StopTimeout)));
+
+  return createOptions;
+}
+
 function effectiveRetentionCount(policy) {
   const keepCount = Number.isFinite(Number(policy?.keepCount)) ? Number(policy.keepCount) : 1;
   // Safety baseline: keep at least one previous instance for rollback.
@@ -1924,6 +2123,90 @@ async function startLocalInstance(containerId) {
   return { opId };
 }
 
+async function cloneLocalInstance(containerId) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+
+  requireNoRunningOperation();
+  const opId = beginOperation('clone_instance', null);
+
+  (async () => {
+    /** @type {any} */
+    let docker = null;
+    let cloneImageRef = '';
+    let createdContainerId = '';
+    let cloneHeadline = cloneOperationHeadline('');
+
+    try {
+      updateOperationProgress({ headline: cloneHeadline, message: 'Preparing clone', progress: null });
+      docker = await getManagedDocker(imageRepo);
+      const containers = await docker.listContainers(imageRepo);
+      const target = (containers || []).find((c) => c && c.containerId === id) || null;
+
+      if (!target || !target.containerId) {
+        const err = new Error('Instance not found');
+        err.code = 'INSTANCE_NOT_FOUND';
+        throw err;
+      }
+
+      const targetName = target.instanceName || target.containerName || String(target.containerId || '').slice(0, 12) || 'instance';
+      cloneHeadline = cloneOperationHeadline(targetName);
+      updateOperationProgress({ headline: cloneHeadline, message: 'Preparing clone', progress: null });
+      const inspect = await docker.inspectContainer(target.containerId);
+      cloneHeadline = cloneOperationHeadline(sourceInstanceNameFromInspect(inspect, targetName));
+      cloneImageRef = cloneImageRefForContainer(target.containerId);
+
+      updateOperationProgress({ headline: cloneHeadline, message: 'Snapshotting container', progress: null });
+      await docker.commitContainer(target.containerId, cloneImageRef, {
+        pause: true,
+        comment: 'A0 Launcher instance clone',
+        author: 'A0 Launcher'
+      });
+
+      updateOperationProgress({ headline: cloneHeadline, message: 'Creating clone on open ports', progress: null });
+      const createOptions = buildCloneCreateOptions(inspect, target.containerId, cloneImageRef);
+      const created = await docker.createContainer(createOptions);
+      createdContainerId = created?.containerId || '';
+      if (!createdContainerId) {
+        const err = new Error('Failed to create container');
+        err.code = 'CREATE_FAILED';
+        throw err;
+      }
+
+      updateOperationProgress({ headline: cloneHeadline, message: 'Starting clone', progress: null });
+      await docker.startContainer(createdContainerId);
+
+      finishOperation('completed', null);
+      updateOperationProgress({ headline: cloneHeadline, progress: 100, message: 'Cloned' });
+    } catch (error) {
+      logDockerManagerError('cloneLocalInstance', error, { opId, containerId: id, cloneImageRef });
+      try {
+        if (docker && createdContainerId) {
+          await docker.deleteContainer(createdContainerId, { force: true });
+        }
+      } catch {
+        // ignore cleanup failure
+      }
+      try {
+        if (docker && cloneImageRef) {
+          await docker.removeLocalImage(cloneImageRef);
+        }
+      } catch {
+        // ignore cleanup failure
+      }
+
+      const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Clone failed';
+      finishOperation('failed', message, error?.code || null);
+    } finally {
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+    }
+  })().catch((error) => {
+    logDockerManagerError('cloneLocalInstance.unhandled', error, { opId, containerId: id });
+  });
+
+  return { opId };
+}
+
 async function startActiveInstance() {
   const imageRepo = getBackendImageRepo();
 
@@ -2047,7 +2330,14 @@ async function deleteLocalInstance(containerId) {
         throw err;
       }
 
+      const cloneImageRef = typeof target?.labels?.['a0.launcher.cloneImageRef'] === 'string'
+        ? target.labels['a0.launcher.cloneImageRef']
+        : '';
+
       await docker.deleteContainer(target.containerId, { force: true });
+      if (cloneImageRef && cloneImageRef.startsWith(`${CLONE_IMAGE_REPO}:`)) {
+        await docker.removeLocalImage(cloneImageRef).catch(() => {});
+      }
       finishOperation('completed', null);
       updateOperationProgress({ progress: 100, message: 'Deleted' });
     } catch (error) {
@@ -2591,6 +2881,38 @@ async function getDockerInventory() {
   };
 }
 
+async function getLocalInstanceLogs(containerId, options = {}) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+  const maxLines = clampContainerLogLines(options?.maxLines);
+  const docker = await getManagedDocker(imageRepo);
+  const containers = await docker.listContainers(imageRepo);
+  const target = (containers || []).find((c) => c && c.containerId === id) || null;
+
+  if (!target || !target.containerId) {
+    const err = new Error('Instance not found');
+    err.code = 'INSTANCE_NOT_FOUND';
+    throw err;
+  }
+
+  const result = await docker.readContainerLogs(id, {
+    maxLines,
+    timestamps: true,
+    includeStderr: true
+  });
+  const lines = Array.isArray(result?.lines) ? result.lines.map(sanitizeContainerLogEvent) : [];
+
+  return {
+    containerId: id,
+    containerName: target.containerName || '',
+    instanceName: target.instanceName || target.containerName || id.slice(0, 12),
+    fetchedAt: nowIso(),
+    maxLines,
+    aborted: !!result?.aborted,
+    lines
+  };
+}
+
 async function removeVolume(volumeName) {
   const name = (volumeName || '').trim();
   if (!name) {
@@ -2651,6 +2973,7 @@ module.exports = {
   installOrSync,
   startActiveInstance,
   startLocalInstance,
+  cloneLocalInstance,
   stopActiveInstance,
   stopLocalInstance,
   setRetentionPolicy,
@@ -2669,6 +2992,7 @@ module.exports = {
   runCustomImage,
   cancelOperation,
   getDockerInventory,
+  getLocalInstanceLogs,
   removeVolume,
   pruneVolumes,
   getContainerUiUrl,

@@ -26,8 +26,8 @@ This scope owns:
 - `official-versions/`: install/version cards, activation dialog, model default
   helpers, port/env overrides, data-loss acknowledgement, and update/switch
   actions.
-- `local-testing/`: local containers, per-instance action menus, remote
-  instance CRUD, and instance opening.
+- `local-testing/`: local containers, per-instance action menus, clone/log
+  inspection controls, remote instance CRUD, and instance opening.
 - `advanced/`: developer-mode custom image runner, Docker Compose composer,
   diagnostics, and storage-volume maintenance.
 - `settings/`: port preferences and retention policy controls.
@@ -100,9 +100,16 @@ This scope owns:
 - The Instances tab owns both local Docker containers and saved remote
   instances. Visible copy must say `Instances`, not `Sessions`.
 - Local instance cards keep `Open UI` or `Start` as the visible primary action.
-  Secondary management actions such as `Open A0 CLI`, `Stop`, and `Delete`
-  belong in the card overflow menu so they always apply to the specific instance
-  shown.
+  Secondary management and inspection actions such as `See logs`, `Clone`,
+  `Open A0 CLI`, `Stop`, and `Delete` belong in the card overflow menu so they
+  always apply to the specific instance shown.
+- Saved remote URL-only instance cards must not expose Docker mutation actions.
+  A saved remote card may show `Clone` only when its URL is loopback
+  (`localhost`, `127.0.0.1`, or IPv6 loopback) and the port matches a discovered
+  local Docker container; the action must clone that local container.
+- The local instance log viewer is a bottom popover panel driven by bounded
+  Docker Manager log snapshots. It must stay read-only and must not expose a
+  generic Docker command surface.
 - Retained instances are rollback candidates; storage-volume cleanup belongs in
   Advanced and must remain clearly separate from instance start/stop actions.
 - Storage UI must say `Storage volumes` when referring to Docker volumes.

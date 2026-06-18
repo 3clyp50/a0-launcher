@@ -479,6 +479,17 @@ async function startLocalInstance(containerId) {
   );
 }
 
+async function cloneLocalInstance(containerId) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.cloneLocalInstance !== "function") return false;
+  const res = await runDockerOperation(
+    "Clone",
+    () => api.cloneLocalInstance(containerId || ""),
+    "Clone requested."
+  );
+  return !isErrorResponse(res);
+}
+
 async function deleteLocalInstance(containerId) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.deleteLocalInstance !== "function") return false;
@@ -488,6 +499,22 @@ async function deleteLocalInstance(containerId) {
     "Instance delete requested."
   );
   return !isErrorResponse(res);
+}
+
+async function getLocalInstanceLogs(containerId, options = {}) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.getLocalInstanceLogs !== "function") return null;
+  try {
+    const res = await api.getLocalInstanceLogs(containerId || "", options && typeof options === "object" ? options : {});
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return null;
+    }
+    return res && typeof res === "object" ? res : null;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to load logs");
+    return null;
+  }
 }
 
 async function activateTag(tag, options = {}) {
@@ -671,9 +698,11 @@ window.dockerManagerActions = {
   installOrSync,
   startActive,
   startLocalInstance,
+  cloneLocalInstance,
   stopActive,
   stopLocalInstance,
   deleteLocalInstance,
+  getLocalInstanceLogs,
   activateTag,
   runCustomImage,
   openCliTerminal,

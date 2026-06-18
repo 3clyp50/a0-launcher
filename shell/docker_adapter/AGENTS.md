@@ -19,7 +19,10 @@ This scope owns:
 - `RuntimeProvisioner.mjs`: platform provisioner base and shared process helpers.
 - `runtime_provisioner.test.mjs`: runtime provisioner selection and parser
   smoke tests.
-- `impl/DockerodeDocker.mjs`: Dockerode-backed concrete implementation.
+- `impl/DockerodeDocker.mjs`: Dockerode-backed container inspection, commit
+  snapshots, creation, lifecycle, volume, image, pull, and log operations.
+- `dockerode_docker.test.mjs`: Dockerode adapter regression tests for
+  container state shaping.
 - `impl/DockerHubRegistry.mjs`: Docker Hub registry and manifest/digest access.
 - `impl/DockerodeLogProcessor.mjs`: Docker pull/log stream processing.
 - `impl/ColimaRuntime.mjs`: macOS Colima/Lima assessment, self-contained
@@ -124,9 +127,12 @@ This scope owns:
   shell-owned `docker login`.
 - `impl/DockerodeDocker.mjs` may surface launcher-managed container labels as
   structured metadata and may include containers labeled
-  `a0.launcher.role=developer` in `listContainers()` even when their image repo
+  `a0.launcher.managed=true` in `listContainers()` even when their image repo
   differs from the default Agent Zero repo. Keep UI language and product
   decisions in `shell/docker_manager` or the renderer.
+- Container commit support is a low-level snapshot primitive for product-layer
+  clone workflows. Keep clone naming, labels, and port-policy decisions in
+  `shell/docker_manager`.
 - Log processing should normalize stream events into stable progress messages and
   preserve enough detail for cancellation/failure diagnosis.
 
@@ -154,6 +160,12 @@ For ESM files, also run Node syntax checks through dynamic import when needed:
 
 ```bash
 node -e "import('./shell/docker_adapter/DockerInterface.mjs')"
+```
+
+For Dockerode adapter state-shaping changes, run:
+
+```bash
+node --test shell/docker_adapter/dockerode_docker.test.mjs
 ```
 
 For runtime provisioner changes, run:

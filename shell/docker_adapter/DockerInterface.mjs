@@ -428,6 +428,22 @@ export class DockerInterface {
   }
 
   /**
+   * Commit a container's writable layer to a local image reference.
+   * Used by product-level clone workflows that need a real container snapshot.
+   *
+   * @param {string} containerId
+   * @param {string} imageRef
+   * @param {Object=} options
+   * @param {boolean=} options.pause
+   * @param {string=} options.comment
+   * @param {string=} options.author
+   * @returns {Promise<{imageRef: string, imageId: string|null}>}
+   */
+  async commitContainer(_containerId, _imageRef, _options = {}) {
+    throw new Error('DockerInterface.commitContainer is abstract');
+  }
+
+  /**
    * Read container logs once (bounded). Intended for diagnostics and snapshot viewing.
    *
    * @param {string} containerId

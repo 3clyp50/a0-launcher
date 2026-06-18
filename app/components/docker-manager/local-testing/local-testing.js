@@ -2,6 +2,8 @@ import { createVersionVisual } from "../card-visuals.js";
 
 function byId(id) { return document.getElementById(id); }
 
+let logsRequestSeq = 0;
+
 function normalizeUrlInput(value) {
   let raw = String(value || "").trim();
   if (!raw) return null;
@@ -31,6 +33,34 @@ function localUiUrl(value) {
   } catch {
     return "";
   }
+}
+
+function loopbackHost(value) {
+  const host = String(value || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") return "127.0.0.1";
+  return "";
+}
+
+function localLoopbackPortKey(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    if (url.username || url.password) return "";
+    if (!loopbackHost(url.hostname)) return "";
+    return url.port || (url.protocol === "https:" ? "443" : "80");
+  } catch {
+    return "";
+  }
+}
+
+function localCloneTargetForRemote(remote, containers) {
+  const remotePortKey = localLoopbackPortKey(remote?.url);
+  if (!remotePortKey) return null;
+  return (Array.isArray(containers) ? containers : []).find((container) =>
+    container?.containerId && localLoopbackPortKey(container?.uiUrl) === remotePortKey
+  ) || null;
 }
 
 function tagFromImageRef(value) {
@@ -201,6 +231,187 @@ function openAddRemoteInstanceDialog() {
   window.setTimeout(() => urlInput?.focus(), 0);
 }
 
+function closeLogsPanel() {
+  const panel = document.getElementById("localInstanceLogsPanel");
+  if (panel) panel.remove();
+}
+
+function bindLogsPanelDismissal() {
+  if (document.body.dataset.dmLogsPanelDismissalBound) return;
+  document.body.dataset.dmLogsPanelDismissalBound = "1";
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeLogsPanel();
+  });
+}
+
+function ensureLogsPanel(c) {
+  bindLogsPanelDismissal();
+  const containerId = c?.containerId || "";
+  const displayName = c?.instanceName || c?.containerName || c?.containerId?.slice(0, 12) || "instance";
+  const existing = document.getElementById("localInstanceLogsPanel");
+  if (existing) existing.remove();
+
+  const backdrop = document.createElement("div");
+  backdrop.id = "localInstanceLogsPanel";
+  backdrop.className = "dm-logs-backdrop";
+  backdrop.setAttribute("role", "presentation");
+  backdrop.addEventListener("mousedown", (event) => {
+    if (event.target === backdrop) closeLogsPanel();
+  });
+
+  const panel = document.createElement("section");
+  panel.className = "dm-logs-panel";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-modal", "false");
+  panel.setAttribute("aria-labelledby", "localInstanceLogsTitle");
+
+  const header = document.createElement("div");
+  header.className = "dm-logs-header";
+
+  const titleBlock = document.createElement("div");
+  titleBlock.className = "dm-logs-title-block";
+  const title = document.createElement("h3");
+  title.id = "localInstanceLogsTitle";
+  title.className = "dm-logs-title";
+  title.textContent = "Docker logs";
+  const subtitle = document.createElement("div");
+  subtitle.className = "dm-logs-subtitle";
+  subtitle.textContent = displayName;
+  titleBlock.appendChild(title);
+  titleBlock.appendChild(subtitle);
+
+  const actions = document.createElement("div");
+  actions.className = "dm-logs-actions";
+  const refreshBtn = document.createElement("button");
+  refreshBtn.className = "button";
+  refreshBtn.type = "button";
+  refreshBtn.title = "Refresh logs";
+  refreshBtn.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">refresh</span><span>Refresh</span>';
+  refreshBtn.addEventListener("click", () => openLogsPanel(c));
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "button dm-icon-button";
+  closeBtn.type = "button";
+  closeBtn.title = "Close logs";
+  closeBtn.setAttribute("aria-label", "Close logs");
+  closeBtn.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">close</span>';
+  closeBtn.addEventListener("click", closeLogsPanel);
+
+  actions.appendChild(refreshBtn);
+  actions.appendChild(closeBtn);
+  header.appendChild(titleBlock);
+  header.appendChild(actions);
+
+  const meta = document.createElement("div");
+  meta.className = "dm-logs-meta";
+  meta.textContent = containerId ? containerId.slice(0, 12) : "";
+
+  const body = document.createElement("div");
+  body.className = "dm-logs-body";
+  body.setAttribute("aria-live", "polite");
+
+  panel.appendChild(header);
+  panel.appendChild(meta);
+  panel.appendChild(body);
+  backdrop.appendChild(panel);
+  document.body.appendChild(backdrop);
+  return backdrop;
+}
+
+function renderLogsLoading(backdrop) {
+  const body = backdrop?.querySelector(".dm-logs-body");
+  const meta = backdrop?.querySelector(".dm-logs-meta");
+  if (meta) meta.textContent = "Loading recent logs...";
+  if (!body) return;
+  body.innerHTML = "";
+  const state = document.createElement("div");
+  state.className = "dm-logs-state";
+  state.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">progress_activity</span><span>Loading logs...</span>';
+  body.appendChild(state);
+}
+
+function renderLogsError(backdrop, message) {
+  const body = backdrop?.querySelector(".dm-logs-body");
+  const meta = backdrop?.querySelector(".dm-logs-meta");
+  if (meta) meta.textContent = "";
+  if (!body) return;
+  body.innerHTML = "";
+  const state = document.createElement("div");
+  state.className = "dm-logs-state error";
+  const icon = document.createElement("span");
+  icon.className = "material-symbols-outlined";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "error";
+  const text = document.createElement("span");
+  text.textContent = message || "Unable to load logs.";
+  state.appendChild(icon);
+  state.appendChild(text);
+  body.appendChild(state);
+}
+
+function renderLogsResult(backdrop, result) {
+  const body = backdrop?.querySelector(".dm-logs-body");
+  const meta = backdrop?.querySelector(".dm-logs-meta");
+  const lines = Array.isArray(result?.lines) ? result.lines : [];
+
+  if (meta) {
+    const parts = [`${lines.length} line${lines.length === 1 ? "" : "s"}`];
+    if (result?.fetchedAt) {
+      const d = new Date(result.fetchedAt);
+      if (!Number.isNaN(d.getTime())) parts.push(d.toLocaleString());
+    }
+    meta.textContent = parts.join(" / ");
+  }
+
+  if (!body) return;
+  body.innerHTML = "";
+  if (!lines.length) {
+    const state = document.createElement("div");
+    state.className = "dm-logs-state";
+    state.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">article</span><span>No logs yet.</span>';
+    body.appendChild(state);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "dm-log-lines";
+  for (const evt of lines) {
+    const row = document.createElement("div");
+    row.className = `dm-log-line ${evt?.stream === "stderr" ? "stderr" : "stdout"}`;
+    const stream = document.createElement("span");
+    stream.className = "dm-log-stream";
+    stream.textContent = evt?.stream === "stderr" ? "err" : "out";
+    const text = document.createElement("code");
+    text.className = "dm-log-text";
+    text.textContent = String(evt?.line || "");
+    row.appendChild(stream);
+    row.appendChild(text);
+    list.appendChild(row);
+  }
+  body.appendChild(list);
+  body.scrollTop = body.scrollHeight;
+}
+
+async function openLogsPanel(c) {
+  const containerId = c?.containerId || "";
+  if (!containerId) {
+    window.toastFrontendError?.("Instance logs are not available.", "Agent Zero");
+    return;
+  }
+  const seq = logsRequestSeq + 1;
+  logsRequestSeq = seq;
+  const backdrop = ensureLogsPanel(c);
+  renderLogsLoading(backdrop);
+
+  const result = await window.dockerManagerActions?.getLocalInstanceLogs?.(containerId, { maxLines: 500 });
+  if (logsRequestSeq !== seq) return;
+  if (!result) {
+    renderLogsError(backdrop, "Unable to load logs.");
+    return;
+  }
+  renderLogsResult(backdrop, result);
+}
+
 function bindActions() {
   bindCardMenuDismissal();
   const addBtn = byId("addRemoteInstanceBtn");
@@ -257,8 +468,9 @@ function renderDockerInstance(list, c, state) {
 
   const actions = document.createElement("div");
   actions.className = "dm-card-actions";
-  const isActiveInstance = c?.labels?.["a0.launcher.role"] === "active" || String(c?.containerName || "").includes("-active__");
-  const isDeveloperInstance = c?.labels?.["a0.launcher.role"] === "developer";
+  const role = c?.labels?.["a0.launcher.role"] || "";
+  const isActiveInstance = String(c?.containerName || "").includes("-active__");
+  const isManagedLocalInstance = c?.labels?.["a0.launcher.managed"] === "true" || role === "developer" || role === "clone";
   const isRunning = st === "running";
 
   if (isRunning) {
@@ -284,7 +496,7 @@ function renderDockerInstance(list, c, state) {
       window.dockerManagerActions?.startActive?.();
     });
     actions.appendChild(startBtn);
-  } else if (isDeveloperInstance) {
+  } else if (isManagedLocalInstance) {
     const startBtn = document.createElement("button");
     startBtn.className = "button confirm";
     startBtn.type = "button";
@@ -297,6 +509,18 @@ function renderDockerInstance(list, c, state) {
   }
 
   const menu = createCardMenu([
+    menuButton("article", "See logs", () => {
+      openLogsPanel(c);
+    }, {
+      disabled: !containerId,
+      title: "See recent Docker logs"
+    }),
+    menuButton("content_copy", "Clone", () => {
+      window.dockerManagerActions?.cloneLocalInstance?.(containerId);
+    }, {
+      disabled: !containerId || operationRunning,
+      title: "Clone this instance on open ports"
+    }),
     menuButton("terminal", "Open A0 CLI", () => {
       window.dockerManagerActions?.openCliTerminal?.(cliHost);
     }, {
@@ -336,7 +560,9 @@ function renderDockerInstance(list, c, state) {
   list.appendChild(card);
 }
 
-function renderRemoteInstance(list, remote) {
+function renderRemoteInstance(list, remote, state) {
+  const operationRunning = state?.progress?.status === "running";
+  const cloneTarget = localCloneTargetForRemote(remote, state?.containers);
   const card = document.createElement("div");
   card.className = "dm-card";
 
@@ -376,16 +602,26 @@ function renderRemoteInstance(list, remote) {
   });
   actions.appendChild(openBtn);
 
-  const menu = createCardMenu([
-    menuButton("delete", "Delete", async () => {
-      if (!window.confirm(`Delete ${remote?.name || "this remote instance"}?`)) return;
-      await window.dockerManagerActions?.deleteRemoteInstance?.(remote?.id || "");
+  const menuItems = [];
+  if (cloneTarget?.containerId) {
+    menuItems.push(menuButton("content_copy", "Clone", () => {
+      window.dockerManagerActions?.cloneLocalInstance?.(cloneTarget.containerId);
     }, {
-      danger: true,
-      disabled: !remote?.id,
-      title: "Delete this saved remote instance"
-    })
-  ]);
+      disabled: operationRunning,
+      title: "Clone this local loopback instance on open ports"
+    }));
+  }
+
+  menuItems.push(menuButton("delete", "Delete", async () => {
+    if (!window.confirm(`Delete ${remote?.name || "this remote instance"}?`)) return;
+    await window.dockerManagerActions?.deleteRemoteInstance?.(remote?.id || "");
+  }, {
+    danger: true,
+    disabled: !remote?.id,
+    title: "Delete this saved remote instance"
+  }));
+
+  const menu = createCardMenu(menuItems);
   actions.appendChild(menu);
 
   footer.appendChild(actions);
@@ -422,7 +658,7 @@ function render(state) {
     renderDockerInstance(list, c, state);
   }
   for (const remote of remoteInstances) {
-    renderRemoteInstance(list, remote);
+    renderRemoteInstance(list, remote, state);
   }
 }
 

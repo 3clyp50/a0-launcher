@@ -137,6 +137,41 @@ function clampReadBytes(value) {
   return Math.max(1, Math.min(1024 * 1024, Math.floor(max)));
 }
 
+function textOrNull(value, maxLength = 240) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return null;
+  return text.slice(0, maxLength);
+}
+
+function finiteNumberOrNull(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function stringList(value, limit = 12, maxLength = 180) {
+  const source = Array.isArray(value) ? value : [];
+  const out = [];
+  for (const item of source) {
+    const text = textOrNull(item, maxLength);
+    if (text) out.push(text);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function driverStatusList(value) {
+  const source = Array.isArray(value) ? value : [];
+  const out = [];
+  for (const item of source) {
+    if (!Array.isArray(item) || item.length < 2) continue;
+    const label = textOrNull(item[0], 80);
+    const detail = textOrNull(item[1], 180);
+    if (label && detail) out.push({ label, detail });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 function isZeroTarBlock(block) {
   for (let i = 0; i < block.length; i += 1) {
     if (block[i] !== 0) return false;
@@ -236,6 +271,54 @@ export class DockerodeDocker extends DockerInterface {
 
     /** @type {Map<string, any>} */
     this._pulls = new Map();
+  }
+
+  async getRuntimeDiagnostics() {
+    try {
+      const [version, info] = await Promise.all([
+        Promise.resolve(this.docker.version()),
+        Promise.resolve(this.docker.info())
+      ]);
+      const securityOptions = stringList(info?.SecurityOptions, 16, 180);
+      return {
+        checkedAt: safeIsoNow(),
+        reachable: true,
+        dockerHost: textOrNull(this.env?.dockerHost?.raw, 500),
+        dockerHostKind: textOrNull(this.env?.dockerHost?.kind, 40),
+        dockerFlavor: textOrNull(this.env?.dockerFlavor, 80),
+        serverVersion: textOrNull(version?.Version || info?.ServerVersion, 120),
+        apiVersion: textOrNull(version?.ApiVersion, 80),
+        minApiVersion: textOrNull(version?.MinAPIVersion, 80),
+        gitCommit: textOrNull(version?.GitCommit, 80),
+        goVersion: textOrNull(version?.GoVersion, 120),
+        os: textOrNull(version?.Os || info?.OSType, 80),
+        arch: textOrNull(version?.Arch || info?.Architecture, 80),
+        operatingSystem: textOrNull(info?.OperatingSystem, 180),
+        kernelVersion: textOrNull(info?.KernelVersion, 180),
+        dockerRootDir: textOrNull(info?.DockerRootDir, 500),
+        storageDriver: textOrNull(info?.Driver, 120),
+        loggingDriver: textOrNull(info?.LoggingDriver, 120),
+        cgroupDriver: textOrNull(info?.CgroupDriver, 120),
+        cgroupVersion: textOrNull(info?.CgroupVersion, 80),
+        rootless: securityOptions.some((item) => /rootless/i.test(item)),
+        securityOptions,
+        containers: {
+          total: finiteNumberOrNull(info?.Containers),
+          running: finiteNumberOrNull(info?.ContainersRunning),
+          paused: finiteNumberOrNull(info?.ContainersPaused),
+          stopped: finiteNumberOrNull(info?.ContainersStopped)
+        },
+        images: finiteNumberOrNull(info?.Images),
+        cpus: finiteNumberOrNull(info?.NCPU),
+        memoryBytes: finiteNumberOrNull(info?.MemTotal),
+        liveRestoreEnabled: typeof info?.LiveRestoreEnabled === 'boolean' ? info.LiveRestoreEnabled : null,
+        swarmLocalNodeState: textOrNull(info?.Swarm?.LocalNodeState, 80),
+        warnings: stringList(info?.Warnings, 8, 220),
+        driverStatus: driverStatusList(info?.DriverStatus)
+      };
+    } catch (error) {
+      throw normalizeDockerError(error, { op: 'getRuntimeDiagnostics', env: this.#envSummary() });
+    }
   }
 
   async listRemoteTags(imageRepo) {

@@ -285,6 +285,14 @@ export class DockerInterface {
   }
 
   /**
+   * Inspect the active Docker runtime using Docker Engine APIs.
+   * @returns {Promise<Object>}
+   */
+  async getRuntimeDiagnostics() {
+    throw new Error('DockerInterface.getRuntimeDiagnostics is abstract');
+  }
+
+  /**
    * List remote tags for an image repo (DI-005).
    * @param {string} imageRepo
    * @returns {Promise<string[]>}

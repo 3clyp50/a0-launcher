@@ -548,6 +548,38 @@ async function assessRuntime(env = null) {
   }
 }
 
+function runtimeDiagnosticsFromError(error, env = null) {
+  return {
+    checkedAt: new Date().toISOString(),
+    reachable: false,
+    dockerHost: typeof env?.dockerHost?.raw === 'string' ? env.dockerHost.raw : '',
+    dockerHostKind: typeof env?.dockerHost?.kind === 'string' ? env.dockerHost.kind : '',
+    dockerFlavor: typeof env?.dockerFlavor === 'string' ? env.dockerFlavor : '',
+    diagnosticCode: typeof error?.code === 'string' ? error.code : (typeof env?.diagnosticCode === 'string' ? env.diagnosticCode : null),
+    diagnosticMessage: mapDockerInterfaceErrorToUiMessage(error) || error?.message || env?.diagnosticMessage || 'Docker runtime diagnostics are unavailable.'
+  };
+}
+
+async function collectRuntimeDiagnostics(docker, env = null) {
+  if (!docker || typeof docker.getRuntimeDiagnostics !== 'function') {
+    return {
+      checkedAt: new Date().toISOString(),
+      reachable: !!env?.dockerAvailable,
+      dockerHost: typeof env?.dockerHost?.raw === 'string' ? env.dockerHost.raw : '',
+      dockerHostKind: typeof env?.dockerHost?.kind === 'string' ? env.dockerHost.kind : '',
+      dockerFlavor: typeof env?.dockerFlavor === 'string' ? env.dockerFlavor : '',
+      diagnosticCode: typeof env?.diagnosticCode === 'string' ? env.diagnosticCode : null,
+      diagnosticMessage: typeof env?.diagnosticMessage === 'string' ? env.diagnosticMessage : null
+    };
+  }
+
+  try {
+    return await docker.getRuntimeDiagnostics();
+  } catch (error) {
+    return runtimeDiagnosticsFromError(error, env);
+  }
+}
+
 async function buildUnavailableState(runtime) {
   const [retentionPolicy, portPreferences, remoteInstances] = await Promise.all([
     stateStore.readRetentionPolicy().catch(() => ({ keepCount: 1 })),
@@ -3056,6 +3088,7 @@ async function getDockerInventory() {
   const docker = await getManagedDocker(imageRepo);
   const env = await docker.getEnvironment();
   const runtime = await assessRuntime(env);
+  const runtimeDiagnostics = await collectRuntimeDiagnostics(docker, env);
 
   // Even when the ping-based env detection reports unavailable, attempt listing
   // so that Docker setups where ping fails but operations work are not blocked.
@@ -3081,12 +3114,13 @@ async function getDockerInventory() {
     // Listing failed - Docker is genuinely unavailable.
   }
 
-  const dockerAvailable = !!(env?.dockerAvailable || listingSucceeded);
+  const dockerAvailable = !!(env?.dockerAvailable || runtimeDiagnostics?.reachable || listingSucceeded);
 
   return {
     dockerAvailable,
     environment: env || null,
     runtime,
+    runtimeDiagnostics,
     images,
     containers,
     volumes,

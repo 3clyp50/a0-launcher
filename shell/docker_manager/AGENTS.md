@@ -53,6 +53,9 @@ This scope owns:
   per-attempt timeouts that create false failed starts while the UI is reachable.
 - Prefer structured state over renderer-side inference. If the UI needs a
   status, add it to the Docker Manager state shape.
+- Runtime diagnostics for the Advanced tab belong in the Docker Manager state
+  shape as sanitized `runtimeDiagnostics`, sourced from Docker adapter
+  inspection rather than renderer guesses.
 - Persist user preferences and remote instances through `state_store.js`; do not
   invent parallel files.
 - Local instance display-name overrides are persisted through `state_store.js`

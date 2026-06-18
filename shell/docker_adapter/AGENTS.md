@@ -130,6 +130,9 @@ This scope owns:
   `a0.launcher.managed=true` in `listContainers()` even when their image repo
   differs from the default Agent Zero repo. Keep UI language and product
   decisions in `shell/docker_manager` or the renderer.
+- Runtime diagnostics may expose sanitized Docker Engine `version()` and
+  `info()` fields through `getRuntimeDiagnostics()`. Keep the payload bounded
+  and generic; product grouping and visible copy belong above this layer.
 - Container file reads must stay bounded, path-specific, and adapter-owned.
   They are for structured inspection such as product-layer runtime source
   metadata, not for exposing a generic command or filesystem browser.

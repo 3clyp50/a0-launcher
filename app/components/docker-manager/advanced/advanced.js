@@ -1,6 +1,8 @@
 const DEFAULT_IMAGE = "agent0ai/agent-zero";
 const DEFAULT_TAG = "latest";
 const DEFAULT_PORTS = "0:80";
+const ADVANCED_TAB_KEY = "dm-advanced-active-tab";
+const ADVANCED_TABS = ["developer", "compose", "diagnostics", "storage"];
 
 let lastState = window.__dmLastState || {};
 let lastGeneratedCompose = "";
@@ -95,6 +97,65 @@ function portTokens(value) {
     .split(/[\s,]+/)
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function validAdvancedTab(tab) {
+  return ADVANCED_TABS.includes(tab) ? tab : "developer";
+}
+
+function getAdvancedTab() {
+  try {
+    return validAdvancedTab(sessionStorage.getItem(ADVANCED_TAB_KEY));
+  } catch {
+    return "developer";
+  }
+}
+
+function setStoredAdvancedTab(tab) {
+  try {
+    sessionStorage.setItem(ADVANCED_TAB_KEY, validAdvancedTab(tab));
+  } catch {
+    // Session storage may be unavailable in constrained browser contexts.
+  }
+}
+
+function applyAdvancedTab(tab, { persist = true, focus = false } = {}) {
+  const activeTab = validAdvancedTab(tab);
+  if (persist) setStoredAdvancedTab(activeTab);
+
+  document.querySelectorAll(".dm-advanced-tab").forEach((button) => {
+    const selected = button.dataset.advancedTab === activeTab;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+    button.tabIndex = selected ? 0 : -1;
+    if (selected && focus) button.focus();
+  });
+
+  document.querySelectorAll(".dm-advanced-tab-panel").forEach((panel) => {
+    const selected = panel.dataset.advancedPanel === activeTab;
+    panel.classList.toggle("is-active", selected);
+    panel.hidden = !selected;
+  });
+}
+
+function bindAdvancedTabs() {
+  const buttons = Array.from(document.querySelectorAll(".dm-advanced-tab"));
+  if (!buttons.length) return;
+
+  buttons.forEach((button, index) => {
+    if (button.dataset.dmTabBound) return;
+    button.dataset.dmTabBound = "1";
+    button.addEventListener("click", () => applyAdvancedTab(button.dataset.advancedTab));
+    button.addEventListener("keydown", (event) => {
+      const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      const nextIndex = (index + step + buttons.length) % buttons.length;
+      applyAdvancedTab(buttons[nextIndex]?.dataset.advancedTab, { focus: true });
+    });
+  });
+
+  applyAdvancedTab(getAdvancedTab(), { persist: false });
 }
 
 function readForm() {
@@ -259,35 +320,170 @@ async function runCustomImage() {
   if (ok === false) updateActionState();
 }
 
-function metric(label, value, className = "") {
-  const item = document.createElement("div");
-  item.className = "sv-storage-item dm-diagnostic-item";
+function displayText(value, fallback = "Unknown") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function yesNo(value) {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "Unknown";
+}
+
+function formatDockerFlavor(value) {
+  const flavor = String(value || "").trim();
+  const labels = {
+    docker_desktop: "Docker Desktop",
+    docker_engine: "Docker Engine",
+    colima: "Colima",
+    orbstack: "OrbStack",
+    rancher_desktop: "Rancher Desktop",
+    podman: "Podman",
+    wsl_engine: "Agent Zero local runtime",
+    unknown: "Docker runtime"
+  };
+  return labels[flavor] || displayText(flavor, "Docker runtime");
+}
+
+function formatHost(value, fallback = "Default Docker host") {
+  const text = String(value || "").trim();
+  return text || fallback;
+}
+
+function formatRuntimeCount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? String(Math.floor(n)) : "Unknown";
+}
+
+function formatCpuCount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "Unknown";
+  return `${Math.floor(n)} CPU${Math.floor(n) === 1 ? "" : "s"}`;
+}
+
+function joinList(value, fallback = "None reported") {
+  const items = Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  return items.length ? items.join(", ") : fallback;
+}
+
+function diagnosticRow(label, value, className = "") {
+  const row = document.createElement("div");
+  row.className = "dm-diagnostic-row";
   const labelEl = document.createElement("div");
-  labelEl.className = "sv-storage-label";
+  labelEl.className = "dm-diagnostic-label";
   labelEl.textContent = label;
   const valueEl = document.createElement("div");
-  valueEl.className = `sv-storage-value${className ? ` ${className}` : ""}`;
-  valueEl.textContent = value;
-  item.appendChild(labelEl);
-  item.appendChild(valueEl);
-  return item;
+  valueEl.className = `dm-diagnostic-value${className ? ` ${className}` : ""}`;
+  valueEl.textContent = displayText(value);
+  row.appendChild(labelEl);
+  row.appendChild(valueEl);
+  return row;
+}
+
+function diagnosticSection(title, rows) {
+  const section = document.createElement("section");
+  section.className = "dm-diagnostic-section";
+  const heading = document.createElement("h4");
+  heading.className = "dm-diagnostic-heading";
+  heading.textContent = title;
+  const list = document.createElement("div");
+  list.className = "dm-diagnostic-rows";
+  for (const row of rows) {
+    if (!row || row.length < 2) continue;
+    list.appendChild(diagnosticRow(row[0], row[1], row[2] || ""));
+  }
+  section.appendChild(heading);
+  section.appendChild(list);
+  return section;
+}
+
+function renderRuntimeSummary(box, state, diagnostic) {
+  const runtimeDiagnostics = state?.runtimeDiagnostics || {};
+  const runtime = state?.runtime || {};
+  const env = state?.environment || {};
+  const available = state?.dockerAvailable || runtimeDiagnostics.reachable === true;
+  const summary = document.createElement("div");
+  summary.className = "dm-diagnostic-summary";
+
+  const dot = document.createElement("span");
+  dot.className = `dm-diagnostic-dot ${available ? "is-ok" : "is-warn"}`;
+  dot.setAttribute("aria-hidden", "true");
+
+  const copy = document.createElement("div");
+  const title = document.createElement("div");
+  title.className = "dm-diagnostic-summary-title";
+  title.textContent = available ? "Docker runtime is reachable" : "Docker runtime is unavailable";
+  const detail = document.createElement("div");
+  detail.className = "sv-subtitle";
+  detail.textContent = diagnostic;
+  copy.appendChild(title);
+  copy.appendChild(detail);
+
+  const meta = document.createElement("div");
+  meta.className = "dm-diagnostic-summary-meta";
+  meta.textContent = [
+    formatDockerFlavor(runtimeDiagnostics.dockerFlavor || runtime.dockerFlavor || env.dockerFlavor),
+    displayText(runtimeDiagnostics.serverVersion || env.daemonVersion, "")
+  ].filter(Boolean).join(" - ");
+
+  summary.appendChild(dot);
+  summary.appendChild(copy);
+  summary.appendChild(meta);
+  box.appendChild(summary);
 }
 
 function renderDiagnostics(state) {
   const box = byId("advancedDiagnostics");
   const env = state?.environment || {};
   const runtime = state?.runtime || {};
-  const diagnostic = compactText(env.diagnosticMessage || runtime.detail || state?.error, "No diagnostic message");
+  const runtimeDiagnostics = state?.runtimeDiagnostics || {};
+  const diagnostic = compactText(
+    runtimeDiagnostics.diagnosticMessage || env.diagnosticMessage || runtime.detail || state?.error,
+    "No diagnostic message"
+  );
 
-  if (box) {
-    box.innerHTML = "";
-    box.appendChild(metric("Docker", state?.dockerAvailable ? "Ready" : "Unavailable", state?.dockerAvailable ? "is-ok" : "is-warn"));
-    box.appendChild(metric("Installs", String((state?.images || []).length || 0)));
-    box.appendChild(metric("Instances", String((state?.containers || []).length || 0)));
-    box.appendChild(metric("Storage volumes", String((state?.volumes || []).length || 0)));
-    box.appendChild(metric("Docker free", fmtBytes(state?.storage?.freeBytes)));
-    box.appendChild(metric("Images used", fmtBytes(state?.storage?.usedBytes)));
-    box.appendChild(metric("Diagnostic", diagnostic));
+  if (!box) return;
+  box.innerHTML = "";
+  renderRuntimeSummary(box, state, diagnostic);
+  box.appendChild(diagnosticSection("Engine", [
+    ["Endpoint", formatHost(runtimeDiagnostics.dockerHost || runtime.dockerHost || env.dockerHost?.raw)],
+    ["Server version", runtimeDiagnostics.serverVersion || env.daemonVersion],
+    ["API version", runtimeDiagnostics.apiVersion],
+    ["Operating system", runtimeDiagnostics.operatingSystem || runtimeDiagnostics.os],
+    ["Architecture", runtimeDiagnostics.arch || env.arch],
+    ["Kernel", runtimeDiagnostics.kernelVersion],
+    ["Docker root", runtimeDiagnostics.dockerRootDir]
+  ]));
+  box.appendChild(diagnosticSection("Configuration", [
+    ["Storage driver", runtimeDiagnostics.storageDriver],
+    ["Cgroup", [runtimeDiagnostics.cgroupDriver, runtimeDiagnostics.cgroupVersion].filter(Boolean).join(" / ")],
+    ["Logging driver", runtimeDiagnostics.loggingDriver],
+    ["Rootless", yesNo(runtimeDiagnostics.rootless)],
+    ["Live restore", yesNo(runtimeDiagnostics.liveRestoreEnabled)],
+    ["Security", joinList(runtimeDiagnostics.securityOptions)]
+  ]));
+  box.appendChild(diagnosticSection("Resources", [
+    ["Containers", [
+      `${formatRuntimeCount(runtimeDiagnostics.containers?.running)} running`,
+      `${formatRuntimeCount(runtimeDiagnostics.containers?.paused)} paused`,
+      `${formatRuntimeCount(runtimeDiagnostics.containers?.stopped)} stopped`
+    ].join(" / ")],
+    ["Images", formatRuntimeCount(runtimeDiagnostics.images ?? (state?.images || []).length)],
+    ["CPUs", formatCpuCount(runtimeDiagnostics.cpus)],
+    ["Memory", fmtBytes(runtimeDiagnostics.memoryBytes)],
+    ["Docker free", fmtBytes(state?.storage?.freeBytes)],
+    ["Images used", fmtBytes(state?.storage?.usedBytes)]
+  ]));
+  box.appendChild(diagnosticSection("Launcher Inventory", [
+    ["Installs", String((state?.images || []).length || 0)],
+    ["Instances", String((state?.containers || []).length || 0)],
+    ["Storage volumes", String((state?.volumes || []).length || 0)]
+  ]));
+
+  const warnings = Array.isArray(runtimeDiagnostics.warnings) ? runtimeDiagnostics.warnings : [];
+  if (warnings.length) {
+    box.appendChild(diagnosticSection("Warnings", warnings.map((warning) => ["Docker", warning])));
   }
 }
 
@@ -356,6 +552,7 @@ function bind() {
   if (document.body.dataset.dmAdvancedBound) return;
   document.body.dataset.dmAdvancedBound = "1";
   setInitialFormValues();
+  bindAdvancedTabs();
 
   const imageInput = byId("advancedImageInput");
   const tagInput = byId("advancedTagInput");

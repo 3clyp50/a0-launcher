@@ -17,6 +17,7 @@ export const dockerManagerStore = createStore("dockerManager", {
   retainedInstances: [],
   storage: null,
   runtime: null,
+  runtimeDiagnostics: null,
   progress: null,
   portPreferences: null,
   retentionPolicy: null,

@@ -103,6 +103,7 @@ function snapshot() {
     retainedInstances: Array.isArray(store.retainedInstances) ? store.retainedInstances : [],
     storage: store.storage || null,
     runtime: store.runtime || null,
+    runtimeDiagnostics: store.runtimeDiagnostics || null,
     progress: store.progress || null,
     portPreferences: store.portPreferences || null,
     retentionPolicy: store.retentionPolicy || null,
@@ -210,6 +211,7 @@ async function refresh() {
       store.remoteInstances = Array.isArray(state?.remoteInstances) ? state.remoteInstances : [];
       store.storage = state?.storage || null;
       store.runtime = state?.runtime || null;
+      store.runtimeDiagnostics = state?.runtimeDiagnostics || store.runtimeDiagnostics || null;
       store.portPreferences = state?.portPreferences || null;
       store.retentionPolicy = state?.retentionPolicy || null;
       if (!store.error) setBanner("", "");
@@ -218,6 +220,7 @@ async function refresh() {
     store.dockerAvailable = !!inventory?.dockerAvailable;
     store.environment = inventory?.environment || null;
     store.runtime = state?.runtime || inventory?.runtime || null;
+    store.runtimeDiagnostics = inventory?.runtimeDiagnostics || state?.runtimeDiagnostics || null;
     store.images = Array.isArray(inventory?.images) ? inventory.images : [];
     store.containers = Array.isArray(inventory?.containers) ? inventory.containers : [];
     if (Array.isArray(inventory?.remoteInstances)) store.remoteInstances = inventory.remoteInstances;
@@ -802,6 +805,7 @@ function initSubscriptions() {
         store.remoteInstances = Array.isArray(state?.remoteInstances) ? state.remoteInstances : [];
         store.storage = state?.storage || null;
         store.runtime = state?.runtime || null;
+        store.runtimeDiagnostics = state?.runtimeDiagnostics || store.runtimeDiagnostics || null;
         store.portPreferences = state?.portPreferences || null;
         store.retentionPolicy = state?.retentionPolicy || null;
         emitState();

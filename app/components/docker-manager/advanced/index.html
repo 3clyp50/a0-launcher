@@ -7,8 +7,27 @@
       </div>
     </div>
 
-    <div class="dm-advanced-grid">
-      <section class="dm-advanced-panel dm-advanced-panel-wide" aria-labelledby="developerModeTitle">
+    <div class="dm-advanced-tabs" role="tablist" aria-label="Advanced tools">
+      <button id="advancedTabDeveloper" class="dm-advanced-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="advancedPanelDeveloper" data-advanced-tab="developer">
+        <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
+        <span>Developer</span>
+      </button>
+      <button id="advancedTabCompose" class="dm-advanced-tab" type="button" role="tab" aria-selected="false" aria-controls="advancedPanelCompose" data-advanced-tab="compose">
+        <span class="material-symbols-outlined" aria-hidden="true">data_object</span>
+        <span>Compose</span>
+      </button>
+      <button id="advancedTabDiagnostics" class="dm-advanced-tab" type="button" role="tab" aria-selected="false" aria-controls="advancedPanelDiagnostics" data-advanced-tab="diagnostics">
+        <span class="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
+        <span>Diagnostics</span>
+      </button>
+      <button id="advancedTabStorage" class="dm-advanced-tab" type="button" role="tab" aria-selected="false" aria-controls="advancedPanelStorage" data-advanced-tab="storage">
+        <span class="material-symbols-outlined" aria-hidden="true">database</span>
+        <span>Storage volumes</span>
+      </button>
+    </div>
+
+    <div class="dm-advanced-tab-panels">
+      <section id="advancedPanelDeveloper" class="dm-advanced-tab-panel is-active" role="tabpanel" aria-labelledby="advancedTabDeveloper" data-advanced-panel="developer">
         <div class="dm-advanced-panel-head">
           <div>
             <h3 id="developerModeTitle" class="dm-advanced-title">Developer mode</h3>
@@ -52,33 +71,41 @@
         </div>
 
         <div class="dm-advanced-actions">
-          <button id="copyComposeBtn" class="button" type="button">
-            <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
-            <span>Copy Compose</span>
-          </button>
           <button id="runCustomImageBtn" class="button confirm" type="button">
             <span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
             <span>Run image</span>
           </button>
         </div>
+      </section>
 
+      <section id="advancedPanelCompose" class="dm-advanced-tab-panel" role="tabpanel" aria-labelledby="advancedTabCompose" data-advanced-panel="compose" hidden>
+        <div class="dm-advanced-panel-head">
+          <div>
+            <h3 class="dm-advanced-title">Docker Compose</h3>
+            <div class="sv-subtitle">Compose file</div>
+          </div>
+          <button id="copyComposeBtn" class="button" type="button">
+            <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+            <span>Copy Compose</span>
+          </button>
+        </div>
         <div class="dm-field dm-compose-field">
-          <label for="composePreview">Docker Compose</label>
+          <label for="composePreview">YAML</label>
           <textarea id="composePreview" class="dm-textarea dm-compose-preview" spellcheck="false"></textarea>
         </div>
       </section>
 
-      <section class="dm-advanced-panel" aria-labelledby="diagnosticsTitle">
+      <section id="advancedPanelDiagnostics" class="dm-advanced-tab-panel" role="tabpanel" aria-labelledby="advancedTabDiagnostics" data-advanced-panel="diagnostics" hidden>
         <div class="dm-advanced-panel-head">
           <div>
             <h3 id="diagnosticsTitle" class="dm-advanced-title">Diagnostics</h3>
-            <div class="sv-subtitle">Docker and launcher inventory</div>
+            <div class="sv-subtitle">Docker runtime diagnostics</div>
           </div>
         </div>
-        <div id="advancedDiagnostics" class="dm-diagnostics-grid"></div>
+        <div id="advancedDiagnostics" class="dm-diagnostics-report"></div>
       </section>
 
-      <section class="dm-advanced-panel" aria-labelledby="advancedVolumesTitle">
+      <section id="advancedPanelStorage" class="dm-advanced-tab-panel" role="tabpanel" aria-labelledby="advancedTabStorage" data-advanced-panel="storage" hidden>
         <div class="dm-advanced-panel-head">
           <div>
             <h3 id="advancedVolumesTitle" class="dm-advanced-title">Storage volumes</h3>

@@ -28,8 +28,8 @@ This scope owns:
   actions.
 - `local-testing/`: local containers, per-instance action menus, rename,
   clone/log inspection controls, remote instance CRUD, and instance opening.
-- `advanced/`: tabbed developer-mode custom image runner, Docker Compose
-  composer, diagnostics, and storage-volume maintenance.
+- `advanced/`: tabbed developer-mode custom image runner with inline Docker
+  Compose composer, diagnostics, and storage-volume maintenance.
 - `settings/`: port preferences and retention policy controls.
 - `instance-tabs/`: browser-style tab chrome, Home tab, active-tab controls,
   empty state, and viewport bounds reporting for shell-owned Agent Zero UI
@@ -99,9 +99,9 @@ This scope owns:
   port, mount, and editable Compose-file controls. Keep it opt-in, validate
   through Docker Manager IPC, and never expose a generic command runner or a
   runtime-candidate browser.
-- Advanced should organize developer controls, Compose editing, diagnostics,
-  and Storage volumes as sub-tabs instead of showing multiple boxed panels at
-  once.
+- Advanced should keep developer controls and their related Compose editing
+  together in the Developer sub-tab. Diagnostics and Storage volumes remain
+  separate sub-tabs so the page avoids multiple boxed panels at once.
 - Advanced diagnostics should render structured Docker runtime facts from
   Docker Manager state as report-style rows, not metric-card grids or
   renderer-inferred runtime guesses.

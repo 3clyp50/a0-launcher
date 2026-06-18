@@ -12,10 +12,6 @@
         <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
         <span>Developer</span>
       </button>
-      <button id="advancedTabCompose" class="dm-advanced-tab" type="button" role="tab" aria-selected="false" aria-controls="advancedPanelCompose" data-advanced-tab="compose">
-        <span class="material-symbols-outlined" aria-hidden="true">data_object</span>
-        <span>Compose</span>
-      </button>
       <button id="advancedTabDiagnostics" class="dm-advanced-tab" type="button" role="tab" aria-selected="false" aria-controls="advancedPanelDiagnostics" data-advanced-tab="diagnostics">
         <span class="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
         <span>Diagnostics</span>
@@ -52,19 +48,19 @@
             <label for="advancedInstanceNameInput">Instance name</label>
             <input id="advancedInstanceNameInput" class="dm-text-input" type="text" maxlength="64" autocomplete="off" placeholder="agent-zero-dev">
           </div>
+          <div class="dm-field">
+            <label for="advancedPortsInput">Ports</label>
+            <input id="advancedPortsInput" class="dm-text-input" type="text" autocomplete="off" placeholder="0:80, 0:22">
+          </div>
           <label class="dm-checkbox-line">
             <input id="advancedPullToggle" type="checkbox" checked>
             <span>Pull before run</span>
           </label>
-          <div class="dm-field dm-field-wide">
-            <label for="advancedPortsInput">Ports</label>
-            <textarea id="advancedPortsInput" class="dm-textarea dm-advanced-small-textarea" spellcheck="false" placeholder="0:80&#10;0:22"></textarea>
-          </div>
-          <div class="dm-field dm-field-wide">
-            <label for="advancedEnvInput">Environment</label>
+          <div class="dm-field">
+            <label for="advancedEnvInput">Environment variables</label>
             <textarea id="advancedEnvInput" class="dm-textarea" spellcheck="false" placeholder="KEY=value"></textarea>
           </div>
-          <div class="dm-field dm-field-wide">
+          <div class="dm-field">
             <label for="advancedMountsInput">Mounts</label>
             <textarea id="advancedMountsInput" class="dm-textarea" spellcheck="false" placeholder="/host/path:/container/path:rw"></textarea>
           </div>
@@ -76,22 +72,22 @@
             <span>Run image</span>
           </button>
         </div>
-      </section>
 
-      <section id="advancedPanelCompose" class="dm-advanced-tab-panel" role="tabpanel" aria-labelledby="advancedTabCompose" data-advanced-panel="compose" hidden>
-        <div class="dm-advanced-panel-head">
-          <div>
-            <h3 class="dm-advanced-title">Docker Compose</h3>
-            <div class="sv-subtitle">Compose file</div>
+        <div class="dm-compose-inline">
+          <div class="dm-advanced-panel-head">
+            <div>
+              <h3 class="dm-advanced-title">Docker Compose</h3>
+              <div class="sv-subtitle">Compose file</div>
+            </div>
+            <button id="copyComposeBtn" class="button" type="button">
+              <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+              <span>Copy Compose</span>
+            </button>
           </div>
-          <button id="copyComposeBtn" class="button" type="button">
-            <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
-            <span>Copy Compose</span>
-          </button>
-        </div>
-        <div class="dm-field dm-compose-field">
-          <label for="composePreview">YAML</label>
-          <textarea id="composePreview" class="dm-textarea dm-compose-preview" spellcheck="false"></textarea>
+          <div class="dm-field dm-compose-field">
+            <label for="composePreview">YAML</label>
+            <textarea id="composePreview" class="dm-textarea dm-compose-preview" spellcheck="false"></textarea>
+          </div>
         </div>
       </section>
 

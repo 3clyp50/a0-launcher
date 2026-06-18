@@ -2,7 +2,7 @@ const DEFAULT_IMAGE = "agent0ai/agent-zero";
 const DEFAULT_TAG = "latest";
 const DEFAULT_PORTS = "0:80";
 const ADVANCED_TAB_KEY = "dm-advanced-active-tab";
-const ADVANCED_TABS = ["developer", "compose", "diagnostics", "storage"];
+const ADVANCED_TABS = ["developer", "diagnostics", "storage"];
 
 let lastState = window.__dmLastState || {};
 let lastGeneratedCompose = "";

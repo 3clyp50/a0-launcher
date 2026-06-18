@@ -86,11 +86,17 @@ jobs:
           EOF
 
       - name: Upload content.json to release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || github.event.inputs.tag != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" content.json --clobber
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "No release tag was provided for content upload." >&2
+            exit 1
+          fi
+
+          gh release upload "$RELEASE_TAG" content.json --clobber
 
       - name: Upload artifact (for manual runs)
         if: github.event_name == 'workflow_dispatch'

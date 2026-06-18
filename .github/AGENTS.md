@@ -40,7 +40,9 @@ This scope owns:
 - Do not publish Linux DEB/RPM or Windows Squirrel/NuGet artifacts unless the
   product decision changes.
 - Content bundling checks out the release tag, walks `app/`, and uploads
-  `content.json` to the same release.
+  `content.json` to the same release. Manual dispatch with a tag also uploads
+  to that release; manual dispatch without a tag only stores the workflow
+  artifact.
 - `content.json` file entries use `{ encoding, data }`, with `utf8` for text
   files and `base64` for binary assets. Keep this in sync with
   `/shell/main.js` content extraction.

@@ -17,7 +17,8 @@ This scope owns:
   activation, rollback, retained-instance, remote-instance, per-container clone
   and log inspection, port, storage, developer custom-image runs, runtime setup,
   and progress operations.
-- `state_store.js`: persisted launcher state under Electron `userData`.
+- `state_store.js`: persisted launcher state under Electron `userData`,
+  including preferences, remote instances, and local instance display names.
 - `releases_client.js`: GitHub release discovery for Agent Zero backend
   versions.
 - `release_tags.js`: shared validation and ordering for Agent Zero release tags.
@@ -51,6 +52,8 @@ This scope owns:
   status, add it to the Docker Manager state shape.
 - Persist user preferences and remote instances through `state_store.js`; do not
   invent parallel files.
+- Local instance display-name overrides are persisted through `state_store.js`
+  because Docker labels on existing containers cannot be mutated safely.
 - Port preferences are stored as UI and SSH host-port preferences.
 - Runtime endpoint selection is stored as a launcher-local Docker endpoint
   preference. It may be set from the setup modal when multiple usable endpoints
@@ -101,10 +104,11 @@ This scope owns:
 - Running an installed image from Installs should create a new launcher-managed
   container with a unique Docker name and open host ports, so repeated runs of
   the same image can coexist.
-- Per-container start/stop/delete/clone actions from the Instances card menu
-  still belong in this product layer. They must target the requested container
-  id, return an operation id, refresh state afterward, and keep storage-volume
-  deletion separate from container deletion.
+- Per-container start/stop/delete/clone/rename actions from the Instances card
+  menu still belong in this product layer. Container mutations must target the
+  requested container id, return an operation id, refresh state afterward, and
+  keep storage-volume deletion separate from container deletion. Rename is a
+  fast launcher metadata update and may return synchronously.
 - Per-container log inspection belongs in this product layer as a bounded
   read-only snapshot. It may not expose generic Docker commands to the renderer.
 - Cloning an instance should snapshot the source container, create a new

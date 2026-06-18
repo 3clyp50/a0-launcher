@@ -76,6 +76,7 @@ const DEFAULT_PORT_PREFERENCES = Object.freeze({
 });
 
 const MAX_REMOTE_INSTANCES = 64;
+const MAX_LOCAL_INSTANCE_NAMES = 256;
 
 function normalizePort(value, fallback) {
   const n = Number(value);
@@ -264,6 +265,72 @@ function normalizeRemoteInstanceName(value, url) {
   return cleaned || fallback;
 }
 
+function localInstanceNameError(message = 'Invalid instance name') {
+  const err = new Error(message);
+  err.code = 'INVALID_INSTANCE_NAME';
+  return err;
+}
+
+function normalizeLocalInstanceId(value) {
+  const v = String(value || '').trim();
+  if (!v || v.length > 128) return '';
+  return /^[a-f0-9]+$/i.test(v) ? v : '';
+}
+
+function normalizeLocalInstanceName(value) {
+  const cleaned = String(value || '')
+    .trim()
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 80);
+  if (!cleaned) throw localInstanceNameError('Instance name is required');
+  return cleaned;
+}
+
+function normalizeLocalInstanceNames(value) {
+  const out = {};
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  for (const [idRaw, nameRaw] of Object.entries(source)) {
+    const id = normalizeLocalInstanceId(idRaw);
+    if (!id) continue;
+    try {
+      const name = normalizeLocalInstanceName(nameRaw);
+      out[id] = name;
+    } catch {
+      // Ignore stale invalid entries.
+    }
+    if (Object.keys(out).length >= MAX_LOCAL_INSTANCE_NAMES) break;
+  }
+  return out;
+}
+
+async function readLocalInstanceNames() {
+  const state = await readJson(stateFile(), {});
+  return normalizeLocalInstanceNames(state?.localInstanceNames);
+}
+
+async function writeLocalInstanceName(containerId, name) {
+  const id = normalizeLocalInstanceId(containerId);
+  if (!id) throw localInstanceNameError('Invalid instance');
+  const displayName = normalizeLocalInstanceName(name);
+  const state = await readJson(stateFile(), {});
+  const current = normalizeLocalInstanceNames(state?.localInstanceNames);
+  current[id] = displayName;
+  await writeJson(stateFile(), { ...state, localInstanceNames: current, updatedAt: new Date().toISOString() });
+  return { containerId: id, name: displayName };
+}
+
+async function deleteLocalInstanceName(containerId) {
+  const id = normalizeLocalInstanceId(containerId);
+  if (!id) return false;
+  const state = await readJson(stateFile(), {});
+  const current = normalizeLocalInstanceNames(state?.localInstanceNames);
+  if (!Object.prototype.hasOwnProperty.call(current, id)) return false;
+  delete current[id];
+  await writeJson(stateFile(), { ...state, localInstanceNames: current, updatedAt: new Date().toISOString() });
+  return true;
+}
+
 function normalizeRemoteInstance(value, existing = null, options = {}) {
   const input = value && typeof value === 'object' ? value : {};
   const url = normalizeRemoteInstanceUrl(input.url);
@@ -372,6 +439,11 @@ module.exports = {
   readRemoteInstances,
   writeRemoteInstance,
   deleteRemoteInstance,
+
+  // Local instance display names
+  readLocalInstanceNames,
+  writeLocalInstanceName,
+  deleteLocalInstanceName,
 
   // Runtime setup resume
   readRuntimeSetupResume,

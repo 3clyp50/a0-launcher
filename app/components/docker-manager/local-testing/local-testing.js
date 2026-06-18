@@ -231,6 +231,63 @@ function openAddRemoteInstanceDialog() {
   window.setTimeout(() => urlInput?.focus(), 0);
 }
 
+function openRenameInstanceDialog({ title, currentName, onRename }) {
+  const existing = document.getElementById("renameInstanceDialog");
+  if (existing) existing.remove();
+
+  const dialog = document.createElement("div");
+  dialog.id = "renameInstanceDialog";
+  dialog.className = "dm-dialog-backdrop";
+  dialog.setAttribute("role", "presentation");
+
+  dialog.innerHTML = `
+    <form class="dm-dialog" role="dialog" aria-modal="true" aria-labelledby="renameInstanceTitle">
+      <div class="dm-dialog-header">
+        <h2 id="renameInstanceTitle" class="dm-dialog-title">${title || "Rename instance"}</h2>
+        <button class="button dm-dialog-close" type="button" data-dialog-close aria-label="Close">×</button>
+      </div>
+      <div class="dm-dialog-body">
+        <div class="dm-field">
+          <label for="renameInstanceName">Name</label>
+          <input id="renameInstanceName" class="dm-text-input" type="text" maxlength="80" autocomplete="off">
+        </div>
+      </div>
+      <div class="dm-dialog-footer">
+        <button class="button" type="button" data-dialog-close>Cancel</button>
+        <button class="button confirm" type="submit">Rename</button>
+      </div>
+    </form>
+  `;
+
+  const form = dialog.querySelector("form");
+  const input = dialog.querySelector("#renameInstanceName");
+  if (input) input.value = currentName || "";
+
+  dialog.querySelectorAll("[data-dialog-close]").forEach((btn) => {
+    btn.addEventListener("click", () => closeDialog(dialog));
+  });
+  dialog.addEventListener("mousedown", (event) => {
+    if (event.target === dialog) closeDialog(dialog);
+  });
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const nextName = String(input?.value || "").trim();
+    if (!nextName) {
+      window.toastFrontendError?.("Name is required.", "Agent Zero");
+      input?.focus();
+      return;
+    }
+    closeDialog(dialog);
+    await onRename?.(nextName);
+  });
+
+  document.body.appendChild(dialog);
+  window.setTimeout(() => {
+    input?.focus();
+    input?.select?.();
+  }, 0);
+}
+
 function closeLogsPanel() {
   const panel = document.getElementById("localInstanceLogsPanel");
   if (panel) panel.remove();
@@ -509,6 +566,16 @@ function renderDockerInstance(list, c, state) {
   }
 
   const menu = createCardMenu([
+    menuButton("edit", "Rename", () => {
+      openRenameInstanceDialog({
+        title: "Rename instance",
+        currentName: displayName,
+        onRename: (name) => window.dockerManagerActions?.renameLocalInstance?.(containerId, name)
+      });
+    }, {
+      disabled: !containerId || operationRunning,
+      title: "Rename this instance"
+    }),
     menuButton("article", "See logs", () => {
       openLogsPanel(c);
     }, {
@@ -603,6 +670,17 @@ function renderRemoteInstance(list, remote, state) {
   actions.appendChild(openBtn);
 
   const menuItems = [];
+  menuItems.push(menuButton("edit", "Rename", () => {
+    openRenameInstanceDialog({
+      title: "Rename remote instance",
+      currentName: remote?.name || "Remote instance",
+      onRename: (name) => window.dockerManagerActions?.renameRemoteInstance?.(remote?.id || "", name)
+    });
+  }, {
+    disabled: !remote?.id,
+    title: "Rename this saved remote instance"
+  }));
+
   if (cloneTarget?.containerId) {
     menuItems.push(menuButton("content_copy", "Clone", () => {
       window.dockerManagerActions?.cloneLocalInstance?.(cloneTarget.containerId);

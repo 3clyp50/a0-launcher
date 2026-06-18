@@ -110,8 +110,8 @@ This scope owns:
   continue sanitizing that field before it reaches the renderer.
 - Long-running Docker operations should return an accepted operation id and
   report progress through Docker Manager events instead of blocking the renderer.
-- Per-instance clone operations are named Docker Manager intents. They must stay
-  behind IPC and report progress like other container mutations.
+- Per-instance clone and rename operations are named Docker Manager intents.
+  They must stay behind IPC; long-running container mutations report progress.
 - Per-instance Docker log inspection is a named, bounded, read-only Docker
   Manager intent. Do not expose raw Docker log commands or shell execution.
 - Error responses should use `dockerManager.toErrorResponse()` so renderer code

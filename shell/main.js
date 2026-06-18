@@ -2324,6 +2324,7 @@ async function installDockerDesktop() {
 
 function sanitizeDockerManagerState(state) {
   const versionsIn = Array.isArray(state?.versions) ? state.versions : [];
+  const containersIn = Array.isArray(state?.containers) ? state.containers : [];
   const retainedIn = Array.isArray(state?.retainedInstances) ? state.retainedInstances : [];
   const remoteIn = Array.isArray(state?.remoteInstances) ? state.remoteInstances : [];
   const policyIn = isPlainObject(state?.retentionPolicy) ? state.retentionPolicy : {};
@@ -2415,6 +2416,39 @@ function sanitizeDockerManagerState(state) {
     retainedInstances.push(out);
   }
 
+  const containers = [];
+  for (const c of containersIn) {
+    if (!isPlainObject(c)) continue;
+    const containerId = typeof c.containerId === 'string' ? c.containerId : '';
+    const containerName = typeof c.containerName === 'string' ? c.containerName : '';
+    if (!containerId || !containerName) continue;
+    const out = { containerId, containerName };
+    if (typeof c.instanceName === 'string' || c.instanceName === null) out.instanceName = c.instanceName || null;
+    if (typeof c.imageRef === 'string') out.imageRef = c.imageRef;
+    if (typeof c.tag === 'string') out.tag = c.tag;
+    if (typeof c.versionTag === 'string') out.versionTag = c.versionTag;
+    if (typeof c.state === 'string' || c.state === null) out.state = c.state || null;
+    if (typeof c.status === 'string' || c.status === null) out.status = c.status || null;
+    if (Number.isFinite(Number(c.createdAt))) out.createdAt = Number(c.createdAt);
+    if (typeof c.uiUrl === 'string' && isAllowedHttpUrl(c.uiUrl)) out.uiUrl = c.uiUrl;
+    if (isPlainObject(c.labels)) {
+      const labels = {};
+      for (const [key, value] of Object.entries(c.labels)) {
+        if (typeof key === 'string' && typeof value === 'string') labels[key] = value;
+      }
+      out.labels = labels;
+    }
+    if (Array.isArray(c.ports)) {
+      out.ports = c.ports.map((p) => ({
+        privatePort: Number.isFinite(Number(p?.privatePort)) ? Number(p.privatePort) : null,
+        publicPort: Number.isFinite(Number(p?.publicPort)) ? Number(p.publicPort) : null,
+        type: typeof p?.type === 'string' ? p.type : null,
+        ip: typeof p?.ip === 'string' ? p.ip : null
+      }));
+    }
+    containers.push(out);
+  }
+
   const keepCount = Number.isFinite(Number(policyIn.keepCount)) ? Number(policyIn.keepCount) : 1;
   const retentionPolicy = { keepCount: Math.max(0, Math.min(20, Math.floor(keepCount))) };
 
@@ -2433,6 +2467,7 @@ function sanitizeDockerManagerState(state) {
 
   const outState = {
     versions,
+    containers,
     retainedInstances,
     remoteInstances,
     retentionPolicy
@@ -2770,6 +2805,30 @@ ipcMain.handle('docker-manager:deleteRemoteInstance', async (_event, body) => {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     const id = typeof body.id === 'string' ? body.id : '';
     return await dockerManager.deleteRemoteInstance(id);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:renameRemoteInstance', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const id = typeof body.id === 'string' ? body.id : '';
+    const name = typeof body.name === 'string' ? body.name : '';
+    const saved = await dockerManager.renameRemoteInstance(id, name);
+    const sanitized = sanitizeDockerManagerState({ remoteInstances: [saved] }).remoteInstances?.[0];
+    return sanitized || dockerManager.toErrorResponse({ code: 'INVALID_REMOTE_INSTANCE', message: 'Invalid remote instance' });
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:renameLocalInstance', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const name = typeof body.name === 'string' ? body.name : '';
+    return await dockerManager.renameLocalInstance(containerId, name);
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

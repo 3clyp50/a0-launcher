@@ -26,8 +26,8 @@ This scope owns:
 - `official-versions/`: install/version cards, activation dialog, model default
   helpers, port/env overrides, data-loss acknowledgement, and update/switch
   actions.
-- `local-testing/`: local containers, per-instance action menus, clone/log
-  inspection controls, remote instance CRUD, and instance opening.
+- `local-testing/`: local containers, per-instance action menus, rename,
+  clone/log inspection controls, remote instance CRUD, and instance opening.
 - `advanced/`: developer-mode custom image runner, Docker Compose composer,
   diagnostics, and storage-volume maintenance.
 - `settings/`: port preferences and retention policy controls.
@@ -102,9 +102,12 @@ This scope owns:
 - The Instances tab owns both local Docker containers and saved remote
   instances. Visible copy must say `Instances`, not `Sessions`.
 - Local instance cards keep `Open UI` or `Start` as the visible primary action.
-  Secondary management and inspection actions such as `See logs`, `Clone`,
-  `Open A0 CLI`, `Stop`, and `Delete` belong in the card overflow menu so they
-  always apply to the specific instance shown.
+  Secondary management and inspection actions such as `Rename`, `See logs`,
+  `Clone`, `Open A0 CLI`, `Stop`, and `Delete` belong in the card overflow menu
+  so they always apply to the specific instance shown.
+- Renaming a local instance changes the launcher-visible display name. It must
+  not rely on mutating existing Docker labels, because Docker labels are
+  immutable after container creation.
 - Saved remote URL-only instance cards must not expose Docker mutation actions.
   A saved remote card may show `Clone` only when its URL is loopback
   (`localhost`, `127.0.0.1`, or IPv6 loopback) and the port matches a discovered

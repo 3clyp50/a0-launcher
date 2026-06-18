@@ -501,6 +501,24 @@ async function deleteLocalInstance(containerId) {
   return !isErrorResponse(res);
 }
 
+async function renameLocalInstance(containerId, name) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.renameLocalInstance !== "function") return false;
+  try {
+    const res = await api.renameLocalInstance(containerId || "", name || "");
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Instance renamed.");
+    await refresh();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to rename instance");
+    return false;
+  }
+}
+
 async function getLocalInstanceLogs(containerId, options = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.getLocalInstanceLogs !== "function") return null;
@@ -649,6 +667,24 @@ async function deleteRemoteInstance(id) {
   }
 }
 
+async function renameRemoteInstance(id, name) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.renameRemoteInstance !== "function") return false;
+  try {
+    const res = await api.renameRemoteInstance(id || "", name || "");
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Remote instance renamed.");
+    await refresh();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to rename remote instance");
+    return false;
+  }
+}
+
 async function openRemoteInstance(id) {
   return openInstanceUi({ kind: "remote", instanceId: id || "" });
 }
@@ -699,6 +735,7 @@ window.dockerManagerActions = {
   startActive,
   startLocalInstance,
   cloneLocalInstance,
+  renameLocalInstance,
   stopActive,
   stopLocalInstance,
   deleteLocalInstance,
@@ -711,6 +748,7 @@ window.dockerManagerActions = {
   cancelOperation,
   addRemoteInstance,
   deleteRemoteInstance,
+  renameRemoteInstance,
   openRemoteInstance,
   openInstanceUi,
   selectInstanceHome,
@@ -759,6 +797,7 @@ function initSubscriptions() {
         store.stateLoaded = true;
         store.uiUrl = state?.uiUrl || "";
         store.versions = Array.isArray(state?.versions) ? state.versions : [];
+        if (Array.isArray(state?.containers)) store.containers = state.containers;
         store.retainedInstances = Array.isArray(state?.retainedInstances) ? state.retainedInstances : [];
         store.remoteInstances = Array.isArray(state?.remoteInstances) ? state.remoteInstances : [];
         store.storage = state?.storage || null;

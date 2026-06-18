@@ -588,6 +588,15 @@ function computeImageBytesStats(localImages) {
   };
 }
 
+function applyLocalInstanceNames(containers, localInstanceNames) {
+  const names = isPlainObject(localInstanceNames) ? localInstanceNames : {};
+  return (Array.isArray(containers) ? containers : []).map((container) => {
+    const id = typeof container?.containerId === 'string' ? container.containerId : '';
+    const override = id && typeof names[id] === 'string' ? names[id] : '';
+    return override ? { ...container, instanceName: override } : container;
+  });
+}
+
 async function bestEffortFreeBytesForUserData() {
   try {
     if (typeof fs.statfs !== 'function') return null;
@@ -738,11 +747,12 @@ async function buildDerivedState(options = {}) {
     return await buildUnavailableState(runtime);
   }
 
-  const [retentionPolicy, portPreferences, remoteInstances, installabilityCache, releasesResult, localImages, containers, freeBytes, remoteTags] =
+  const [retentionPolicy, portPreferences, remoteInstances, localInstanceNames, installabilityCache, releasesResult, localImages, rawContainers, freeBytes, remoteTags] =
     await Promise.all([
       stateStore.readRetentionPolicy(),
       stateStore.readPortPreferences(),
       stateStore.readRemoteInstances(),
+      stateStore.readLocalInstanceNames(),
       stateStore.readInstallabilityCache(),
       releasesClient.listOfficialReleases({ githubRepo, forceRefresh }),
       docker.listLocalImages(imageRepo),
@@ -750,6 +760,7 @@ async function buildDerivedState(options = {}) {
       bestEffortFreeBytesForUserData(),
       docker.listRemoteTags(imageRepo).catch(() => null)
     ]);
+  const containers = applyLocalInstanceNames(rawContainers, localInstanceNames);
 
   const releases = Array.isArray(releasesResult?.releases) ? releasesResult.releases : [];
   const offline = !!releasesResult?.offline;
@@ -1094,6 +1105,7 @@ async function buildDerivedState(options = {}) {
 
   return {
     versions: releaseEntries,
+    containers,
     retainedInstances,
     remoteInstances,
     retentionPolicy,
@@ -1719,6 +1731,21 @@ async function deleteRemoteInstance(id) {
   return result;
 }
 
+async function renameRemoteInstance(id, name) {
+  const found = await getRemoteInstance(id);
+  const saved = await stateStore.writeRemoteInstance({
+    id: found.id,
+    name,
+    url: found.url
+  });
+  if (_cachedState) {
+    const remoteInstances = await stateStore.readRemoteInstances();
+    _cachedState = { ..._cachedState, remoteInstances };
+    events.emit('state', _cachedState);
+  }
+  return saved;
+}
+
 async function getRemoteInstance(id) {
   const cleanId = String(id || '').trim();
   const remoteInstances = await stateStore.readRemoteInstances();
@@ -2262,6 +2289,24 @@ async function cloneLocalInstance(containerId) {
   return { opId };
 }
 
+async function renameLocalInstance(containerId, name) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+  const docker = await getManagedDocker(imageRepo);
+  const containers = await docker.listContainers(imageRepo);
+  const target = (containers || []).find((c) => c && c.containerId === id) || null;
+
+  if (!target || !target.containerId) {
+    const err = new Error('Instance not found');
+    err.code = 'INSTANCE_NOT_FOUND';
+    throw err;
+  }
+
+  const saved = await stateStore.writeLocalInstanceName(id, name);
+  await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+  return { containerId: id, instanceName: saved.name };
+}
+
 async function startActiveInstance() {
   const imageRepo = getBackendImageRepo();
 
@@ -2347,6 +2392,7 @@ async function deleteRetainedInstance(containerId) {
       }
 
       await docker.deleteContainer(id, { force: true });
+      await stateStore.deleteLocalInstanceName(id).catch(() => {});
       finishOperation('completed', null);
       updateOperationProgress({ progress: 100, message: 'Deleted' });
     } catch (error) {
@@ -2393,6 +2439,7 @@ async function deleteLocalInstance(containerId) {
       if (cloneImageRef && cloneImageRef.startsWith(`${CLONE_IMAGE_REPO}:`)) {
         await docker.removeLocalImage(cloneImageRef).catch(() => {});
       }
+      await stateStore.deleteLocalInstanceName(target.containerId).catch(() => {});
       finishOperation('completed', null);
       updateOperationProgress({ progress: 100, message: 'Deleted' });
     } catch (error) {
@@ -2857,7 +2904,10 @@ async function cancelOperation(opId) {
 
 async function getDockerInventory() {
   const imageRepo = getBackendImageRepo();
-  const remoteInstances = await stateStore.readRemoteInstances();
+  const [remoteInstances, localInstanceNames] = await Promise.all([
+    stateStore.readRemoteInstances(),
+    stateStore.readLocalInstanceNames()
+  ]);
   const docker = await getManagedDocker(imageRepo);
   const env = await docker.getEnvironment();
   const runtime = await assessRuntime(env);
@@ -2876,7 +2926,7 @@ async function getDockerInventory() {
       docker.listVolumes()
     ]);
     images = Array.isArray(results[0]) ? results[0] : [];
-    containers = Array.isArray(results[1]) ? results[1] : [];
+    containers = applyLocalInstanceNames(Array.isArray(results[1]) ? results[1] : [], localInstanceNames);
     volumes = Array.isArray(results[2]) ? results[2] : [];
     listingSucceeded = images.length > 0 || containers.length > 0 || volumes.length > 0;
   } catch {
@@ -2989,6 +3039,7 @@ module.exports = {
   startActiveInstance,
   startLocalInstance,
   cloneLocalInstance,
+  renameLocalInstance,
   stopActiveInstance,
   stopLocalInstance,
   setRetentionPolicy,
@@ -2998,6 +3049,7 @@ module.exports = {
   resumeRuntimeSetupIfPending,
   addRemoteInstance,
   deleteRemoteInstance,
+  renameRemoteInstance,
   deleteLocalInstance,
   getRemoteInstance,
   deleteRetainedInstance,

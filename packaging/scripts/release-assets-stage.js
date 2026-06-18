@@ -371,6 +371,40 @@ function stageUpdaterMetadataAssets(rootDir, context, artifactIndex, releaseVers
   });
 }
 
+function shouldRequireCanonicalAsset(record) {
+  if (record.kind.endsWith(".blockmap")) {
+    return false;
+  }
+  if (record.platform === "linux" && record.baseExtension === "AppImage") {
+    return true;
+  }
+  if (record.platform === "windows" && record.baseExtension === "exe") {
+    return true;
+  }
+  if (record.platform === "macos" && (record.baseExtension === "dmg" || record.baseExtension === "zip")) {
+    return true;
+  }
+  return false;
+}
+
+function validateCanonicalAssetCoverage(releaseVersion, context, artifactIndex) {
+  const expected = new Set();
+  artifactIndex.forEach((record) => {
+    if (!shouldRequireCanonicalAsset(record)) {
+      return;
+    }
+    expected.add(buildCanonicalAssetName(releaseVersion, record.platform, record.arch, record.baseExtension));
+  });
+
+  const missing = Array.from(expected)
+    .filter((targetName) => !context.staged.has(targetName))
+    .sort();
+
+  if (missing.length) {
+    throw new Error("Release staging missed expected canonical asset(s): " + missing.join(", ") + ".");
+  }
+}
+
 function writeManifest(context) {
   const manifestPath = path.join(context.outputDir, ".manifest.json");
   const manifest = {
@@ -397,6 +431,7 @@ function main() {
 
   stagePublicReleaseAssets(parsed.releaseVersion, context, artifactIndex);
   stageUpdaterMetadataAssets(parsed.assetsDir, context, artifactIndex, parsed.releaseVersion);
+  validateCanonicalAssetCoverage(parsed.releaseVersion, context, artifactIndex);
 
   const manifestPath = writeManifest(context);
   console.log("Wrote release upload manifest to " + manifestPath + ".");

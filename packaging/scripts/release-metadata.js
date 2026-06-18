@@ -129,11 +129,15 @@ function serializeUpdateMetadata(metadata) {
   return `${lines.join("\n")}\n`;
 }
 
+function buildMetadataFileKey(file) {
+  return [file.url || "", file.sha512 || "", file.size || ""].join("\0");
+}
+
 function mergeMetadataFiles(inputFiles, outputPath) {
   const merged = {
     files: []
   };
-  const seenUrls = new Set();
+  const seenFiles = new Set();
 
   inputFiles.forEach((filePath) => {
     const metadata = readUpdateMetadata(filePath);
@@ -144,11 +148,12 @@ function mergeMetadataFiles(inputFiles, outputPath) {
     });
 
     metadata.files.forEach((file) => {
-      if (!file.url || seenUrls.has(file.url)) {
+      const key = buildMetadataFileKey(file);
+      if (!file.url || seenFiles.has(key)) {
         return;
       }
 
-      seenUrls.add(file.url);
+      seenFiles.add(key);
       merged.files.push(file);
     });
   });

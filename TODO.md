@@ -219,7 +219,7 @@ especially for the fresh no-WSL/no-Docker path.
   - Local images absent from official release metadata are merged into cards.
   - Dynamic-port local tabs key by container identity and update/reload their
     URL instead of duplicating stale tabs.
-  - No-Docker onboarding fallback button copy now says `Set Up Agent Zero`.
+  - No-Docker onboarding fallback button copy now says `Setup Agent Zero`.
 - Windows Server 2022 blocker path:
   - Baseline VM: Windows Server 2022 Standard, PowerShell `5.1.20348.4294`,
     no Docker CLI, no winget.
@@ -236,7 +236,7 @@ especially for the fresh no-WSL/no-Docker path.
   - Destructive reset was performed: Ubuntu unregistered, WSL and
     VirtualMachinePlatform disabled, reboot completed.
   - No-WSL baseline returned `WSL_E_WSL_OPTIONAL_COMPONENT_REQUIRED`.
-  - Launcher provisioner reported `wsl_feature`, `Set Up Agent Zero`,
+  - Launcher provisioner reported `wsl_feature`, `Setup Agent Zero`,
     `requiresAdmin=true`, and `requiresRestart=true`.
   - UAC-backed `wsl.exe --install --no-distribution` started feature setup and
     returned a reboot-required follow-up.

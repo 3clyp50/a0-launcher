@@ -104,7 +104,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
         packageManager: pm.id,
         manualPackages: [...MANUAL_PACKAGES],
         manualCommand: this.#installScript(pm),
-        detail: 'Automatic setup needs a system authentication dialog or passwordless sudo. Install Docker Engine manually, then return here.'
+        detail: 'Automatic Runtime Setup needs a system authentication dialog or passwordless sudo. Install Docker Engine manually, then return here.'
       };
     }
 
@@ -168,7 +168,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
 
     const pm = await this.#detectPackageManager();
     if (!pm || pm.manual || !pm.install) {
-      throw makeError('RUNTIME_UNSUPPORTED', 'Automatic setup is not available on this system.');
+      throw makeError('RUNTIME_UNSUPPORTED', 'Automatic Runtime Setup is not available on this system.');
     }
 
     options.onProgress?.('Requesting system authorization');
@@ -306,7 +306,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
     }
     throw makeError(
       'RUNTIME_MANUAL_INSTALL',
-      'Automatic setup needs a system authentication dialog or passwordless sudo.'
+      'Automatic Runtime Setup needs a system authentication dialog or passwordless sudo.'
     );
   }
 
@@ -384,7 +384,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
   #username() {
     const user = (this._usernameOverride || process.env.SUDO_USER || os.userInfo().username || '').trim();
     if (!/^[A-Za-z_][A-Za-z0-9_.-]*\$?$/.test(user)) {
-      throw makeError('INVALID_USERNAME', 'Refusing to run privileged setup for an unusual username.');
+      throw makeError('INVALID_USERNAME', 'Refusing to run privileged Runtime Setup for an unusual username.');
     }
     return user;
   }

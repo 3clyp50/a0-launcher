@@ -376,9 +376,9 @@ async function provisionRuntime() {
   }
 
   return runDockerOperation(
-    "Runtime setup",
+    "Runtime Setup",
     () => api.provisionRuntime(),
-    "Runtime setup requested."
+    "Runtime Setup requested."
   );
 }
 

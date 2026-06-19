@@ -35,7 +35,7 @@ const RUNTIME_STEPS = Object.freeze({
   ]),
   generic: Object.freeze([
     ['check_runtime', 'Checking runtime'],
-    ['setup_runtime', 'Setting up runtime'],
+    ['setup_runtime', 'Runtime Setup'],
     ['ready', 'Runtime ready']
   ])
 });
@@ -138,11 +138,11 @@ function clampProgress(value) {
 
 function runtimeSetupProgressPatch(assessment = null, message = '', progress = null, status = 'running') {
   const kind = runtimeKind(assessment);
-  const detail = normalizeProgressText(message) || normalizeProgressText(assessment?.detail) || 'Preparing Agent Zero setup.';
+  const detail = normalizeProgressText(message) || normalizeProgressText(assessment?.detail) || 'Preparing Agent Zero Setup.';
   const phase = phaseForMessage(detail, kind) || (status === 'completed' ? 'ready' : '');
   const numericProgress = clampProgress(progress);
   const patch = {
-    headline: 'Setting up Agent Zero',
+    headline: 'Setup Agent Zero',
     detail,
     message: detail,
     phase: phase || null,

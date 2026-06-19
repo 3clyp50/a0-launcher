@@ -233,13 +233,13 @@ test('no Docker on Linux shows blocking setup action', () => {
 
   assert.equal(shouldShowRuntimeGate(state), true);
   const model = normalizedRuntimeGate(state);
-  assert.equal(model.action.label, 'Set Up Agent Zero');
+  assert.equal(model.action.label, 'Setup Agent Zero');
 
   let setupCount = 0;
   assert.equal(renderRuntimeGate(state, { provisionRuntime: () => { setupCount += 1; } }), true);
   assert.ok(document.getElementById('runtimeSetupDialog'));
   assert.equal(document.querySelector('.dm-page').inert, true);
-  buttonByText(document, 'Set Up Agent Zero').dispatchEvent(new MiniEvent('click'));
+  buttonByText(document, 'Setup Agent Zero').dispatchEvent(new MiniEvent('click'));
   assert.equal(setupCount, 1);
 });
 
@@ -284,7 +284,7 @@ test('runtime setup progress keeps setup disabled and shows an indeterminate bar
     progress: {
       type: 'runtime_setup',
       status: 'running',
-      headline: 'Setting up Agent Zero',
+      headline: 'Setup Agent Zero',
       detail: 'Installing Docker Engine',
       indeterminate: true
     }
@@ -295,7 +295,7 @@ test('runtime setup progress keeps setup disabled and shows an indeterminate bar
   assert.equal(model.indeterminate, true);
 
   renderRuntimeGate(state, {});
-  const primary = buttonByText(document, 'Setting Up Agent Zero');
+  const primary = buttonByText(document, 'Setup Agent Zero');
   assert.equal(primary.disabled, true);
   assert.ok(document.querySelector('.indeterminate'));
   assert.equal(document.querySelector('.dm-runtime-gate-detail'), null);
@@ -317,7 +317,7 @@ test('completed runtime setup shows success without a refresh button or step lis
       opId: 'op-success',
       type: 'runtime_setup',
       status: 'completed',
-      headline: 'Setting up Agent Zero',
+      headline: 'Setup Agent Zero',
       detail: 'Runtime ready',
       phase: 'ready',
       progress: 100

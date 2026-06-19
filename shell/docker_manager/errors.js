@@ -30,7 +30,7 @@ function mapDockerInterfaceErrorToUiMessage(error) {
     case 'RUNTIME_AUTH_DECLINED':
       return 'Authentication was cancelled. Nothing was changed.';
     case 'RUNTIME_UNSUPPORTED':
-      return 'Automatic runtime setup is not available on this system.';
+      return 'Automatic Runtime Setup is not available on this system.';
 
     case 'REGISTRY_RATE_LIMIT':
       return 'Update checks are temporarily unavailable. Please try again later.';

@@ -476,7 +476,7 @@ function emptyDerivedState(runtime = null) {
 
 function normalizeRuntimeAssessment(assessment, env = null) {
   let state = typeof assessment?.state === 'string' ? assessment.state : 'unsupported';
-  const detail = typeof assessment?.detail === 'string' ? assessment.detail : 'Automatic runtime setup is not available.';
+  const detail = typeof assessment?.detail === 'string' ? assessment.detail : 'Automatic Runtime Setup is not available.';
   if (state === 'unsupported' && /user needs Docker access|not in the docker group/i.test(detail)) {
     state = 'needs_group_membership';
   }
@@ -533,7 +533,7 @@ async function assessRuntime(env = null) {
   if (!provisioner) {
     return normalizeRuntimeAssessment({
       state: 'unsupported',
-      detail: 'Automatic runtime setup is not available on this system. Install Docker Desktop or Docker Engine, then refresh.'
+      detail: 'Automatic Runtime Setup is not available on this system. Install Docker Desktop or Docker Engine, then refresh.'
     }, env);
   }
 
@@ -543,7 +543,7 @@ async function assessRuntime(env = null) {
   } catch (error) {
     return normalizeRuntimeAssessment({
       state: 'unsupported',
-      detail: error?.message || 'Automatic runtime setup is not available on this system.'
+      detail: error?.message || 'Automatic Runtime Setup is not available on this system.'
     }, env);
   }
 }
@@ -1800,7 +1800,7 @@ async function provisionRuntime() {
     try {
       const provisioner = await getRuntimeProvisioner();
       if (!provisioner) {
-        const err = new Error('Automatic runtime setup is not available on this system.');
+        const err = new Error('Automatic Runtime Setup is not available on this system.');
         err.code = 'RUNTIME_UNSUPPORTED';
         throw err;
       }
@@ -1844,7 +1844,7 @@ async function provisionRuntime() {
         };
         throw err;
       } else {
-        const err = new Error(assessment?.detail || 'Automatic runtime setup is not available on this system.');
+        const err = new Error(assessment?.detail || 'Automatic Runtime Setup is not available on this system.');
         err.code = 'RUNTIME_UNSUPPORTED';
         throw err;
       }
@@ -1854,7 +1854,7 @@ async function provisionRuntime() {
       updateOperationProgress(runtimeSetupProgressPatch(assessment, 'Runtime ready', 100, 'completed'));
       finishOperation('completed', null);
     } catch (error) {
-      const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Runtime setup failed';
+      const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Runtime Setup failed';
       updateOperationProgress(runtimeSetupProgressPatch(runtimeAssessment, message, null, 'failed'));
       finishOperation('failed', message);
     } finally {

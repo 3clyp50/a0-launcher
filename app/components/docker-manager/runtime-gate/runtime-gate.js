@@ -37,7 +37,7 @@ const RUNTIME_STEPS = Object.freeze({
   ]),
   generic: Object.freeze([
     ["check_runtime", "Checking runtime"],
-    ["setup_runtime", "Setting up runtime"],
+    ["setup_runtime", "Runtime Setup"],
     ["ready", "Runtime ready"]
   ])
 });
@@ -120,9 +120,9 @@ function headlineForRuntime(runtime, progress = null) {
   const headline = asText(progress?.headline);
   if (headline) return headline;
   if (isDockerDesktopStopped(runtime)) return "Docker Desktop is not running";
-  if (runtime?.state === "manual_install" || runtime?.state === "unsupported") return "Manual runtime setup needed";
-  if (runtime?.state === "needs_relogin") return "Finish Docker access setup";
-  return "Set up Agent Zero";
+  if (runtime?.state === "manual_install" || runtime?.state === "unsupported") return "Manual Runtime Setup Needed";
+  if (runtime?.state === "needs_relogin") return "Finish Docker Access Setup";
+  return "Setup Agent Zero";
 }
 
 function detailForRuntime(runtime, progress = null) {
@@ -142,11 +142,11 @@ function actionForRuntime(runtime, progress = null) {
   }
 
   if (progress?.type === "runtime_setup" && status === "running") {
-    return { kind: "wait", label: "Setting Up Agent Zero", disabled: true };
+    return { kind: "wait", label: "Setup Agent Zero", disabled: true };
   }
 
   if (!runtime || typeof runtime !== "object") {
-    return { kind: "setup", label: "Set Up Agent Zero" };
+    return { kind: "setup", label: "Setup Agent Zero" };
   }
 
   if (runtime.canProvision && runtime.action === "start") {
@@ -157,7 +157,7 @@ function actionForRuntime(runtime, progress = null) {
   }
 
   if (runtime.canProvision && runtime.action === "install") {
-    const label = asText(runtime.setupActionLabel) || "Set Up Agent Zero";
+    const label = asText(runtime.setupActionLabel) || "Setup Agent Zero";
     return { kind: "setup", label };
   }
 
@@ -259,7 +259,7 @@ function normalizedRuntimeGate(state = {}) {
   const steps = completedButStillBlocked ? [] : normalizeSteps(progress?.steps);
 
   return {
-    headline: success ? "Agent Zero setup complete" : headlineForRuntime(runtime, progress),
+    headline: success ? "Agent Zero Setup Complete" : headlineForRuntime(runtime, progress),
     detail: success ? "Docker Engine is installed and running." : detailForRuntime(runtime, progress),
     showDetail: success || status !== "running",
     phase,
@@ -388,7 +388,7 @@ function renderSetupChoice(model, parent, selectedTag = "") {
 
   const text = document.createElement("div");
   text.className = "dm-runtime-install-text";
-  text.textContent = "Install the Agent Zero image next. The latest tag is recommended for first setup.";
+  text.textContent = "Install the Agent Zero image next. Use latest for first-time Setup.";
   wrap.appendChild(text);
 
   const field = document.createElement("div");

@@ -64,6 +64,8 @@ This scope owns:
 - Runtime setup success should stay in the same modal shell long enough to
   offer first Agent Zero image setup. The selector defaults to `latest`, and the
   primary `Setup Agent Zero` action starts the selected image install.
+- Visible setup titles, buttons, and transient progress states should use
+  `Setup`, not `Set up`, `Set Up`, or `Setting up`.
 - If two or more usable local runtime endpoints are detected during setup
   completion, the same modal may show a compact `Run Agent Zero with` selector.
   Hide that selector for zero or one usable endpoint, and do not add a runtime

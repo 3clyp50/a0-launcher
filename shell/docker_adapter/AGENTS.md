@@ -62,6 +62,9 @@ This scope owns:
   for platform setup phases such as authorization, component download, Docker
   Engine install/start, follow-up/relogin, and Docker Desktop waiting. Keep the
   messages stable enough for Docker Manager to normalize into modal steps.
+- Renderer-visible runtime assessment labels and details should use `Setup`,
+  not `Set up`, `Set Up`, or `Setting up`; internal field names may remain
+  `setup`.
 - macOS automatic provisioning uses a dedicated Colima profile named `a0`.
   It must not require Docker Desktop, Homebrew, or a privileged Docker socket
   symlink. Because Colima checks for a Docker client during startup, the

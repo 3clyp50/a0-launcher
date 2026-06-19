@@ -141,7 +141,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
 
     if (!wslPresent) {
       if (dockerDesktopInstalled) return this.#dockerDesktopStoppedAssessment();
-      return this.#wslFeatureSetupAssessment('Set up the local Agent Zero runtime. Windows may ask for approval and may require a restart.');
+      return this.#wslFeatureSetupAssessment('Local Agent Zero runtime Setup may ask for Windows approval and may require a restart.');
     }
 
     const distroList = await this.#wslList();
@@ -153,16 +153,16 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       const vmPlatform = await this.#optionalFeatureState('VirtualMachinePlatform');
       if (!wslUsable && (wslFeature !== 'Enabled' || vmPlatform !== 'Enabled')) {
         if (dockerDesktopInstalled) return this.#dockerDesktopStoppedAssessment();
-        return this.#wslFeatureSetupAssessment('Set up the local Agent Zero runtime. Windows may ask for approval and may require a restart.');
+        return this.#wslFeatureSetupAssessment('Local Agent Zero runtime Setup may ask for Windows approval and may require a restart.');
       }
       if (dockerDesktopInstalled) return this.#dockerDesktopStoppedAssessment();
       return {
         state: 'not_provisioned',
         mode: 'wsl_distribution',
-        detail: 'Finish setting up the local Agent Zero runtime.',
+        detail: 'Finish local Agent Zero runtime Setup.',
         manualCommand: `wsl.exe --install -d ${DEFAULT_WSL_DISTRO} --no-launch`,
         manualUrl: WSL_INSTALL_URL,
-        setupActionLabel: 'Set Up Agent Zero'
+        setupActionLabel: 'Setup Agent Zero'
       };
     }
 
@@ -174,9 +174,9 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
         state: 'not_provisioned',
         mode: 'wsl_engine',
         distro: distro.name,
-        detail: 'Finish setting up the local Agent Zero runtime.',
+        detail: 'Finish local Agent Zero runtime Setup.',
         manualUrl: DOCKER_ENGINE_UBUNTU_URL,
-        setupActionLabel: 'Set Up Agent Zero'
+        setupActionLabel: 'Setup Agent Zero'
       };
     }
 
@@ -186,10 +186,10 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
         state: 'not_provisioned',
         mode: 'wsl_bridge_dependency',
         distro: distro.name,
-        detail: 'Finish setting up the local Agent Zero runtime.',
+        detail: 'Finish local Agent Zero runtime Setup.',
         manualCommand: 'sudo apt-get update && sudo apt-get install -y python3',
         manualUrl: DOCKER_ENGINE_UBUNTU_URL,
-        setupActionLabel: 'Set Up Agent Zero'
+        setupActionLabel: 'Setup Agent Zero'
       };
     }
 
@@ -228,7 +228,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       manualUrl: WSL_INSTALL_URL,
       requiresAdmin: true,
       requiresRestart: true,
-      setupActionLabel: 'Set Up Agent Zero'
+      setupActionLabel: 'Setup Agent Zero'
     };
   }
 
@@ -357,7 +357,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     });
     return {
       state: 'needs_followup',
-      detail: 'Agent Zero setup was started. Restart Windows if prompted, then return here to continue.'
+      detail: 'Agent Zero Setup was started. Restart Windows if prompted, then return here to continue.'
     };
   }
 
@@ -389,7 +389,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     if (!distroReady) {
       return {
         state: 'needs_followup',
-        detail: 'Agent Zero setup was started. If Windows asks for a restart or a first-run setup window opens, complete that and return here.'
+        detail: 'Agent Zero Setup was started. If Windows asks for a restart or opens a first-run window, complete that and return here.'
       };
     }
     await this.#installAndStartWslDocker(DEFAULT_WSL_DISTRO, options);
@@ -485,7 +485,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     }
     return {
       state: 'needs_followup',
-      detail: 'Agent Zero setup is almost done. Continue setup to start the local runtime.'
+      detail: 'Agent Zero Setup is almost done. Continue Setup to start the local runtime.'
     };
   }
 
@@ -555,7 +555,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       signal: options.signal
     });
     if (result.code !== 0) {
-      throw makeError('RUNTIME_PROVISION_FAILED', 'Windows WSL setup did not complete.', {
+      throw makeError('RUNTIME_PROVISION_FAILED', 'Windows WSL Setup did not complete.', {
         exitCode: result.code,
         stdout: cleanCommandText(result.stdout),
         stderr: cleanCommandText(result.stderr)

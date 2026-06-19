@@ -80,6 +80,8 @@ This scope owns:
   `indeterminate` in addition to the legacy `message` and numeric progress
   fields. Runtime setup progress uses those fields for the blocking startup
   modal.
+- Renderer-visible setup progress copy should use `Setup`, not `Set up`,
+  `Set Up`, or `Setting up`; internal identifiers may stay `setup`.
 - Progress payloads may include `canCancel`; set it only while a user cancel
   action can actually abort the current operation phase, such as an active image
   pull.

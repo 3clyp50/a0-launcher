@@ -12,7 +12,7 @@ test('runtime progress normalizes Linux Docker Engine setup phases', () => {
 
   const installing = runtimeSetupProgressPatch(assessment, 'Installing Docker Engine');
   assert.equal(runtimeKind(assessment), 'linux');
-  assert.equal(installing.headline, 'Setting up Agent Zero');
+  assert.equal(installing.headline, 'Setup Agent Zero');
   assert.equal(installing.phase, 'install_engine');
   assert.equal(activeStep(installing)?.label, 'Installing Docker Engine');
   assert.equal(installing.indeterminate, true);

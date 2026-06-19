@@ -66,7 +66,7 @@ test('WindowsWslRuntime assess directs Windows clients without WSL to runtime in
     assert.equal(assessment.mode, 'wsl_feature');
     assert.equal(assessment.requiresAdmin, true);
     assert.equal(assessment.requiresRestart, true);
-    assert.equal(assessment.setupActionLabel, 'Set Up Agent Zero');
+    assert.equal(assessment.setupActionLabel, 'Setup Agent Zero');
     assert.match(assessment.detail, /Agent Zero runtime/i);
     assert.match(assessment.manualCommand, /wsl\.exe --install --no-distribution/i);
   } finally {
@@ -176,7 +176,7 @@ test('WindowsWslRuntime provision installs Ubuntu when WSL2 has no distro', asyn
     const assessment = await runtime.assess();
     assert.equal(assessment.state, 'not_provisioned');
     assert.equal(assessment.mode, 'wsl_distribution');
-    assert.equal(assessment.setupActionLabel, 'Set Up Agent Zero');
+    assert.equal(assessment.setupActionLabel, 'Setup Agent Zero');
 
     const result = await runtime.provision();
 
@@ -210,7 +210,7 @@ test('WindowsWslRuntime resumes to distro setup after WSL feature reboot', async
 
     assert.equal(assessment.state, 'not_provisioned');
     assert.equal(assessment.mode, 'wsl_distribution');
-    assert.equal(assessment.setupActionLabel, 'Set Up Agent Zero');
+    assert.equal(assessment.setupActionLabel, 'Setup Agent Zero');
     assert.match(assessment.manualCommand, /wsl\.exe --install -d Ubuntu --no-launch/i);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
@@ -279,7 +279,7 @@ test('WindowsWslRuntime provision installs Docker Engine inside an existing WSL 
     const assessment = await runtime.assess();
     assert.equal(assessment.state, 'not_provisioned');
     assert.equal(assessment.mode, 'wsl_engine');
-    assert.equal(assessment.setupActionLabel, 'Set Up Agent Zero');
+    assert.equal(assessment.setupActionLabel, 'Setup Agent Zero');
 
     await runtime.provision({ onProgress: (message) => progress.push(message) });
 

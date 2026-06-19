@@ -18,14 +18,14 @@ function isDockerDesktopStopped(runtime) {
 
 function titleForRuntime(runtime) {
   if (isDockerDesktopStopped(runtime)) return "Docker Desktop is not running";
-  if (isDockerDesktopRuntime(runtime)) return "Docker Desktop setup";
-  return "Agent Zero setup";
+  if (isDockerDesktopRuntime(runtime)) return "Docker Desktop Setup";
+  return "Agent Zero Setup";
 }
 
 function actionForRuntime(runtime) {
   const openGuide = () => window.dockerManagerActions?.openDockerDownload?.(runtime?.manualUrl || "");
   if (!runtime || typeof runtime !== "object") {
-    return { label: "Set Up Agent Zero", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
+    return { label: "Setup Agent Zero", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (runtime.canProvision && runtime.action === "start") {
     return {
@@ -36,7 +36,7 @@ function actionForRuntime(runtime) {
   if (runtime.canProvision && runtime.action === "install") {
     const label = typeof runtime.setupActionLabel === "string" && runtime.setupActionLabel.trim()
       ? runtime.setupActionLabel.trim()
-      : "Set Up Agent Zero";
+      : "Setup Agent Zero";
     return { label, handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (isDockerDesktopStopped(runtime)) {
@@ -67,7 +67,7 @@ function render(state) {
   const runtime = state?.runtime || null;
   panel.classList.toggle("sv-onboarding-warning", isDockerDesktopStopped(runtime));
   if (title) title.textContent = titleForRuntime(runtime);
-  const fallback = state?.error || state?.environment?.diagnosticMessage || "Agent Zero needs to finish local setup before it can start.";
+  const fallback = state?.error || state?.environment?.diagnosticMessage || "Agent Zero needs local Setup to finish before it can start.";
   const detail = runtimeMessage(runtime, fallback);
   if (message) message.textContent = detail;
 

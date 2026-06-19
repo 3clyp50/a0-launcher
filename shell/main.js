@@ -1989,7 +1989,7 @@ function findDockerCliBinary() {
     if (existing) return existing;
   }
 
-  const err = new Error('Docker CLI was not found. Finish Docker setup, then try again.');
+  const err = new Error('Docker CLI was not found. Finish Docker Setup, then try again.');
   err.code = 'TERMINAL_UNAVAILABLE';
   throw err;
 }

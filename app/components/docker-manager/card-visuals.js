@@ -48,7 +48,36 @@ function createVersionVisual(value, options = {}) {
   return visual;
 }
 
+function createInstanceVisual(value, options = {}) {
+  const label = String(value || "").trim() || "Instance";
+  const badge = versionVisualLabel(options.badge || options.version || "", "");
+  const seed = String(options.seed || value || badge || "instance");
+  const tone = toneForSeed(seed);
+  const lengthClass = label.length > 30 ? " is-compact" : label.length > 18 ? " is-long" : "";
+  const visual = document.createElement("div");
+  visual.className = `dm-card-visual dm-card-instance-visual${lengthClass}`;
+  visual.style.setProperty("--dm-version-fg", tone.fg);
+  visual.style.setProperty("--dm-version-bg", tone.bg);
+  visual.style.setProperty("--dm-version-border", tone.border);
+  visual.setAttribute("aria-label", badge ? `${label}, version ${badge}` : label);
+
+  const text = document.createElement("span");
+  text.className = "dm-card-instance-name";
+  text.textContent = label;
+  visual.appendChild(text);
+
+  if (badge) {
+    const chip = document.createElement("span");
+    chip.className = "dm-card-instance-version";
+    chip.textContent = badge;
+    visual.appendChild(chip);
+  }
+
+  return visual;
+}
+
 export {
+  createInstanceVisual,
   createVersionVisual,
   versionVisualLabel
 };

@@ -1,4 +1,4 @@
-import { createVersionVisual } from "../card-visuals.js";
+import { createInstanceVisual } from "../card-visuals.js";
 
 function byId(id) { return document.getElementById(id); }
 
@@ -86,14 +86,6 @@ function imageTagForContainer(c) {
     c?.tag ||
     tagFromImageRef(c?.imageRef) ||
     "";
-}
-
-function dockerInstanceVisualValue(c) {
-  return runtimeBranch(c) ||
-    imageTagForContainer(c) ||
-    c?.instanceName ||
-    c?.containerName ||
-    "Instance";
 }
 
 function dockerInstanceRuntimeSummary(c) {
@@ -601,13 +593,14 @@ function renderDockerInstance(list, c, state) {
   const operationRunning = state?.progress?.status === "running";
   const containerId = c?.containerId || "";
   const displayName = c?.instanceName || c?.containerName || c?.containerId?.slice(0, 12) || "instance";
-  const visualValue = dockerInstanceVisualValue(c);
+  const imageTag = imageTagForContainer(c);
   const cliHost = localUiUrl(c?.uiUrl);
   const card = document.createElement("div");
   card.className = "dm-card";
 
-  const visual = createVersionVisual(visualValue, {
-    seed: visualValue
+  const visual = createInstanceVisual(displayName, {
+    badge: imageTag,
+    seed: `${displayName}:${imageTag || containerId}`
   });
 
   const body = document.createElement("div");
@@ -621,7 +614,6 @@ function renderDockerInstance(list, c, state) {
   meta.className = "dm-card-meta";
   const parts = [];
   const runtimeSummary = dockerInstanceRuntimeSummary(c);
-  const imageTag = imageTagForContainer(c);
   if (runtimeSummary) {
     parts.push(runtimeSummary);
     if (imageTag && imageTag !== runtimeBranch(c)) parts.push(`image ${imageTag}`);
@@ -773,7 +765,7 @@ function renderRemoteInstance(list, remote, state) {
   const card = document.createElement("div");
   card.className = "dm-card";
 
-  const visual = createVersionVisual("Remote", {
+  const visual = createInstanceVisual(remote?.name || "Remote instance", {
     seed: remoteInstanceVisualSeed(remote)
   });
 

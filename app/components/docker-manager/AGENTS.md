@@ -140,9 +140,9 @@ This scope owns:
   Secondary management and inspection actions such as `Rename`, `See logs`,
   `Open storage folder`, `Clone`, `Open A0 CLI`, `Stop`, and `Delete` belong in
   the card overflow menu so they always apply to the specific instance shown.
-- Local instance cards should prefer runtime source metadata such as git branch
-  over Docker image tag for the primary visual identity, while keeping a
-  divergent image tag visible as provenance in compact metadata.
+- Local instance cards should use the launcher-visible instance name as the
+  primary visual identity. Keep Docker image version and runtime source
+  provenance compact and secondary.
 - Local instance cards should show workspace state quietly. Persistent host
   directories, named volumes, custom mounts, and legacy ephemeral workspaces
   should be distinguishable without turning Docker storage into the primary

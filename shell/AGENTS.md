@@ -44,11 +44,14 @@ This scope owns:
   without credentials. Terminal launch should stay shell-owned and work across
   Windows, macOS, and Linux when the `a0` CLI is installed or available in a
   sibling `a0-connector` development checkout. Launcher-owned instance launches
-  should pass the known host directly to the CLI and skip Docker discovery.
-  Before launching, the shell should use a native directory picker so the user
-  chooses the CLI working folder; canceling that picker is a quiet no-op. Start
-  the interactive CLI through a launcher-owned wrapper script rather than a
-  long inline shell command so Textual receives normal terminal input.
+  should pass the known host directly to the CLI and only use CLI flags
+  advertised by that installed `a0 --help`; use the direct `--connect` plus
+  `--no-docker-discovery` path only when supported, otherwise pass `--host` and
+  let the installed CLI use its normal discovery/autoconnect behavior. Before
+  launching, the shell should use a native directory picker so the user chooses
+  the CLI working folder; canceling that picker is a quiet no-op. Start the
+  interactive CLI through a launcher-owned wrapper script rather than a long
+  inline shell command so Textual receives normal terminal input.
 - A0 CLI availability shown to the renderer is based on whether the `a0`
   terminal command can be discovered on the host. Installing A0 CLI is a named
   shell-owned intent that opens a fixed installer wrapper for the official

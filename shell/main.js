@@ -1872,6 +1872,14 @@ function powerShellArrayLiteral(values) {
   return `@(${values.map((value) => powerShellSingleQuote(value)).join(', ')})`;
 }
 
+function shellCommandArgs(values) {
+  return values.map((value) => shellSingleQuote(value)).join(' ');
+}
+
+function powerShellCommandArgs(values) {
+  return values.map((value) => powerShellSingleQuote(value)).join(' ');
+}
+
 function appleScriptString(value) {
   return JSON.stringify(String(value || ''));
 }
@@ -2019,6 +2027,33 @@ function findA0CliBinary() {
   const err = new Error('A0 CLI was not found. Install a0-connector or add the a0 command to PATH.');
   err.code = 'TERMINAL_UNAVAILABLE';
   throw err;
+}
+
+function a0CliSupportsOption(cli, option) {
+  const binary = existingFilePath(cli);
+  const flag = String(option || '').trim();
+  if (!binary || !flag) return false;
+
+  try {
+    const checked = childProcess.spawnSync(binary, ['--help'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      env: { ...process.env, TERM: 'dumb', NO_COLOR: '1' },
+      windowsHide: true
+    });
+    const helpText = `${checked.stdout || ''}\n${checked.stderr || ''}`;
+    return helpText.includes(flag);
+  } catch {
+    return false;
+  }
+}
+
+function a0CliLaunchArgs(host, cli) {
+  const args = ['--host', host];
+  if (a0CliSupportsOption(cli, '--connect')) {
+    args.push('--no-docker-discovery', '--connect');
+  }
+  return args;
 }
 
 function findDockerCliBinary() {
@@ -2200,6 +2235,7 @@ function writeA0CliInstallPowerShellWrapper() {
 
 function writeA0CliLaunchShellWrapper(host, cli, workingDirectory) {
   const scriptPath = path.join(terminalWrapperDir(), 'a0-cli-launch.sh');
+  const cliArgs = a0CliLaunchArgs(host, cli);
   const script = [
     '#!/usr/bin/env bash',
     'set -u',
@@ -2210,7 +2246,7 @@ function writeA0CliLaunchShellWrapper(host, cli, workingDirectory) {
     'export LANG="${LANG:-C.UTF-8}"',
     'export LC_CTYPE="${LC_CTYPE:-$LANG}"',
     'export PATH="${HOME:+$HOME/.local/bin:}/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"',
-    `${shellSingleQuote(cli)} --host ${shellSingleQuote(host)} --no-docker-discovery --connect`,
+    `${shellSingleQuote(cli)} ${shellCommandArgs(cliArgs)}`,
     'code=$?',
     'echo',
     'if [ "$code" -ne 0 ]; then',
@@ -2233,10 +2269,11 @@ function writeA0CliLaunchShellWrapper(host, cli, workingDirectory) {
 
 function writeA0CliLaunchPowerShellWrapper(host, cli, workingDirectory) {
   const scriptPath = path.join(terminalWrapperDir(), 'a0-cli-launch.ps1');
+  const cliArgs = a0CliLaunchArgs(host, cli);
   const script = [
     `$env:AGENT_ZERO_HOST = ${powerShellSingleQuote(host)}`,
     `Set-Location -LiteralPath ${powerShellSingleQuote(workingDirectory)}`,
-    `& ${powerShellSingleQuote(cli)} --host ${powerShellSingleQuote(host)} --no-docker-discovery --connect`,
+    `& ${powerShellSingleQuote(cli)} ${powerShellCommandArgs(cliArgs)}`,
     '$code = $LASTEXITCODE',
     'if ($null -eq $code) { $code = 0 }',
     'if ($code -ne 0) {',

@@ -16,6 +16,12 @@ function isDockerDesktopStopped(runtime) {
   return isDockerDesktopRuntime(runtime) && runtime?.state === "engine_stopped";
 }
 
+function setupActionButtonLabel(value = "") {
+  const label = typeof value === "string" ? value.trim() : "";
+  if (!label || label === "Setup Agent Zero" || label === "Continue Setup") return "Continue";
+  return label;
+}
+
 function titleForRuntime(runtime) {
   if (isDockerDesktopStopped(runtime)) return "Docker Desktop is not running";
   if (isDockerDesktopRuntime(runtime)) return "Docker Desktop Setup";
@@ -25,18 +31,16 @@ function titleForRuntime(runtime) {
 function actionForRuntime(runtime) {
   const openGuide = () => window.dockerManagerActions?.openDockerDownload?.(runtime?.manualUrl || "");
   if (!runtime || typeof runtime !== "object") {
-    return { label: "Setup Agent Zero", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
+    return { label: "Continue", handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (runtime.canProvision && runtime.action === "start") {
     return {
-      label: isDockerDesktopRuntime(runtime) ? "Start Docker Desktop" : "Continue Setup",
+      label: isDockerDesktopRuntime(runtime) ? "Start Docker Desktop" : "Continue",
       handler: () => window.dockerManagerActions?.provisionRuntime?.()
     };
   }
   if (runtime.canProvision && runtime.action === "install") {
-    const label = typeof runtime.setupActionLabel === "string" && runtime.setupActionLabel.trim()
-      ? runtime.setupActionLabel.trim()
-      : "Setup Agent Zero";
+    const label = setupActionButtonLabel(runtime.setupActionLabel);
     return { label, handler: () => window.dockerManagerActions?.provisionRuntime?.() };
   }
   if (isDockerDesktopStopped(runtime)) {

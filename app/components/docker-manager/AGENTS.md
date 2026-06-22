@@ -57,9 +57,9 @@ This scope owns:
 - Docker Desktop installed-but-stopped states must be warning states that tell
   the user to start Docker Desktop. Do not show a download/reinstall action for
   that state.
-- If runtime state includes `setupActionLabel`, the runtime modal should use it
-  for the primary setup button. Docker Desktop states may name Docker Desktop
-  plainly; default setup buttons should stay Agent Zero-first.
+- Generic runtime setup buttons should say `Continue`, including runtime states
+  that provide `Setup Agent Zero` or `Continue Setup` as a setup action label.
+  Docker Desktop states may still name Docker Desktop plainly.
 - Sidebar navigation publishes `dm:nav`; click-originated events include
   `userInitiated` so the renderer coordinator can refresh data-heavy tabs.
   Tab content activation remains owned by the renderer coordinator, not
@@ -72,10 +72,14 @@ This scope owns:
   Use the `See more` disclosure for structured setup phases when detailed
   progress is available.
 - Runtime setup success should stay in the same modal shell long enough to
-  offer first Agent Zero image setup. The selector defaults to `latest`, and the
-  primary `Setup Agent Zero` action starts the selected image install.
-- Visible setup titles, buttons, and transient progress states should use
-  `Setup`, not `Set up`, `Set Up`, or `Setting up`.
+  guide the next step without implying Agent Zero is still missing. If no Agent
+  Zero image is installed, offer a `Download Agent Zero` image action with a
+  selector defaulting to `latest`. If an image is installed and no local
+  Instance exists yet, offer `Run Agent Zero`. If a local Instance already
+  exists, offer `Continue`.
+- Visible setup titles and transient progress states should use `Setup`, not
+  `Set up`, `Set Up`, or `Setting up`; button labels that advance runtime setup
+  should use `Continue`.
 - If two or more usable local runtime endpoints are detected during setup
   completion, the same modal may show a compact `Run Agent Zero with` selector.
   Hide that selector for zero or one usable endpoint, and do not add a runtime

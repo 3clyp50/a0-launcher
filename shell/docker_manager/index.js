@@ -670,6 +670,29 @@ function normalizeHostRootForUse(value) {
   return path.resolve(expanded);
 }
 
+function windowsPathToWslMountSource(value) {
+  const input = String(value || '').trim();
+  const match = /^([A-Za-z]):[\\/](.*)$/.exec(input);
+  if (!match) return '';
+  const drive = match[1].toLowerCase();
+  const rest = match[2].replace(/[\\/]+/g, '/').replace(/^\/+/, '');
+  return `/mnt/${drive}/${rest}`;
+}
+
+function dockerUsesWindowsWslEngine(docker) {
+  const env = docker?.env && typeof docker.env === 'object' ? docker.env : null;
+  if (env?.dockerFlavor === 'wsl_engine') return true;
+  const host = env?.dockerHost;
+  return host?.kind === 'tcp' && host.host === '127.0.0.1' && Number(host.port) === 23750;
+}
+
+function dockerMountSourceForHostPath(hostPath, docker) {
+  const source = String(hostPath || '').trim();
+  if (!source) return source;
+  if (!dockerUsesWindowsWslEngine(docker)) return source;
+  return windowsPathToWslMountSource(source) || source;
+}
+
 function dockerVolumeName(value, fallback = 'a0-launcher-workspace') {
   const cleaned = String(value || '')
     .trim()
@@ -771,7 +794,7 @@ function stripWorkspaceMounts(hostConfig) {
   return next;
 }
 
-function applyWorkspaceStorage(createOptions, storage, { skipIfCustom = false } = {}) {
+function applyWorkspaceStorage(createOptions, storage, { skipIfCustom = false, docker = null } = {}) {
   if (!createOptions || !storage) return createOptions;
   const hostConfig = stripWorkspaceMounts(createOptions.HostConfig || {});
   if (skipIfCustom) {
@@ -791,9 +814,13 @@ function applyWorkspaceStorage(createOptions, storage, { skipIfCustom = false } 
   }
 
   if (storage.mount) {
+    const mount = { ...storage.mount };
+    if (String(mount.Type || '').toLowerCase() === 'bind') {
+      mount.Source = dockerMountSourceForHostPath(mount.Source || storage.hostPath, docker);
+    }
     hostConfig.Mounts = [
       ...(Array.isArray(hostConfig.Mounts) ? hostConfig.Mounts : []),
-      storage.mount
+      mount
     ];
   }
   createOptions.HostConfig = hostConfig;
@@ -2371,7 +2398,7 @@ async function buildCloneCreateOptions(inspect, containerId, cloneImageRef, stor
     instanceName,
     containerName
   });
-  applyWorkspaceStorage(createOptions, workspaceStorage);
+  applyWorkspaceStorage(createOptions, workspaceStorage, { docker: options?.docker || null });
 
   return createOptions;
 }
@@ -2670,7 +2697,7 @@ async function createAndStartActiveContainer(docker, imageRepo, tag, portPrefere
     instanceName,
     containerName: activeName
   });
-  applyWorkspaceStorage(createOptions, workspaceStorage);
+  applyWorkspaceStorage(createOptions, workspaceStorage, { docker });
 
   if (Array.isArray(activationOptions?.env) && activationOptions.env.length) {
     createOptions.Env = activationOptions.env;
@@ -2760,7 +2787,7 @@ async function createAndStartManagedInstanceContainer(docker, imageRepo, tag, ac
     instanceName,
     containerName
   });
-  applyWorkspaceStorage(createOptions, workspaceStorage);
+  applyWorkspaceStorage(createOptions, workspaceStorage, { docker });
 
   if (Array.isArray(activationOptions?.env) && activationOptions.env.length) {
     createOptions.Env = activationOptions.env;
@@ -2819,7 +2846,7 @@ async function createAndStartDeveloperContainer(docker, options, storagePreferen
     instanceName: options.instanceName,
     containerName
   });
-  applyWorkspaceStorage(createOptions, workspaceStorage, { skipIfCustom: true });
+  applyWorkspaceStorage(createOptions, workspaceStorage, { skipIfCustom: true, docker });
 
   const created = await docker.createContainer(createOptions);
   const containerId = created?.containerId;
@@ -3128,7 +3155,8 @@ async function cloneLocalInstance(containerId, options = {}) {
         cloneImageRef,
         await stateStore.readStoragePreferences(),
         {
-          workspaceCategories: workspaceSelection
+          workspaceCategories: workspaceSelection,
+          docker
         }
       );
       const created = await docker.createContainer(createOptions);
@@ -3252,7 +3280,8 @@ async function migrateLocalInstanceStorage(containerId, options = {}) {
           instanceName: friendlyName,
           containerName: migratedInstanceContainerName(friendlyName),
           migrationSource: true,
-          storage: storageOverride
+          storage: storageOverride,
+          docker
         }
       );
       const replacementContainerName = createOptions.name || migratedInstanceContainerName(friendlyName);
@@ -3856,6 +3885,7 @@ async function activateTag(tag, dataLossAck, options = {}) {
         (error && typeof error === 'object' && error.code === 'NOT_INSTALLED'
           ? 'This version is not installed yet.'
           : '') ||
+        (error && typeof error === 'object' && typeof error.message === 'string' ? error.message : '') ||
         'Run failed';
       finishOperation('failed', message);
     } finally {
@@ -4096,19 +4126,18 @@ async function pruneVolumes() {
   return result && typeof result === 'object' ? result : {};
 }
 
-async function getContainerUiUrl(containerId) {
+async function getContainerUiUrl(containerId, options = {}) {
   const imageRepo = getBackendImageRepo();
   const id = assertContainerId(containerId);
   const docker = await getManagedDocker(imageRepo);
-  const inspect = await docker.inspectContainer(id);
-  const candidate = bestEffortUiUrlFromInspect(inspect);
-  if (!candidate) return null;
-
-  const hp = parseHostPortFromLocalUrl(candidate);
-  if (!hp) return null;
-
-  const ok = await isHttpPortReachable(hp.host, hp.port, UI_READY_ATTEMPT_TIMEOUT_MS);
-  return ok ? candidate : null;
+  const waitRes = await waitForUiReachable(docker, id, {
+    timeoutMs: Number.isFinite(Number(options?.timeoutMs)) ? Number(options.timeoutMs) : UI_READY_ATTEMPT_TIMEOUT_MS,
+    intervalMs: Number.isFinite(Number(options?.intervalMs)) ? Number(options.intervalMs) : 450,
+    attemptTimeoutMs: Number.isFinite(Number(options?.attemptTimeoutMs))
+      ? Number(options.attemptTimeoutMs)
+      : UI_READY_ATTEMPT_TIMEOUT_MS
+  });
+  return waitRes.ok ? waitRes.uiUrl : null;
 }
 
 module.exports = {
@@ -4171,8 +4200,11 @@ module.exports = {
     normalizeStorageOverride,
     resolveWorkspaceStorage,
     applyWorkspaceStorage,
+    windowsPathToWslMountSource,
+    dockerMountSourceForHostPath,
     workspaceStorageFromInspect,
     workspaceHostPathFromInspect,
+    waitForUiReachable,
     buildCloneCreateOptions,
     normalizeCloneWorkspaceSelection,
     selectedCloneWorkspaceCategoryIds,

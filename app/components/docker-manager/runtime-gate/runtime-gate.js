@@ -66,6 +66,12 @@ function isDockerDesktopStopped(runtime) {
   return isDockerDesktopRuntime(runtime) && runtime?.state === "engine_stopped";
 }
 
+function setupActionButtonLabel(value = "") {
+  const label = asText(value);
+  if (!label || label === "Setup Agent Zero" || label === "Continue Setup") return "Continue";
+  return label;
+}
+
 function runtimeKind(runtime = null) {
   const mode = asText(runtime?.mode);
   if (mode === "docker_desktop" || runtime?.dockerFlavor === "docker_desktop") return "docker_desktop";
@@ -140,26 +146,26 @@ function detailForRuntime(runtime, progress = null) {
 function actionForRuntime(runtime, progress = null) {
   const status = asText(progress?.status);
   if (isRuntimeSetupSuccess({ dockerAvailable: false, runtime, progress })) {
-    return { kind: "complete", label: "Setup Agent Zero" };
+    return { kind: "complete", label: "Continue" };
   }
 
   if (progress?.type === "runtime_setup" && status === "running") {
-    return { kind: "wait", label: "Setup Agent Zero", disabled: true };
+    return { kind: "wait", label: "Continue", disabled: true };
   }
 
   if (!runtime || typeof runtime !== "object") {
-    return { kind: "setup", label: "Setup Agent Zero" };
+    return { kind: "setup", label: "Continue" };
   }
 
   if (runtime.canProvision && runtime.action === "start") {
     return {
       kind: "setup",
-      label: isDockerDesktopRuntime(runtime) ? "Start Docker Desktop" : "Continue Setup"
+      label: isDockerDesktopRuntime(runtime) ? "Start Docker Desktop" : "Continue"
     };
   }
 
   if (runtime.canProvision && runtime.action === "install") {
-    const label = asText(runtime.setupActionLabel) || "Setup Agent Zero";
+    const label = setupActionButtonLabel(runtime.setupActionLabel);
     return { kind: "setup", label };
   }
 
@@ -196,6 +202,73 @@ function setupTagOptions(state = {}) {
   }
 
   return out;
+}
+
+function versionIsInstalled(version = null) {
+  if (!version || typeof version !== "object") return false;
+  const availability = asText(version.availability);
+  return (
+    availability === "installed" ||
+    availability === "update_available" ||
+    version.isActive === true ||
+    version.differsFromPublished === true
+  );
+}
+
+function installedTagOptions(state = {}) {
+  const out = [];
+  const seen = new Set();
+  const versions = Array.isArray(state?.versions) ? state.versions : [];
+  const images = Array.isArray(state?.images) ? state.images : [];
+
+  const latest = versions.find((version) => asText(version?.id) === "latest" && versionIsInstalled(version));
+  if (latest) addSetupOption(out, seen, "latest", "latest");
+
+  for (const version of versions) {
+    const tag = asText(version?.id);
+    if (!tag || !versionIsInstalled(version)) continue;
+    addSetupOption(out, seen, tag, tag);
+  }
+
+  for (const image of images) {
+    const tag = asText(image?.tag) || asText(image?.imageRef);
+    if (!tag) continue;
+    addSetupOption(out, seen, tag, tag);
+  }
+
+  return out;
+}
+
+function hasInstalledAgentZeroImage(state = {}) {
+  return installedTagOptions(state).length > 0;
+}
+
+function hasLocalInstances(state = {}) {
+  const containers = Array.isArray(state?.containers) ? state.containers : [];
+  return containers.some((container) => {
+    const name = asText(container?.containerName);
+    const role = asText(container?.role) || asText(container?.labels?.["a0.launcher.role"]);
+    if (role === "retained") return false;
+    return !!(container?.containerId || name);
+  });
+}
+
+function successModeForState(state = {}) {
+  if (!hasInstalledAgentZeroImage(state)) return "install";
+  if (!hasLocalInstances(state)) return "run";
+  return "continue";
+}
+
+function successTextForMode(mode) {
+  if (mode === "install") return "Download Agent Zero to create your first Instance.";
+  if (mode === "run") return "Agent Zero is already downloaded. Start an Instance when you're ready.";
+  return "Agent Zero is ready on this computer.";
+}
+
+function successActionForMode(mode) {
+  if (mode === "install") return { kind: "install_image", label: "Download Agent Zero" };
+  if (mode === "run") return { kind: "run_image", label: "Run Agent Zero" };
+  return { kind: "continue", label: "Continue" };
 }
 
 function runtimeEndpointOptions(state = {}) {
@@ -260,10 +333,14 @@ function normalizedRuntimeGate(state = {}) {
   const indeterminate = !completedButStillBlocked && (progress?.indeterminate === true || (progress?.type === "runtime_setup" && status === "running" && numericProgress === null));
   const steps = completedButStillBlocked ? [] : normalizeSteps(progress?.steps);
   const renderedSteps = steps.length ? steps : decorateSteps(kind, phase, status);
+  const successMode = success ? successModeForState(state) : "";
+  const setupOptions = success
+    ? successMode === "run" ? installedTagOptions(state) : successMode === "install" ? setupTagOptions(state) : []
+    : [];
 
   return {
-    headline: success ? "Agent Zero Setup Complete" : headlineForRuntime(runtime, progress),
-    detail: success ? "Docker Engine is installed and running." : detailForRuntime(runtime, progress),
+    headline: success ? "Runtime Ready" : headlineForRuntime(runtime, progress),
+    detail: success ? "Agent Zero can run on this computer now." : detailForRuntime(runtime, progress),
     showDetail: success || status !== "running",
     phase,
     status: success ? "completed" : status,
@@ -278,11 +355,13 @@ function normalizedRuntimeGate(state = {}) {
     }),
     steps: renderedSteps,
     success,
-    setupOptions: success ? setupTagOptions(state) : [],
-    setupTag: "latest",
+    successMode,
+    setupText: success ? successTextForMode(successMode) : "",
+    setupOptions,
+    setupTag: setupOptions.some((option) => option.value === "latest") ? "latest" : (setupOptions[0]?.value || "latest"),
     runtimeOptions: success ? runtimeEndpointOptions(state) : [],
     runtimeEndpointId: asText(state?.runtime?.selectedRuntimeEndpointId),
-    action: success ? { kind: "complete", label: "Setup Agent Zero" } : actionForRuntime(runtime, progress)
+    action: success ? successActionForMode(successMode) : actionForRuntime(runtime, progress)
   };
 }
 
@@ -436,7 +515,7 @@ function renderRuntimeChoice(model, parent, selectedEndpointId = "") {
 }
 
 function renderSetupChoice(model, parent, selectedTag = "") {
-  if (!model.success) return null;
+  if (!model.success || model.successMode === "continue") return null;
 
   const options = Array.isArray(model.setupOptions) && model.setupOptions.length
     ? model.setupOptions
@@ -450,7 +529,7 @@ function renderSetupChoice(model, parent, selectedTag = "") {
 
   const text = document.createElement("div");
   text.className = "dm-runtime-install-text";
-  text.textContent = "Install the Agent Zero image next. Use latest for first-time Setup.";
+  text.textContent = model.setupText || "Choose an Agent Zero image.";
   wrap.appendChild(text);
 
   const field = document.createElement("div");
@@ -542,7 +621,7 @@ async function runAction(action, runtime, actions, root = null) {
     actions?.refresh?.();
   } else if (action.kind === "guide" && asText(runtime?.manualUrl)) {
     actions?.openDockerDownload?.(runtime.manualUrl);
-  } else if (action.kind === "complete") {
+  } else if (action.kind === "install_image" || action.kind === "run_image" || action.kind === "continue") {
     const state = typeof window !== "undefined" ? window.__dmLastState || {} : {};
     const selectedTag = asText(root?.querySelector?.("#runtimeSetupTag")?.value) || "latest";
     const selectedEndpointId = asText(root?.querySelector?.("#runtimeEndpointChoice")?.value);
@@ -552,7 +631,11 @@ async function runAction(action, runtime, actions, root = null) {
     }
     acknowledgedRuntimeSetupKey = runtimeSetupKey(state.progress);
     removeRuntimeGate();
-    actions?.installOrSync?.(selectedTag);
+    if (action.kind === "install_image") {
+      actions?.installOrSync?.(selectedTag);
+    } else if (action.kind === "run_image") {
+      actions?.activateTag?.(selectedTag, { dataLossAck: "proceed_without_backup", portMappings: "0:80" });
+    }
   }
 }
 
@@ -623,7 +706,7 @@ function renderRuntimeGate(state = {}, actions = {}) {
   const primaryWrap = document.createElement("div");
   primaryWrap.className = "dm-runtime-gate-primary";
 
-  if (model.action.kind !== "refresh" && model.action.kind !== "wait" && model.action.kind !== "complete") {
+  if (!["refresh", "wait", "install_image", "run_image", "continue"].includes(model.action.kind)) {
     const refresh = makeButton("Refresh", "button", false);
     refresh.dataset.runtimeAction = "refresh";
     refresh.addEventListener("click", () => actions?.refresh?.());

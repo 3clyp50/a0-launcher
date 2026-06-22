@@ -61,7 +61,9 @@ This scope owns:
 - Instance UI tabs are shell-owned `WebContentsView`s. Renderer code may request
   open/select/select launcher home/close/reload/detach and report viewport
   bounds, but URL resolution, URL validation, web contents lifecycle, and
-  detached windows stay in `shell/main.js`.
+  detached windows stay in `shell/main.js`. Local `Open UI` requests should wait
+  briefly for a freshly running container's HTTP UI before returning an
+  unavailable error.
 - Local development content is selected by `A0_LAUNCHER_LOCAL_REPO`,
   `A0_LAUNCHER_USE_LOCAL_CONTENT`, a repo-shaped default-app current working
   directory, a repo-shaped unpackaged-app current working directory, or the

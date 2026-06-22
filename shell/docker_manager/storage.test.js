@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs/promises');
@@ -10,8 +11,11 @@ const {
   WORKSPACE_MOUNT_TARGET,
   resolveWorkspaceStorage,
   applyWorkspaceStorage,
+  windowsPathToWslMountSource,
+  dockerMountSourceForHostPath,
   workspaceStorageFromInspect,
   workspaceHostPathFromInspect,
+  waitForUiReachable,
   buildCloneCreateOptions,
   normalizeCloneWorkspaceSelection,
   selectedCloneWorkspaceCategoryIds,
@@ -24,6 +28,67 @@ const {
 async function tempRoot() {
   return await fs.mkdtemp(path.join(os.tmpdir(), 'a0-launcher-storage-'));
 }
+
+function listenLocalServer(server) {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve(server.address());
+    });
+  });
+}
+
+function closeServer(server) {
+  return new Promise((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+}
+
+test('UI readiness wait retries while a published port is still warming up', async () => {
+  let hits = 0;
+  const server = http.createServer((_req, res) => {
+    res.on('error', () => {});
+    hits += 1;
+    if (hits === 1) {
+      const timer = setTimeout(() => {
+        if (!res.destroyed && !res.writableEnded) res.end('late');
+      }, 180);
+      if (typeof timer.unref === 'function') timer.unref();
+      return;
+    }
+    res.statusCode = 200;
+    res.end('ok');
+  });
+  const address = await listenLocalServer(server);
+
+  try {
+    const fakeDocker = {
+      async inspectContainer(containerId) {
+        assert.equal(containerId, 'container-1');
+        return {
+          NetworkSettings: {
+            Ports: {
+              '80/tcp': [{ HostPort: String(address.port) }]
+            }
+          }
+        };
+      }
+    };
+
+    const result = await waitForUiReachable(fakeDocker, 'container-1', {
+      timeoutMs: 1500,
+      intervalMs: 30,
+      attemptTimeoutMs: 90
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.uiUrl, `http://127.0.0.1:${address.port}/`);
+    assert.ok(hits >= 2);
+  } finally {
+    await closeServer(server);
+  }
+});
 
 test('host directory workspace storage creates a per-container /a0/usr mount and labels', async () => {
   const root = await tempRoot();
@@ -43,6 +108,64 @@ test('host directory workspace storage creates a per-container /a0/usr mount and
   assert.equal(createOptions.HostConfig.Mounts[0].Target, WORKSPACE_MOUNT_TARGET);
   assert.equal(createOptions.Labels['a0.launcher.storage.mode'], 'host_directory');
   assert.equal(createOptions.Labels['a0.launcher.storage.persistent'], 'true');
+});
+
+test('Windows WSL runtime bind mounts use WSL-visible sources while labels keep host paths', () => {
+  const hostPath = 'C:\\Users\\Ada Lovelace\\agent-zero\\a0-inst-agent-zero-latest\\usr';
+  const fakeWslDocker = {
+    env: {
+      dockerFlavor: 'wsl_engine',
+      dockerHost: { kind: 'tcp', host: '127.0.0.1', port: 23750 }
+    }
+  };
+  const storage = {
+    mode: 'host_directory',
+    target: WORKSPACE_MOUNT_TARGET,
+    persistent: true,
+    legacy: false,
+    hostPath,
+    mount: {
+      Type: 'bind',
+      Source: hostPath,
+      Target: WORKSPACE_MOUNT_TARGET
+    }
+  };
+  const createOptions = { Labels: {}, HostConfig: {} };
+
+  applyWorkspaceStorage(createOptions, storage, { docker: fakeWslDocker });
+
+  assert.equal(windowsPathToWslMountSource(hostPath), '/mnt/c/Users/Ada Lovelace/agent-zero/a0-inst-agent-zero-latest/usr');
+  assert.equal(dockerMountSourceForHostPath(hostPath, fakeWslDocker), '/mnt/c/Users/Ada Lovelace/agent-zero/a0-inst-agent-zero-latest/usr');
+  assert.equal(createOptions.HostConfig.Mounts[0].Source, '/mnt/c/Users/Ada Lovelace/agent-zero/a0-inst-agent-zero-latest/usr');
+  assert.equal(createOptions.HostConfig.Mounts[0].Target, WORKSPACE_MOUNT_TARGET);
+  assert.equal(createOptions.Labels['a0.launcher.storage.hostPath'], hostPath);
+});
+
+test('non-WSL runtimes keep host-directory bind mount sources unchanged', () => {
+  const hostPath = 'C:\\Users\\Ada\\agent-zero\\a0-inst\\usr';
+  const fakeDesktopDocker = {
+    env: {
+      dockerFlavor: 'docker_desktop',
+      dockerHost: { kind: 'npipe', socketPath: '//./pipe/docker_engine' }
+    }
+  };
+  const storage = {
+    mode: 'host_directory',
+    target: WORKSPACE_MOUNT_TARGET,
+    persistent: true,
+    hostPath,
+    mount: {
+      Type: 'bind',
+      Source: hostPath,
+      Target: WORKSPACE_MOUNT_TARGET
+    }
+  };
+  const createOptions = { Labels: {}, HostConfig: {} };
+
+  applyWorkspaceStorage(createOptions, storage, { docker: fakeDesktopDocker });
+
+  assert.equal(dockerMountSourceForHostPath(hostPath, fakeDesktopDocker), hostPath);
+  assert.equal(createOptions.HostConfig.Mounts[0].Source, hostPath);
 });
 
 test('named volume workspace storage uses the configured prefix', async () => {
@@ -115,7 +238,7 @@ test('workspace host folder resolver only returns persistent bind paths', () => 
   };
   const ephemeralInspect = { Config: { Labels: {} }, Mounts: [] };
 
-  assert.equal(workspaceHostPathFromInspect(bindInspect), '/tmp/a0/usr');
+  assert.equal(workspaceHostPathFromInspect(bindInspect), path.resolve('/tmp/a0/usr'));
   assert.equal(workspaceHostPathFromInspect(volumeInspect), '');
   assert.equal(workspaceHostPathFromInspect(ephemeralInspect), '');
 });

@@ -48,6 +48,9 @@ This scope owns:
   provenance, and expose runtime branch/commit as separate structured state.
 - Start, switch, and run flows should give the Agent Zero UI enough time to
   finish a slow first boot before rolling back a newly-created container.
+- Direct `Open UI` resolution may use a shorter bounded wait than start/run
+  flows so a fresh running container can finish warming up before showing an
+  error.
 - UI readiness probes should also allow enough time for a local Agent Zero HTTP
   response to produce headers on slower Windows/WSL loopback paths; avoid
   per-attempt timeouts that create false failed starts while the UI is reachable.
@@ -66,6 +69,9 @@ This scope owns:
   `~/agent-zero`, and every new launcher-managed local container must mount a
   per-instance workspace at `/a0/usr` unless the user explicitly selects the
   no-volume ephemeral workspace mode for that run.
+- Windows WSL Engine bind mounts should keep the Windows host path in launcher
+  labels and state, but send Docker a WSL-visible `/mnt/<drive>/...` source path
+  for the actual container mount.
 - Instance defaults are stored as Main, Utility, and Embedding provider/model
   preferences with optional local API keys for new Instances.
 - Runtime endpoint selection is stored as a launcher-local Docker endpoint

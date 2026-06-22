@@ -39,9 +39,10 @@ This scope owns:
   used. Docker mechanics stay in the shell.
 - The setup capability slideshow is for the long Agent Zero image pull/extract
   wait, not for Docker runtime setup or short install preflight checks.
-- When runtime setup completes, the same modal shell owns the first Agent Zero
-  image setup prompt, including a short explanation and a version selector that
-  defaults to the Docker `latest` tag.
+- When runtime setup completes, the same modal shell owns the next step without
+  implying Agent Zero is still missing: download an image if none is installed,
+  run Agent Zero if an image is installed but no local Instance exists, or
+  continue if an Instance already exists.
 - During the first Agent Zero image pull, the operation modal may offer saved
   Instance provider/model defaults and an explicit one-time checkbox to start
   the first Instance after the download finishes. It may also offer an optional

@@ -233,13 +233,13 @@ test('no Docker on Linux shows blocking setup action', () => {
 
   assert.equal(shouldShowRuntimeGate(state), true);
   const model = normalizedRuntimeGate(state);
-  assert.equal(model.action.label, 'Setup Agent Zero');
+  assert.equal(model.action.label, 'Continue');
 
   let setupCount = 0;
   assert.equal(renderRuntimeGate(state, { provisionRuntime: () => { setupCount += 1; } }), true);
   assert.ok(document.getElementById('runtimeSetupDialog'));
   assert.equal(document.querySelector('.dm-page').inert, true);
-  buttonByText(document, 'Setup Agent Zero').dispatchEvent(new MiniEvent('click'));
+  buttonByText(document, 'Continue').dispatchEvent(new MiniEvent('click'));
   assert.equal(setupCount, 1);
 });
 
@@ -296,7 +296,7 @@ test('runtime setup progress keeps setup disabled and shows an indeterminate bar
   assert.equal(model.indeterminate, true);
 
   renderRuntimeGate(state, {});
-  const primary = buttonByText(document, 'Setup Agent Zero');
+  const primary = buttonByText(document, 'Continue');
   assert.equal(primary.disabled, true);
   assert.ok(document.querySelector('.indeterminate'));
   assert.equal(document.querySelector('.dm-runtime-gate-detail'), null);
@@ -340,7 +340,7 @@ test('runtime setup progress estimates remaining minutes from setup phases', () 
   }
 });
 
-test('completed runtime setup shows success without a refresh button or step list', () => {
+test('completed runtime setup prompts for image download only when no image is installed', () => {
   const document = installDom();
   const state = {
     stateLoaded: true,
@@ -364,22 +364,109 @@ test('completed runtime setup shows success without a refresh button or step lis
 
   const model = normalizedRuntimeGate(state);
   assert.equal(model.success, true);
-  assert.equal(model.action.label, 'Setup Agent Zero');
+  assert.equal(model.headline, 'Runtime Ready');
+  assert.equal(model.action.label, 'Download Agent Zero');
   assert.deepEqual(model.setupOptions.map((option) => option.value), ['latest', 'v1.20', 'testing']);
 
   let installTag = '';
   assert.equal(renderRuntimeGate(state, { installOrSync: (tag) => { installTag = tag; } }), true);
   assert.ok(document.querySelector('.dm-runtime-success'));
-  assert.equal(document.querySelector('.dm-runtime-gate-detail')?.textContent, 'Docker Engine is installed and running.');
+  assert.equal(document.querySelector('.dm-runtime-gate-detail')?.textContent, 'Agent Zero can run on this computer now.');
+  assert.equal(document.querySelector('.dm-runtime-install-text')?.textContent, 'Download Agent Zero to create your first Instance.');
   assert.equal(document.querySelector('#runtimeSetupTag')?.value, 'latest');
   assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
   assert.equal(buttonByText(document, 'Refresh'), null);
   assert.equal(document.querySelector('.dm-runtime-steps'), null);
 
-  buttonByText(document, 'Setup Agent Zero').dispatchEvent(new MiniEvent('click'));
+  buttonByText(document, 'Download Agent Zero').dispatchEvent(new MiniEvent('click'));
   assert.equal(installTag, 'latest');
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
   assert.equal(document.querySelector('.dm-page').inert, false);
+});
+
+test('completed runtime setup runs an already-installed image when no local instance exists', () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: true,
+    runtime: { platform: 'win32', state: 'ready' },
+    versions: [
+      { id: 'latest', displayVersion: 'latest', availability: 'installed' },
+      { id: 'v1.20', displayVersion: '1.20', availability: 'installed' }
+    ],
+    containers: [],
+    progress: {
+      opId: 'op-success-installed',
+      type: 'runtime_setup',
+      status: 'completed',
+      detail: 'Runtime ready',
+      phase: 'ready',
+      progress: 100
+    }
+  };
+  window.__dmLastState = state;
+
+  const model = normalizedRuntimeGate(state);
+  assert.equal(model.successMode, 'run');
+  assert.equal(model.action.label, 'Run Agent Zero');
+  assert.deepEqual(model.setupOptions.map((option) => option.value), ['latest', 'v1.20']);
+
+  let runTag = '';
+  let runOptions = null;
+  renderRuntimeGate(state, {
+    activateTag: (tag, options) => {
+      runTag = tag;
+      runOptions = options;
+    }
+  });
+
+  assert.equal(document.querySelector('.dm-runtime-install-text')?.textContent, "Agent Zero is already downloaded. Start an Instance when you're ready.");
+  buttonByText(document, 'Run Agent Zero').dispatchEvent(new MiniEvent('click'));
+
+  assert.equal(runTag, 'latest');
+  assert.deepEqual(runOptions, { dataLossAck: 'proceed_without_backup', portMappings: '0:80' });
+  assert.equal(document.getElementById('runtimeSetupDialog'), null);
+});
+
+test('completed runtime setup only continues when an instance already exists', () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: true,
+    runtime: { platform: 'win32', state: 'ready' },
+    versions: [
+      { id: 'latest', displayVersion: 'latest', availability: 'installed' }
+    ],
+    containers: [
+      { containerId: 'abc123', containerName: 'a0-inst-agent-zero', role: 'instance' }
+    ],
+    progress: {
+      opId: 'op-success-continue',
+      type: 'runtime_setup',
+      status: 'completed',
+      detail: 'Runtime ready',
+      phase: 'ready',
+      progress: 100
+    }
+  };
+  window.__dmLastState = state;
+
+  const model = normalizedRuntimeGate(state);
+  assert.equal(model.successMode, 'continue');
+  assert.equal(model.action.label, 'Continue');
+
+  let ran = false;
+  let installed = false;
+  renderRuntimeGate(state, {
+    activateTag: () => { ran = true; },
+    installOrSync: () => { installed = true; }
+  });
+
+  assert.equal(document.querySelector('#runtimeSetupTag'), null);
+  buttonByText(document, 'Continue').dispatchEvent(new MiniEvent('click'));
+  assert.equal(ran, false);
+  assert.equal(installed, false);
+  assert.equal(document.getElementById('runtimeSetupDialog'), null);
 });
 
 test('runtime selector is hidden unless multiple available endpoints exist', () => {
@@ -464,7 +551,7 @@ test('runtime selector appears for multiple endpoints and submits before image i
   assert.deepEqual(selector.querySelectorAll('option').map((option) => option.value), ['runtime-one', 'runtime-two']);
 
   selector.value = 'runtime-two';
-  buttonByText(document, 'Setup Agent Zero').dispatchEvent(new MiniEvent('click'));
+  buttonByText(document, 'Download Agent Zero').dispatchEvent(new MiniEvent('click'));
   await Promise.resolve();
   await Promise.resolve();
 

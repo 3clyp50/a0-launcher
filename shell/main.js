@@ -29,6 +29,9 @@ const {
   stageLauncherDebugRelease
 } = require('./launcher_updater_debug_release');
 
+const OPEN_UI_READY_TIMEOUT_MS = 20_000;
+const OPEN_UI_READY_INTERVAL_MS = 450;
+
 // Handle Squirrel.Windows startup events
 if (require('electron-squirrel-startup')) {
   app.quit();
@@ -1610,9 +1613,12 @@ async function resolveInstanceUiTarget(body) {
 
   const containerId = typeof request.containerId === 'string' ? request.containerId.trim() : '';
   if (containerId) {
-    const url = normalizeHttpUrl(await dockerManager.getContainerUiUrl(containerId));
+    const url = normalizeHttpUrl(await dockerManager.getContainerUiUrl(containerId, {
+      timeoutMs: OPEN_UI_READY_TIMEOUT_MS,
+      intervalMs: OPEN_UI_READY_INTERVAL_MS
+    }));
     if (!url || !isAllowedLocalInstanceUrl(url)) {
-      throw createTabTargetError('UI_UNAVAILABLE', 'Agent Zero UI is not reachable for this instance yet.');
+      throw createTabTargetError('UI_UNAVAILABLE', 'Agent Zero is still starting. Try Open UI again in a moment.');
     }
     const target = {
       kind: 'local',

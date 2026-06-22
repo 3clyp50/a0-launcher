@@ -151,13 +151,14 @@ This scope owns:
   If the shell reports that the host `a0` command is unavailable, the same menu
   slot should become `Install A0 CLI` and launch the shell-owned installer
   intent instead of failing late.
-  Clone opens a focused category selector for `/a0/usr` data; all categories are
-  selected by default to match Agent Zero backup behavior, while clearing all
-  categories intentionally creates a fresh empty workspace. Keep Agent profiles
-  as their own category for `/a0/usr/agents`, separate from generic workspace
-  files. Clone and persistence-migration entry points must warn that the source
-  container is paused and resumed, and that running AI work stops and must be
-  resumed manually.
+  Clone opens a quiet confirmation dialog with `/a0/usr` category choices hidden
+  in a disclosure by default; all categories are selected by default to match
+  Agent Zero backup behavior, while clearing all categories intentionally
+  creates a fresh empty workspace. Keep Agent profiles as their own category for
+  `/a0/usr/agents`, separate from generic workspace files. Clone and
+  persistence-migration entry points must warn that the source container is
+  paused and resumed, and that running AI work stops and must be resumed
+  manually.
 - Local instance cards should use the launcher-visible instance name as the
   primary visual identity. The visual version chip should prefer the runtime
   branch reported from inside the container over the original Docker image tag,

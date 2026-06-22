@@ -418,33 +418,60 @@ function openCloneInstanceDialog(instance) {
         <button class="button dm-dialog-close" type="button" data-dialog-close aria-label="Close">×</button>
       </div>
       <div class="dm-dialog-body">
-        <p class="dm-dialog-copy">Choose the /a0/usr data to copy into the new workspace for <strong>${escapeHtml(displayName)}</strong>. Clearing every option creates a clone with a fresh empty /a0/usr workspace. Cloning pauses and resumes the source container during the snapshot; any running AI work stops and must be resumed manually.</p>
-        <div class="dm-clone-toolbar">
-          <button class="button" type="button" data-clone-select-all>Select all</button>
-          <button class="button" type="button" data-clone-clear>Clear</button>
-        </div>
-        <div class="dm-clone-options">
-          ${optionRows}
-        </div>
+        <p class="dm-dialog-copy">Create a new instance from <strong>${escapeHtml(displayName)}</strong> with its current /a0/usr workspace. The source pauses during the snapshot; resume any running AI work manually afterward.</p>
+        <details class="dm-clone-details">
+          <summary class="dm-clone-details-summary">
+            <span class="dm-clone-details-label">Workspace copy</span>
+            <span class="dm-clone-selection-summary" data-clone-selection-summary>Everything selected</span>
+          </summary>
+          <div class="dm-clone-details-body">
+            <p class="dm-clone-details-copy">Everything is included by default. Clear categories only when you want a leaner clone; clear all to start with an empty /a0/usr.</p>
+            <div class="dm-clone-toolbar">
+              <button class="button" type="button" data-clone-select-all>Select all</button>
+              <button class="button" type="button" data-clone-clear>Clear</button>
+            </div>
+            <div class="dm-clone-options">
+              ${optionRows}
+            </div>
+          </div>
+        </details>
       </div>
       <div class="dm-dialog-footer">
         <button class="button" type="button" data-dialog-close>Cancel</button>
-        <button class="button confirm" type="submit">Clone</button>
+        <button class="button confirm" type="submit" data-clone-submit>Clone</button>
       </div>
     </form>
   `;
 
   const form = dialog.querySelector("form");
   const boxes = () => [...dialog.querySelectorAll('input[name="cloneWorkspaceCategory"]')];
+  const selectionSummary = dialog.querySelector("[data-clone-selection-summary]");
+  const updateSelectionSummary = () => {
+    if (!selectionSummary) return;
+    const categoryBoxes = boxes();
+    const selectedCount = categoryBoxes.filter((box) => box.checked).length;
+    if (selectedCount === categoryBoxes.length) {
+      selectionSummary.textContent = "Everything selected";
+    } else if (selectedCount === 0) {
+      selectionSummary.textContent = "Empty workspace";
+    } else {
+      selectionSummary.textContent = `${selectedCount} of ${categoryBoxes.length} selected`;
+    }
+  };
 
   dialog.querySelectorAll("[data-dialog-close]").forEach((btn) => {
     btn.addEventListener("click", () => closeDialog(dialog));
   });
   dialog.querySelector("[data-clone-select-all]")?.addEventListener("click", () => {
     boxes().forEach((box) => { box.checked = true; });
+    updateSelectionSummary();
   });
   dialog.querySelector("[data-clone-clear]")?.addEventListener("click", () => {
     boxes().forEach((box) => { box.checked = false; });
+    updateSelectionSummary();
+  });
+  boxes().forEach((box) => {
+    box.addEventListener("change", updateSelectionSummary);
   });
   dialog.addEventListener("mousedown", (event) => {
     if (event.target === dialog) closeDialog(dialog);
@@ -461,8 +488,9 @@ function openCloneInstanceDialog(instance) {
   });
 
   document.body.appendChild(dialog);
+  updateSelectionSummary();
   window.setTimeout(() => {
-    boxes()[0]?.focus();
+    dialog.querySelector("[data-clone-submit]")?.focus();
   }, 0);
 }
 

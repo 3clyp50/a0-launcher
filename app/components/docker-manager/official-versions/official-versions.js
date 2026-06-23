@@ -234,6 +234,18 @@ function actionForEntry(entry, state) {
   };
 }
 
+function canRemoveEntry(entry) {
+  if (!entry || entry.availability === "installing") return false;
+  return entry.availability === "installed" || entry.availability === "update_available" || !!entry.differsFromPublished;
+}
+
+function confirmRemoveInstall(entry) {
+  const label = entry?.title || entry?.tag || "this install";
+  return window.confirm(
+    `Remove ${label} from Installs?\n\nDocker will refuse if any Instance still uses this image. Delete those Instances first, then remove the install.`
+  );
+}
+
 function isAwaitingFirstInventory(state, entries) {
   return !state?.stateLoaded || (!!state?.loading && !entries.length);
 }
@@ -464,6 +476,20 @@ function render(state) {
       actions.appendChild(actionBtn);
     }
 
+    if (canRemoveEntry(entry)) {
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "button cancel dm-icon-button";
+      removeBtn.type = "button";
+      removeBtn.title = "Remove install";
+      removeBtn.setAttribute("aria-label", `Remove ${entry.title || entry.tag} install`);
+      removeBtn.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">delete</span>';
+      removeBtn.addEventListener("click", () => {
+        if (!confirmRemoveInstall(entry)) return;
+        window.dockerManagerActions?.removeInstalledImage?.(entry.tag);
+      });
+      actions.appendChild(removeBtn);
+    }
+
     footer.appendChild(actions);
 
     card.appendChild(visual);
@@ -473,7 +499,7 @@ function render(state) {
   }
 }
 
-export { actionForEntry, defaultInstanceName };
+export { actionForEntry, canRemoveEntry, defaultInstanceName };
 
 window.addEventListener("dm:state", (e) => render(e.detail || {}));
 if (window.__dmLastState) render(window.__dmLastState);

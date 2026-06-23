@@ -148,6 +148,13 @@ This scope owns:
   are allowed for product-layer workflows such as workspace migration and
   selective workspace clone, but must not become a renderer-facing filesystem
   browser or generic `docker cp` surface.
+- Container archive import/export primitives may expose raw streams to the
+  product layer for bounded workflows such as Backup and Restore, but product
+  scope, path filtering, metadata, and user-facing semantics must remain in
+  `shell/docker_manager`.
+- Docker image removal should default to non-forced deletion so callers preserve
+  Docker's native protection for images still referenced by containers. Forced
+  removal must be an explicit option.
 - Container commit support is a low-level snapshot primitive for product-layer
   clone workflows. Keep clone naming, labels, and port-policy decisions in
   `shell/docker_manager`.

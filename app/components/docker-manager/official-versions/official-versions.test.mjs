@@ -11,7 +11,7 @@ globalThis.window = {
   dockerManagerActions: {}
 };
 
-const { actionForEntry, defaultInstanceName } = await import('./official-versions.js');
+const { actionForEntry, canRemoveEntry, defaultInstanceName } = await import('./official-versions.js');
 
 test('installed active entries still expose Run for additional instances', () => {
   const action = actionForEntry({
@@ -33,6 +33,14 @@ test('running operations still suppress install card actions', () => {
   }, {});
 
   assert.equal(action, null);
+});
+
+test('installed and differing install cards can expose remove control', () => {
+  assert.equal(canRemoveEntry({ availability: 'installed' }), true);
+  assert.equal(canRemoveEntry({ availability: 'update_available' }), true);
+  assert.equal(canRemoveEntry({ availability: 'available' }), false);
+  assert.equal(canRemoveEntry({ availability: 'installing' }), false);
+  assert.equal(canRemoveEntry({ availability: 'available', differsFromPublished: true }), true);
 });
 
 test('default run names increment when same-tag instances exist', () => {

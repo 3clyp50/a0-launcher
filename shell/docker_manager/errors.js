@@ -71,6 +71,8 @@ function mapDockerInterfaceErrorToUiMessage(error) {
       return 'Please confirm the warning to continue.';
     case 'NOT_INSTALLED':
       return 'This version is not installed yet.';
+    case 'IMAGE_IN_USE':
+      return 'This install is still used by an Instance. Delete the Instance first, then remove the install.';
     case 'NOT_YET_AVAILABLE':
       return 'This version is not available yet. Please try again later.';
     case 'INSTANCE_NOT_FOUND':
@@ -89,6 +91,20 @@ function mapDockerInterfaceErrorToUiMessage(error) {
       return 'Invalid Docker image tag.';
     case 'TAG_NOT_ALLOWED':
       return 'That version is not supported.';
+    case 'INVALID_BACKUP_PATH':
+      return 'Choose a valid Agent Zero backup .zip file.';
+    case 'BACKUP_NOT_FOUND':
+      return 'Backup file was not found.';
+    case 'BACKUP_EMPTY':
+      return 'No /a0/usr files were found to back up.';
+    case 'BACKUP_TOO_LARGE':
+      return msg || 'Backup is too large to export.';
+    case 'BACKUP_UNAVAILABLE':
+      return 'Backup is not supported by the selected runtime.';
+    case 'RESTORE_UNAVAILABLE':
+      return 'Restore is not supported by the selected runtime.';
+    case 'INVALID_BACKUP_ARCHIVE':
+      return msg || 'This backup does not contain restorable /a0/usr data.';
 
     case 'NOT_IMPLEMENTED':
       return 'This action is not available yet.';

@@ -816,6 +816,19 @@ function renderDockerInstance(list, c, state) {
       disabled: !containerId,
       title: "Open the persistent /a0/usr folder on this computer"
     }) : null,
+    menuButton("archive", "Backup /a0/usr", () => {
+      window.dockerManagerActions?.backupLocalInstance?.(containerId);
+    }, {
+      disabled: !containerId || operationRunning || containerOperationRunning,
+      title: "Save an Agent Zero backup zip from this instance"
+    }),
+    menuButton("upload_file", "Restore /a0/usr", async () => {
+      if (!window.confirm(`Restore a backup into ${displayName}?\n\nThis writes files into /a0/usr and can overwrite existing files. Restart Agent Zero afterward so restored settings fully load.`)) return;
+      await window.dockerManagerActions?.restoreLocalInstance?.(containerId);
+    }, {
+      disabled: !containerId || operationRunning || containerOperationRunning,
+      title: "Restore an Agent Zero backup zip into this instance"
+    }),
     workspaceMigrationAvailable(c) ? menuButton("drive_file_move", "Persist a0/usr data", async () => {
       if (!window.confirm(`Create persistent /a0/usr storage for ${displayName}?\n\nThe source container will be paused and resumed during the snapshot. Any running AI work stops and must be resumed manually.\n\nThe existing container will be kept until the persistent replacement starts successfully.`)) return;
       await window.dockerManagerActions?.migrateLocalInstanceStorage?.(containerId);

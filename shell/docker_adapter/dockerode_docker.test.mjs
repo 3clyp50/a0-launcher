@@ -100,6 +100,27 @@ test('readContainerTextFile returns null for missing paths', async () => {
   assert.equal(text, null);
 });
 
+test('removeLocalImage preserves Docker in-use protection unless force is explicit', async () => {
+  const calls = [];
+  const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
+  docker.docker = {
+    getImage: (imageRef) => ({
+      remove: (options, callback) => {
+        calls.push([imageRef, options]);
+        callback(null);
+      }
+    })
+  };
+
+  await docker.removeLocalImage('agent0ai/agent-zero:latest');
+  await docker.removeLocalImage('agent0ai/agent-zero:latest', { force: true });
+
+  assert.deepEqual(calls, [
+    ['agent0ai/agent-zero:latest', { force: false }],
+    ['agent0ai/agent-zero:latest', { force: true }]
+  ]);
+});
+
 test('copyContainerPathToContainer streams a container archive into another container', async () => {
   const archive = Readable.from(tarArchiveForFile('usr/marker.txt', 'hello'));
   const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });

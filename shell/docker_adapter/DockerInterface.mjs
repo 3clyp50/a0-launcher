@@ -366,9 +366,11 @@ export class DockerInterface {
   /**
    * Delete a local image reference (DI-010).
    * @param {string} imageRef
+   * @param {Object=} options
+   * @param {boolean=} options.force
    * @returns {Promise<void>}
    */
-  async removeLocalImage(_imageRef) {
+  async removeLocalImage(_imageRef, _options = {}) {
     throw new Error('DockerInterface.removeLocalImage is abstract');
   }
 
@@ -529,6 +531,30 @@ export class DockerInterface {
    */
   async copyContainerPathToContainer(_sourceContainerId, _sourcePath, _targetContainerId, _targetPath) {
     throw new Error('DockerInterface.copyContainerPathToContainer is abstract');
+  }
+
+  /**
+   * Open a Docker archive stream for a path inside a container.
+   * The caller owns archive interpretation; Docker API details stay in the adapter.
+   *
+   * @param {string} containerId
+   * @param {string} sourcePath
+   * @returns {Promise<NodeJS.ReadableStream>}
+   */
+  async getContainerPathArchive(_containerId, _sourcePath) {
+    throw new Error('DockerInterface.getContainerPathArchive is abstract');
+  }
+
+  /**
+   * Put a Docker-compatible tar archive stream into a container path.
+   *
+   * @param {string} containerId
+   * @param {string} targetPath
+   * @param {NodeJS.ReadableStream} archiveStream
+   * @returns {Promise<{imported: boolean}>}
+   */
+  async putContainerPathArchive(_containerId, _targetPath, _archiveStream) {
+    throw new Error('DockerInterface.putContainerPathArchive is abstract');
   }
 
   /**

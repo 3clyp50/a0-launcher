@@ -132,9 +132,14 @@ Product language:
   local Docker setup or an image pull before a user can add a remote Agent Zero
   URL.
 - Say `Storage volumes`, not just `Storage`, when referring to Docker volumes.
+- Installs may be removed from the Installs view, but image removal must be a
+  non-forced Docker image delete so Docker refuses removal while any Instance
+  still references the image.
 - Keep instance deletion separate from workspace deletion. Host workspace
   directories and named Docker volumes should survive container removal unless a
   user takes an explicit storage cleanup action.
+- Backup and Restore for local Instances operate on the Agent Zero workspace
+  path `/a0/usr` and should use the same backup shape Agent Zero core uses.
 - Keep Docker mechanics behind purposeful controls.
 - Put `Open UI` where the instance lives, not in the global header.
 - Keep the surface quiet and precise: avoid excessive borders, nested cards, and

@@ -1,11 +1,15 @@
 const { EventEmitter } = require('node:events');
+const fsSync = require('node:fs');
 const fs = require('node:fs/promises');
 const http = require('node:http');
 const path = require('node:path');
 const os = require('node:os');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const zlib = require('node:zlib');
 const { app } = require('electron');
+const tarStream = require('tar-stream');
+const yauzl = require('yauzl');
 
 const { getDocker, resetDocker } = require('../docker_adapter/getDocker');
 const releasesClient = require('./releases_client');
@@ -30,10 +34,13 @@ const CONTAINER_SOURCE_MAX_BYTES = 256 * 1024;
 const RUNTIME_SETUP_RESUME_ARG = '--a0-resume-runtime-setup';
 const RUNTIME_SETUP_RUNONCE_VALUE = 'AgentZeroLauncherResumeRuntimeSetup';
 const execFileAsync = promisify(execFile);
+const AGENT_ZERO_CONTAINER_ROOT = '/a0';
 const WORKSPACE_MOUNT_TARGET = '/a0/usr';
 const STORAGE_MODE_HOST_DIRECTORY = 'host_directory';
 const STORAGE_MODE_NAMED_VOLUME = 'named_volume';
 const STORAGE_MODE_EPHEMERAL = 'ephemeral';
+const ZIP_UINT16_MAX = 0xffff;
+const ZIP_UINT32_MAX = 0xffffffff;
 const CLONE_WORKSPACE_CATEGORY_IDS = Object.freeze([
   'auth',
   'secrets',
@@ -2405,6 +2412,541 @@ async function copySelectedWorkspaceData(docker, sourceContainerId, targetContai
   };
 }
 
+function makeDockerManagerError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+}
+
+function assertHostZipPath(value, mode = 'read') {
+  const raw = String(value || '').trim();
+  if (!raw || raw.length > 4096 || /[\0\r\n]/.test(raw)) {
+    throw makeDockerManagerError('INVALID_BACKUP_PATH', 'Invalid backup path');
+  }
+  const resolved = path.resolve(raw);
+  if (!path.isAbsolute(resolved) || !resolved.toLowerCase().endsWith('.zip')) {
+    throw makeDockerManagerError('INVALID_BACKUP_PATH', 'Backup path must be a .zip file');
+  }
+  if (mode === 'read' && !fsSync.existsSync(resolved)) {
+    throw makeDockerManagerError('BACKUP_NOT_FOUND', 'Backup file was not found');
+  }
+  return resolved;
+}
+
+function safeRelativeArchivePath(value) {
+  const raw = String(value || '').replace(/\\/g, '/').replace(/^\/+/u, '');
+  if (!raw || /[\0\r\n]/.test(raw)) return '';
+  const normalized = path.posix.normalize(raw);
+  if (!normalized || normalized === '.') return '';
+  if (normalized === '..' || normalized.startsWith('../') || normalized.includes('/../')) return '';
+  return normalized;
+}
+
+function workspaceRelativeFromTarEntry(entryName) {
+  const name = safeRelativeArchivePath(entryName);
+  if (!name) return '';
+  if (name === 'usr') return '';
+  if (name.startsWith('usr/')) return name.slice('usr/'.length);
+  if (name === 'a0/usr') return '';
+  if (name.startsWith('a0/usr/')) return name.slice('a0/usr/'.length);
+  return '';
+}
+
+function restorePrefixesFromBackupMetadata(metadata = {}) {
+  const roots = new Set(['a0']);
+  const environmentInfo = isPlainObject(metadata?.environment_info) ? metadata.environment_info : {};
+  const backedUpRoot = typeof environmentInfo.agent_zero_root === 'string' ? environmentInfo.agent_zero_root : '';
+  const safeRoot = safeRelativeArchivePath(backedUpRoot);
+  if (safeRoot) roots.add(safeRoot);
+  return [...roots].map((root) => `${root.replace(/\/+$/u, '')}/usr/`);
+}
+
+function workspaceTarEntryFromBackupEntry(entryName, metadata = {}) {
+  const name = safeRelativeArchivePath(entryName);
+  if (!name || name === 'metadata.json' || name === 'checksums.json') return '';
+  if (name === 'usr') return '';
+  if (name.startsWith('usr/')) return name;
+  for (const prefix of restorePrefixesFromBackupMetadata(metadata)) {
+    if (name === prefix.slice(0, -1)) return '';
+    if (name.startsWith(prefix)) {
+      const rel = safeRelativeArchivePath(name.slice(prefix.length));
+      return rel ? `usr/${rel}` : '';
+    }
+  }
+  return '';
+}
+
+function countDirectoriesFromBackupFiles(files) {
+  const dirs = new Set();
+  for (const file of Array.isArray(files) ? files : []) {
+    const filePath = String(file?.path || '').trim();
+    const dir = path.posix.dirname(filePath);
+    if (!dir || dir === '.') continue;
+    const parts = dir.split('/').filter(Boolean);
+    for (let i = 1; i <= parts.length; i += 1) {
+      dirs.add(`/${parts.slice(0, i).join('/')}`);
+    }
+  }
+  return dirs.size;
+}
+
+function backupNameFromPath(filePath) {
+  const base = path.basename(String(filePath || 'agent-zero-backup.zip')).replace(/\.zip$/i, '');
+  return base.replace(/[^\x20-\x7E]/g, '').trim().slice(0, 120) || 'agent-zero-backup';
+}
+
+function buildAgentZeroBackupMetadata({ filePath, files, sourceName }) {
+  const safeFiles = Array.isArray(files) ? files : [];
+  const backupName = backupNameFromPath(filePath);
+  const backupSize = safeFiles.reduce((sum, file) => sum + (Number.isFinite(Number(file?.size)) ? Number(file.size) : 0), 0);
+  return {
+    agent_zero_version: 'unknown',
+    timestamp: nowIso(),
+    backup_name: backupName,
+    include_hidden: true,
+    include_patterns: [`${WORKSPACE_MOUNT_TARGET}/**`],
+    exclude_patterns: [],
+    system_info: {
+      source: 'A0 Launcher',
+      source_instance: String(sourceName || '').slice(0, 160)
+    },
+    environment_info: {
+      agent_zero_root: AGENT_ZERO_CONTAINER_ROOT,
+      working_directory: AGENT_ZERO_CONTAINER_ROOT,
+      runtime_mode: 'container',
+      source: 'a0-launcher'
+    },
+    backup_author: 'A0 Launcher',
+    backup_config: {
+      include_patterns: [`${WORKSPACE_MOUNT_TARGET}/**`],
+      exclude_patterns: [],
+      include_hidden: true,
+      compression_level: 6,
+      integrity_check: false
+    },
+    files: safeFiles,
+    total_files: safeFiles.length,
+    backup_size: backupSize,
+    directory_count: countDirectoriesFromBackupFiles(safeFiles)
+  };
+}
+
+let crc32Table = null;
+
+function crc32(buffer) {
+  if (!crc32Table) {
+    crc32Table = new Uint32Array(256);
+    for (let i = 0; i < 256; i += 1) {
+      let c = i;
+      for (let j = 0; j < 8; j += 1) {
+        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      crc32Table[i] = c >>> 0;
+    }
+  }
+
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc = crc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function zipDosDateTime(value) {
+  const date = value instanceof Date && Number.isFinite(value.getTime()) ? value : new Date(value || Date.now());
+  const year = Math.max(1980, Math.min(2107, date.getFullYear()));
+  const month = Math.max(1, Math.min(12, date.getMonth() + 1));
+  const day = Math.max(1, Math.min(31, date.getDate()));
+  const hours = Math.max(0, Math.min(23, date.getHours()));
+  const minutes = Math.max(0, Math.min(59, date.getMinutes()));
+  const seconds = Math.max(0, Math.min(29, Math.floor(date.getSeconds() / 2)));
+  return {
+    date: ((year - 1980) << 9) | (month << 5) | day,
+    time: (hours << 11) | (minutes << 5) | seconds
+  };
+}
+
+function assertZip32Value(value, field) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > ZIP_UINT32_MAX) {
+    throw makeDockerManagerError('BACKUP_TOO_LARGE', `Backup ${field} is too large for ZIP export`);
+  }
+  return Math.floor(n);
+}
+
+class ZipFileWriter {
+  constructor(filePath) {
+    this.filePath = filePath;
+    this.stream = fsSync.createWriteStream(filePath);
+    this.offset = 0;
+    this.entries = [];
+    this.closed = false;
+  }
+
+  async write(buffer) {
+    const chunk = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+    if (!chunk.length) return;
+    await new Promise((resolve, reject) => {
+      const onError = (error) => {
+        this.stream.off('error', onError);
+        reject(error);
+      };
+      this.stream.once('error', onError);
+      this.stream.write(chunk, (error) => {
+        this.stream.off('error', onError);
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    this.offset += chunk.length;
+  }
+
+  async addFile(entryName, data, mtime = new Date()) {
+    if (this.closed) throw makeDockerManagerError('BACKUP_WRITE_FAILED', 'Backup writer is closed');
+    const name = safeRelativeArchivePath(entryName);
+    if (!name) throw makeDockerManagerError('INVALID_BACKUP_ENTRY', 'Invalid backup entry name');
+    const nameBytes = Buffer.from(name, 'utf8');
+    if (nameBytes.length > ZIP_UINT16_MAX) throw makeDockerManagerError('INVALID_BACKUP_ENTRY', 'Backup entry name is too long');
+
+    const raw = Buffer.isBuffer(data) ? data : Buffer.from(data || '');
+    const compressed = zlib.deflateRawSync(raw, { level: 6 });
+    const method = 8;
+    const crc = crc32(raw);
+    const { date, time } = zipDosDateTime(mtime);
+    const localOffset = assertZip32Value(this.offset, 'offset');
+    const compressedSize = assertZip32Value(compressed.length, 'entry');
+    const uncompressedSize = assertZip32Value(raw.length, 'entry');
+
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x0800, 6);
+    localHeader.writeUInt16LE(method, 8);
+    localHeader.writeUInt16LE(time, 10);
+    localHeader.writeUInt16LE(date, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(compressedSize, 18);
+    localHeader.writeUInt32LE(uncompressedSize, 22);
+    localHeader.writeUInt16LE(nameBytes.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+
+    await this.write(localHeader);
+    await this.write(nameBytes);
+    await this.write(compressed);
+
+    this.entries.push({
+      nameBytes,
+      method,
+      time,
+      date,
+      crc,
+      compressedSize,
+      uncompressedSize,
+      localOffset
+    });
+  }
+
+  async close() {
+    if (this.closed) return;
+    this.closed = true;
+    const centralOffset = assertZip32Value(this.offset, 'central directory offset');
+    for (const entry of this.entries) {
+      const header = Buffer.alloc(46);
+      header.writeUInt32LE(0x02014b50, 0);
+      header.writeUInt16LE(0x0314, 4);
+      header.writeUInt16LE(20, 6);
+      header.writeUInt16LE(0x0800, 8);
+      header.writeUInt16LE(entry.method, 10);
+      header.writeUInt16LE(entry.time, 12);
+      header.writeUInt16LE(entry.date, 14);
+      header.writeUInt32LE(entry.crc, 16);
+      header.writeUInt32LE(entry.compressedSize, 20);
+      header.writeUInt32LE(entry.uncompressedSize, 24);
+      header.writeUInt16LE(entry.nameBytes.length, 28);
+      header.writeUInt16LE(0, 30);
+      header.writeUInt16LE(0, 32);
+      header.writeUInt16LE(0, 34);
+      header.writeUInt16LE(0, 36);
+      header.writeUInt32LE(0, 38);
+      header.writeUInt32LE(entry.localOffset, 42);
+      await this.write(header);
+      await this.write(entry.nameBytes);
+    }
+
+    const centralSize = assertZip32Value(this.offset - centralOffset, 'central directory');
+    if (this.entries.length > ZIP_UINT16_MAX) {
+      throw makeDockerManagerError('BACKUP_TOO_LARGE', 'Backup has too many files for ZIP export');
+    }
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0);
+    end.writeUInt16LE(0, 4);
+    end.writeUInt16LE(0, 6);
+    end.writeUInt16LE(this.entries.length, 8);
+    end.writeUInt16LE(this.entries.length, 10);
+    end.writeUInt32LE(centralSize, 12);
+    end.writeUInt32LE(centralOffset, 16);
+    end.writeUInt16LE(0, 20);
+    await this.write(end);
+
+    await new Promise((resolve, reject) => {
+      this.stream.end(resolve);
+      this.stream.once('error', reject);
+    });
+  }
+
+  destroy() {
+    try {
+      this.stream.destroy();
+    } catch {
+      // ignore cleanup failure
+    }
+  }
+}
+
+function readStreamBuffer(stream, maxBytes = ZIP_UINT32_MAX) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    stream.on('data', (chunk) => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += buffer.length;
+      if (total > maxBytes) {
+        const error = makeDockerManagerError('BACKUP_TOO_LARGE', 'Backup entry is too large');
+        try {
+          stream.destroy(error);
+        } catch {
+          // ignore
+        }
+        fail(error);
+        return;
+      }
+      chunks.push(buffer);
+    });
+    stream.on('error', fail);
+    stream.on('end', () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks, total));
+    });
+  });
+}
+
+function drainStream(stream) {
+  return new Promise((resolve, reject) => {
+    stream.resume();
+    stream.once('error', reject);
+    stream.once('end', resolve);
+  });
+}
+
+async function createAgentZeroBackupZip(docker, containerId, outputPath, options = {}) {
+  if (!docker || typeof docker.getContainerPathArchive !== 'function') {
+    throw makeDockerManagerError('BACKUP_UNAVAILABLE', 'Container backup is not supported by this runtime.');
+  }
+
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  const source = await docker.getContainerPathArchive(containerId, WORKSPACE_MOUNT_TARGET);
+  const extract = tarStream.extract();
+  const writer = new ZipFileWriter(outputPath);
+  const files = [];
+  let pendingError = null;
+
+  const done = new Promise((resolve, reject) => {
+    extract.on('entry', async (header, stream, next) => {
+      try {
+        const rel = workspaceRelativeFromTarEntry(header?.name);
+        if (!rel) {
+          await drainStream(stream);
+          next();
+          return;
+        }
+
+        if (header?.type !== 'file') {
+          await drainStream(stream);
+          next();
+          return;
+        }
+
+        const data = await readStreamBuffer(stream);
+        const zipPath = `a0/usr/${rel}`;
+        const mtime = header?.mtime instanceof Date ? header.mtime : new Date();
+        await writer.addFile(zipPath, data, mtime);
+        files.push({
+          path: `/${zipPath}`,
+          size: data.length,
+          modified: mtime.toISOString(),
+          type: 'file'
+        });
+        next();
+      } catch (error) {
+        pendingError = error;
+        try {
+          stream.destroy(error);
+        } catch {
+          // ignore
+        }
+        next(error);
+      }
+    });
+    extract.once('finish', resolve);
+    extract.once('error', reject);
+  });
+
+  try {
+    source.once('error', (error) => extract.destroy(error));
+    source.pipe(extract);
+    await done;
+    if (pendingError) throw pendingError;
+    if (!files.length) throw makeDockerManagerError('BACKUP_EMPTY', 'No /a0/usr files were found to back up.');
+
+    const metadata = buildAgentZeroBackupMetadata({
+      filePath: outputPath,
+      files,
+      sourceName: options.sourceName
+    });
+    await writer.addFile('metadata.json', Buffer.from(`${JSON.stringify(metadata, null, 2)}\n`, 'utf8'), new Date());
+    await writer.close();
+    return {
+      filePath: outputPath,
+      fileCount: files.length,
+      sizeBytes: metadata.backup_size,
+      backupName: metadata.backup_name
+    };
+  } catch (error) {
+    writer.destroy();
+    await fs.rm(outputPath, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+function openZipFile(filePath) {
+  return new Promise((resolve, reject) => {
+    yauzl.open(filePath, { lazyEntries: true, autoClose: true }, (error, zipfile) => {
+      if (error) reject(error);
+      else resolve(zipfile);
+    });
+  });
+}
+
+function readZipEntryBuffer(zipfile, entry, maxBytes = ZIP_UINT32_MAX) {
+  return new Promise((resolve, reject) => {
+    zipfile.openReadStream(entry, (error, stream) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      readStreamBuffer(stream, maxBytes).then(resolve, reject);
+    });
+  });
+}
+
+async function forEachZipEntry(filePath, onEntry) {
+  const zipfile = await openZipFile(filePath);
+  return await new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      try {
+        zipfile.close();
+      } catch {
+        // ignore
+      }
+      reject(error);
+    };
+    zipfile.on('entry', (entry) => {
+      Promise.resolve(onEntry(zipfile, entry))
+        .then(() => {
+          if (!settled) zipfile.readEntry();
+        })
+        .catch(fail);
+    });
+    zipfile.once('end', () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    });
+    zipfile.once('error', fail);
+    zipfile.readEntry();
+  });
+}
+
+async function readBackupMetadataFromZip(filePath) {
+  let metadata = {};
+  await forEachZipEntry(filePath, async (zipfile, entry) => {
+    if (String(entry?.fileName || '') !== 'metadata.json') return;
+    const data = await readZipEntryBuffer(zipfile, entry, 10 * 1024 * 1024);
+    try {
+      const parsed = JSON.parse(data.toString('utf8'));
+      if (isPlainObject(parsed)) metadata = parsed;
+    } catch {
+      throw makeDockerManagerError('INVALID_BACKUP_ARCHIVE', 'Backup metadata is not valid JSON.');
+    }
+  });
+  return metadata;
+}
+
+function addTarPackEntry(pack, header, data) {
+  return new Promise((resolve, reject) => {
+    pack.entry(header, data, (error) => (error ? reject(error) : resolve()));
+  });
+}
+
+async function restoreAgentZeroBackupZip(docker, containerId, inputPath, onProgress = null) {
+  if (!docker || typeof docker.putContainerPathArchive !== 'function') {
+    throw makeDockerManagerError('RESTORE_UNAVAILABLE', 'Container restore is not supported by this runtime.');
+  }
+
+  const metadata = await readBackupMetadataFromZip(inputPath);
+  const pack = tarStream.pack();
+  const importPromise = docker.putContainerPathArchive(containerId, AGENT_ZERO_CONTAINER_ROOT, pack);
+  let restoredFiles = 0;
+  let restoredBytes = 0;
+
+  try {
+    await forEachZipEntry(inputPath, async (zipfile, entry) => {
+      const entryName = String(entry?.fileName || '');
+      if (!entryName || entryName.endsWith('/')) return;
+      const tarName = workspaceTarEntryFromBackupEntry(entryName, metadata);
+      if (!tarName) return;
+
+      const data = await readZipEntryBuffer(zipfile, entry);
+      await addTarPackEntry(pack, {
+        name: tarName,
+        size: data.length,
+        mode: 0o644,
+        mtime: typeof entry.getLastModDate === 'function' ? entry.getLastModDate() : new Date()
+      }, data);
+      restoredFiles += 1;
+      restoredBytes += data.length;
+      if (restoredFiles % 25 === 0) onProgress?.(`Restoring /a0/usr files (${restoredFiles})`);
+    });
+
+    if (!restoredFiles) {
+      throw makeDockerManagerError('INVALID_BACKUP_ARCHIVE', 'No /a0/usr files were found in this backup.');
+    }
+
+    pack.finalize();
+    await importPromise;
+    return { restoredFiles, restoredBytes };
+  } catch (error) {
+    try {
+      pack.destroy(error);
+    } catch {
+      // ignore
+    }
+    await importPromise.catch(() => {});
+    throw error;
+  }
+}
+
 function setIfPresent(target, key, value) {
   if (value === null || value === undefined || value === '') return;
   if (Array.isArray(value) && !value.length) return;
@@ -3111,6 +3653,30 @@ async function installOrSync(tag) {
   return { opId };
 }
 
+async function removeInstalledImage(tag) {
+  const imageRepo = getBackendImageRepo();
+  const t = assertTagAllowedForActivate(tag);
+  requireNoRunningOperation();
+
+  const docker = await getManagedDocker(imageRepo);
+  const localImages = await docker.listLocalImages(imageRepo);
+  const target = (localImages || []).find((img) => img?.tag === t) || null;
+  if (!target?.imageRef) {
+    throw makeDockerManagerError('NOT_INSTALLED', 'This install is not available locally.');
+  }
+
+  try {
+    await docker.removeLocalImage(target.imageRef, { force: false });
+    await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+    return { removed: true, tag: t };
+  } catch (error) {
+    if (error?.code === 'CONFLICT') {
+      throw makeDockerManagerError('IMAGE_IN_USE', 'This install is still used by an Instance. Delete the Instance first, then remove the install.');
+    }
+    throw error;
+  }
+}
+
 async function stopActiveInstance() {
   const imageRepo = getBackendImageRepo();
 
@@ -3461,6 +4027,115 @@ async function migrateLocalInstanceStorage(containerId, options = {}) {
     }
   })().catch((error) => {
     logDockerManagerError('migrateLocalInstanceStorage.unhandled', error, { opId, containerId: id });
+  });
+
+  return { opId };
+}
+
+async function backupLocalInstance(containerId, outputPath) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+  const targetPath = assertHostZipPath(outputPath, 'write');
+
+  requireNoRunningOperation();
+  const opId = beginOperation('backup_workspace', null);
+
+  (async () => {
+    try {
+      updateOperationProgress({ headline: 'Backing up /a0/usr', message: 'Preparing backup', progress: null });
+      const docker = await getManagedDocker(imageRepo);
+      const containers = await docker.listContainers(imageRepo);
+      const target = (containers || []).find((c) => c && c.containerId === id) || null;
+
+      if (!target || !target.containerId) {
+        const err = new Error('Instance not found');
+        err.code = 'INSTANCE_NOT_FOUND';
+        throw err;
+      }
+
+      const sourceName = target.instanceName || target.containerName || id.slice(0, 12);
+      updateOperationProgress({ headline: `Backing up ${sourceName || 'instance'}`, message: 'Reading /a0/usr data', progress: null });
+      const result = await createAgentZeroBackupZip(docker, id, targetPath, { sourceName });
+
+      finishOperation('completed', null);
+      updateOperationProgress({
+        headline: `Backed up ${sourceName || 'instance'}`,
+        message: `Saved ${result.fileCount} file${result.fileCount === 1 ? '' : 's'}`,
+        progress: 100
+      });
+    } catch (error) {
+      logDockerManagerError('backupLocalInstance', error, { opId, containerId: id, outputPath: targetPath });
+      const message =
+        (error && typeof error === 'object' && error.code === 'BACKUP_EMPTY' && error.message) ||
+        (error && typeof error === 'object' && error.code === 'BACKUP_TOO_LARGE' && error.message) ||
+        mapDockerInterfaceErrorToUiMessage(error) ||
+        error?.message ||
+        'Backup failed';
+      finishOperation('failed', message, error?.code || null);
+    } finally {
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+    }
+  })().catch((error) => {
+    logDockerManagerError('backupLocalInstance.unhandled', error, { opId, containerId: id });
+  });
+
+  return { opId };
+}
+
+async function restoreLocalInstance(containerId, inputPath) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+  const sourcePath = assertHostZipPath(inputPath, 'read');
+
+  requireNoRunningOperation();
+  const opId = beginOperation('restore_workspace', null);
+
+  (async () => {
+    try {
+      updateOperationProgress({ headline: 'Restoring /a0/usr', message: 'Preparing restore', progress: null });
+      const docker = await getManagedDocker(imageRepo);
+      const containers = await docker.listContainers(imageRepo);
+      const target = (containers || []).find((c) => c && c.containerId === id) || null;
+
+      if (!target || !target.containerId) {
+        const err = new Error('Instance not found');
+        err.code = 'INSTANCE_NOT_FOUND';
+        throw err;
+      }
+
+      const targetName = target.instanceName || target.containerName || id.slice(0, 12);
+      updateOperationProgress({ headline: `Restoring ${targetName || 'instance'}`, message: 'Ensuring /a0/usr exists', progress: null });
+      if (typeof docker.ensureContainerDirectory === 'function') {
+        await docker.ensureContainerDirectory(id, WORKSPACE_MOUNT_TARGET);
+      }
+
+      updateOperationProgress({ headline: `Restoring ${targetName || 'instance'}`, message: 'Writing /a0/usr data', progress: null });
+      const result = await restoreAgentZeroBackupZip(
+        docker,
+        id,
+        sourcePath,
+        (message) => updateOperationProgress({ headline: `Restoring ${targetName || 'instance'}`, message, progress: null })
+      );
+
+      finishOperation('completed', null);
+      updateOperationProgress({
+        headline: `Restored ${targetName || 'instance'}`,
+        message: `Restored ${result.restoredFiles} file${result.restoredFiles === 1 ? '' : 's'}`,
+        progress: 100
+      });
+    } catch (error) {
+      logDockerManagerError('restoreLocalInstance', error, { opId, containerId: id, inputPath: sourcePath });
+      const message =
+        (error && typeof error === 'object' && error.code === 'INVALID_BACKUP_ARCHIVE' && error.message) ||
+        mapDockerInterfaceErrorToUiMessage(error) ||
+        error?.message ||
+        'Restore failed';
+      finishOperation('failed', message, error?.code || null);
+    } finally {
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+    }
+  })().catch((error) => {
+    logDockerManagerError('restoreLocalInstance.unhandled', error, { opId, containerId: id });
   });
 
   return { opId };
@@ -4262,10 +4937,13 @@ module.exports = {
 
   // Operations (implemented in later tasks)
   installOrSync,
+  removeInstalledImage,
   startActiveInstance,
   startLocalInstance,
   cloneLocalInstance,
   migrateLocalInstanceStorage,
+  backupLocalInstance,
+  restoreLocalInstance,
   renameLocalInstance,
   stopActiveInstance,
   stopLocalInstance,
@@ -4311,7 +4989,11 @@ module.exports = {
     cloneWorkspaceSelectionIsAll,
     filterEnvTextForClone,
     filterSettingsJsonForClone,
-    copySelectedWorkspaceData
+    copySelectedWorkspaceData,
+    workspaceTarEntryFromBackupEntry,
+    buildAgentZeroBackupMetadata,
+    createAgentZeroBackupZip,
+    restoreAgentZeroBackupZip
   },
 
   // Error helpers for IPC handlers

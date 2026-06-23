@@ -4,6 +4,8 @@ const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { test } = require('node:test');
+const tarStream = require('tar-stream');
+const yauzl = require('yauzl');
 
 const dockerManager = require('./index');
 
@@ -22,7 +24,11 @@ const {
   cloneWorkspaceSelectionIsAll,
   filterEnvTextForClone,
   filterSettingsJsonForClone,
-  copySelectedWorkspaceData
+  copySelectedWorkspaceData,
+  workspaceTarEntryFromBackupEntry,
+  buildAgentZeroBackupMetadata,
+  createAgentZeroBackupZip,
+  restoreAgentZeroBackupZip
 } = dockerManager._test;
 
 async function tempRoot() {
@@ -42,6 +48,86 @@ function listenLocalServer(server) {
 function closeServer(server) {
   return new Promise((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
+  });
+}
+
+async function makeTarStream(entries) {
+  const pack = tarStream.pack();
+  for (const entry of entries) {
+    const data = Buffer.from(entry.text || '', 'utf8');
+    await new Promise((resolve, reject) => {
+      const header = {
+        name: entry.name,
+        type: entry.type || 'file',
+        mode: entry.mode || 0o644,
+        mtime: entry.mtime || new Date('2026-06-23T10:00:00.000Z')
+      };
+      if (entry.type === 'directory') {
+        pack.entry(header, (error) => (error ? reject(error) : resolve()));
+      } else {
+        pack.entry(header, data, (error) => (error ? reject(error) : resolve()));
+      }
+    });
+  }
+  pack.finalize();
+  return pack;
+}
+
+function readZipEntries(filePath) {
+  return new Promise((resolve, reject) => {
+    const entries = new Map();
+    yauzl.open(filePath, { lazyEntries: true, autoClose: true }, (openError, zipfile) => {
+      if (openError) {
+        reject(openError);
+        return;
+      }
+      zipfile.on('entry', (entry) => {
+        const name = String(entry?.fileName || '');
+        if (!name || name.endsWith('/')) {
+          zipfile.readEntry();
+          return;
+        }
+        zipfile.openReadStream(entry, (streamError, stream) => {
+          if (streamError) {
+            reject(streamError);
+            return;
+          }
+          const chunks = [];
+          stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+          stream.once('error', reject);
+          stream.once('end', () => {
+            entries.set(name, Buffer.concat(chunks));
+            zipfile.readEntry();
+          });
+        });
+      });
+      zipfile.once('error', reject);
+      zipfile.once('end', () => resolve(entries));
+      zipfile.readEntry();
+    });
+  });
+}
+
+function collectTarEntries(stream) {
+  return new Promise((resolve, reject) => {
+    const entries = [];
+    const extract = tarStream.extract();
+    extract.on('entry', (header, entryStream, next) => {
+      const chunks = [];
+      entryStream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      entryStream.once('error', reject);
+      entryStream.once('end', () => {
+        entries.push({
+          name: header.name,
+          type: header.type,
+          text: Buffer.concat(chunks).toString('utf8')
+        });
+        next();
+      });
+    });
+    extract.once('error', reject);
+    extract.once('finish', () => resolve(entries));
+    stream.pipe(extract);
   });
 }
 
@@ -513,4 +599,102 @@ test('selected clone workspace copy filters shared files and reserved plugin sta
   assert.ok(calls.some((call) => call[0] === 'copy' && call[1] === '/a0/usr/plugins/_model_config'));
   assert.equal(calls.some((call) => call[0] === 'copy' && call[1] === '/a0/usr/plugins/_oauth'), false);
   assert.ok(calls.some((call) => call[0] === 'copy' && call[1] === '/a0/usr/plugins/custom_plugin'));
+});
+
+test('launcher backup metadata matches Agent Zero core /a0/usr backup shape', () => {
+  const metadata = buildAgentZeroBackupMetadata({
+    filePath: '/tmp/agent-zero-backup-main.zip',
+    sourceName: 'Main',
+    files: [
+      {
+        path: '/a0/usr/settings.json',
+        size: 42,
+        modified: '2026-06-23T10:00:00.000Z',
+        type: 'file'
+      }
+    ]
+  });
+
+  assert.equal(metadata.backup_name, 'agent-zero-backup-main');
+  assert.deepEqual(metadata.include_patterns, ['/a0/usr/**']);
+  assert.deepEqual(metadata.backup_config.include_patterns, ['/a0/usr/**']);
+  assert.equal(metadata.environment_info.agent_zero_root, '/a0');
+  assert.equal(metadata.environment_info.working_directory, '/a0');
+  assert.equal(metadata.system_info.source, 'A0 Launcher');
+  assert.equal(metadata.system_info.source_instance, 'Main');
+  assert.equal(metadata.total_files, 1);
+  assert.equal(metadata.backup_size, 42);
+});
+
+test('launcher restore maps only backup entries under the Agent Zero usr path', () => {
+  assert.equal(
+    workspaceTarEntryFromBackupEntry('a0/usr/settings.json', {
+      environment_info: { agent_zero_root: '/a0' }
+    }),
+    'usr/settings.json'
+  );
+  assert.equal(
+    workspaceTarEntryFromBackupEntry('/a0/usr/plugins/custom/plugin.yaml', {
+      environment_info: { agent_zero_root: '/a0' }
+    }),
+    'usr/plugins/custom/plugin.yaml'
+  );
+  assert.equal(
+    workspaceTarEntryFromBackupEntry('home/ada/a0/usr/chats/session.json', {
+      environment_info: { agent_zero_root: '/home/ada/a0' }
+    }),
+    'usr/chats/session.json'
+  );
+  assert.equal(workspaceTarEntryFromBackupEntry('usr/workdir/readme.md', {}), 'usr/workdir/readme.md');
+  assert.equal(workspaceTarEntryFromBackupEntry('metadata.json', {}), '');
+  assert.equal(workspaceTarEntryFromBackupEntry('a0/data/not-workspace.txt', { environment_info: { agent_zero_root: '/a0' } }), '');
+  assert.equal(workspaceTarEntryFromBackupEntry('../a0/usr/escape.txt', { environment_info: { agent_zero_root: '/a0' } }), '');
+});
+
+test('launcher backup zip exports and restores the Agent Zero usr archive shape', async () => {
+  const root = await tempRoot();
+  const backupPath = path.join(root, 'agent-zero-backup-main.zip');
+  const fakeBackupDocker = {
+    async getContainerPathArchive(containerId, sourcePath) {
+      assert.equal(containerId, 'source-id');
+      assert.equal(sourcePath, '/a0/usr');
+      return await makeTarStream([
+        { name: 'usr/', type: 'directory' },
+        { name: 'usr/settings.json', text: '{"ok":true}\n' },
+        { name: 'usr/plugins/custom/plugin.yaml', text: 'name: custom\n' },
+        { name: 'tmp/outside.txt', text: 'ignore me\n' }
+      ]);
+    }
+  };
+
+  const backup = await createAgentZeroBackupZip(fakeBackupDocker, 'source-id', backupPath, { sourceName: 'Main' });
+  const zipEntries = await readZipEntries(backupPath);
+  const metadata = JSON.parse(zipEntries.get('metadata.json').toString('utf8'));
+
+  assert.equal(backup.fileCount, 2);
+  assert.equal(metadata.environment_info.agent_zero_root, '/a0');
+  assert.deepEqual([...zipEntries.keys()].sort(), [
+    'a0/usr/plugins/custom/plugin.yaml',
+    'a0/usr/settings.json',
+    'metadata.json'
+  ]);
+  assert.equal(zipEntries.get('a0/usr/settings.json').toString('utf8'), '{"ok":true}\n');
+
+  let importedEntries = [];
+  const fakeRestoreDocker = {
+    async putContainerPathArchive(containerId, targetPath, archiveStream) {
+      assert.equal(containerId, 'target-id');
+      assert.equal(targetPath, '/a0');
+      importedEntries = await collectTarEntries(archiveStream);
+      return { imported: true };
+    }
+  };
+
+  const restore = await restoreAgentZeroBackupZip(fakeRestoreDocker, 'target-id', backupPath);
+  assert.equal(restore.restoredFiles, 2);
+  assert.equal(restore.restoredBytes, Buffer.byteLength('{"ok":true}\n') + Buffer.byteLength('name: custom\n'));
+  assert.deepEqual(importedEntries, [
+    { name: 'usr/settings.json', type: 'file', text: '{"ok":true}\n' },
+    { name: 'usr/plugins/custom/plugin.yaml', type: 'file', text: 'name: custom\n' }
+  ]);
 });

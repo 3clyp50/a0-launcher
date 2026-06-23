@@ -65,6 +65,13 @@ This scope owns:
   before opening the terminal. If the shell reports that the `a0` command is
   not installed, show `Install A0 CLI` instead of `Open A0 CLI`. Do not add a
   global footer or ambiguous active-instance CLI button.
+- Local Instance Backup and Restore belong with the other card-local actions.
+  They must call named renderer actions that delegate host path selection and
+  container archive work to the shell and Docker Manager.
+- Removing an Install is a named renderer action from the Installs view. The
+  renderer should present it as image cleanup and let Docker Manager report
+  Docker's in-use refusal rather than trying to infer container/image bindings
+  in component code.
 - The compact header shows the Agent Zero wordmark without visible launcher
   version text. Shell app/content metadata may remain in renderer state for
   diagnostics and update decisions, but it should not reintroduce version or

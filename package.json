@@ -41,7 +41,9 @@
     "dockerode": "^4.0.9",
     "electron-squirrel-startup": "^1.0.1",
     "electron-updater": "^6.8.9",
-    "semver": "^7.7.3"
+    "semver": "^7.7.3",
+    "tar-stream": "^2.2.0",
+    "yauzl": "^2.10.0"
   },
   "build": {
     "appId": "ai.agent0.launcher",

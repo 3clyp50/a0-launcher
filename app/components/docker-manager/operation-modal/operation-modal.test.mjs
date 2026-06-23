@@ -533,6 +533,33 @@ test('workspace persistence operation uses persistence wording', () => {
   assert.equal(model.detail, 'Creating persistent replacement');
 });
 
+test('workspace backup and restore operations use Agent Zero usr wording', () => {
+  installDom();
+  const backup = normalizedOperationDialog({
+    progress: {
+      opId: 'op-backup',
+      type: 'backup_workspace',
+      status: 'running',
+      message: 'Reading /a0/usr data'
+    }
+  });
+  const restore = normalizedOperationDialog({
+    progress: {
+      opId: 'op-restore',
+      type: 'restore_workspace',
+      status: 'running',
+      message: 'Writing /a0/usr data'
+    }
+  });
+
+  assert.equal(backup.headline, 'Backing up /a0/usr');
+  assert.equal(backup.primary?.label, 'Backing up /a0/usr');
+  assert.equal(backup.detail, 'Reading /a0/usr data');
+  assert.equal(restore.headline, 'Restoring /a0/usr');
+  assert.equal(restore.primary?.label, 'Restoring /a0/usr');
+  assert.equal(restore.detail, 'Writing /a0/usr data');
+});
+
 test('rate-limited install failure shows docker login and retry actions in modal', () => {
   const document = installDom();
   const state = {

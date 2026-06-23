@@ -2665,6 +2665,47 @@ async function openHostFolder(folderPath) {
   }
 }
 
+function backupDateStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function ensureZipExtension(filePath) {
+  const value = typeof filePath === 'string' ? filePath.trim() : '';
+  if (!value) return '';
+  return value.toLowerCase().endsWith('.zip') ? value : `${value}.zip`;
+}
+
+async function chooseBackupSavePath(ownerWindow) {
+  const options = {
+    title: 'Backup Instance /a0/usr',
+    buttonLabel: 'Backup',
+    defaultPath: path.join(app.getPath('downloads'), `agent-zero-backup-${backupDateStamp()}.zip`),
+    filters: [{ name: 'Agent Zero backup', extensions: ['zip'] }],
+    properties: ['createDirectory', 'showOverwriteConfirmation']
+  };
+  const result = ownerWindow && !ownerWindow.isDestroyed()
+    ? await dialog.showSaveDialog(ownerWindow, options)
+    : await dialog.showSaveDialog(options);
+  if (result?.canceled) return '';
+  return ensureZipExtension(result?.filePath || '');
+}
+
+async function chooseBackupRestorePath(ownerWindow) {
+  const options = {
+    title: 'Restore Instance /a0/usr',
+    buttonLabel: 'Restore',
+    defaultPath: app.getPath('downloads'),
+    filters: [{ name: 'Agent Zero backup', extensions: ['zip'] }],
+    properties: ['openFile']
+  };
+  const result = ownerWindow && !ownerWindow.isDestroyed()
+    ? await dialog.showOpenDialog(ownerWindow, options)
+    : await dialog.showOpenDialog(options);
+  if (result?.canceled) return '';
+  const selected = Array.isArray(result?.filePaths) ? result.filePaths[0] : '';
+  return existingFilePath(selected);
+}
+
 function sanitizeDockerManagerState(state) {
   const versionsIn = Array.isArray(state?.versions) ? state.versions : [];
   const containersIn = Array.isArray(state?.containers) ? state.containers : [];
@@ -3123,6 +3164,16 @@ ipcMain.handle('docker-manager:install', async (_event, body) => {
   }
 });
 
+ipcMain.handle('docker-manager:removeInstalledImage', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const tag = typeof body.tag === 'string' ? body.tag : '';
+    return await dockerManager.removeInstalledImage(tag);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
 ipcMain.handle('docker-manager:startActive', async () => {
   try {
     const accepted = await dockerManager.startActiveInstance();
@@ -3203,6 +3254,38 @@ ipcMain.handle('docker-manager:migrateLocalInstanceStorage', async (_event, body
     });
     if (!accepted || typeof accepted.opId !== 'string') {
       return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Migration did not return an opId' });
+    }
+    return { opId: accepted.opId };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:backupLocalInstance', async (event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const outputPath = await chooseBackupSavePath(BrowserWindow.fromWebContents(event.sender));
+    if (!outputPath) return { canceled: true };
+    const accepted = await dockerManager.backupLocalInstance(containerId, outputPath);
+    if (!accepted || typeof accepted.opId !== 'string') {
+      return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Backup did not return an opId' });
+    }
+    return { opId: accepted.opId };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:restoreLocalInstance', async (event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const inputPath = await chooseBackupRestorePath(BrowserWindow.fromWebContents(event.sender));
+    if (!inputPath) return { canceled: true };
+    const accepted = await dockerManager.restoreLocalInstance(containerId, inputPath);
+    if (!accepted || typeof accepted.opId !== 'string') {
+      return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Restore did not return an opId' });
     }
     return { opId: accepted.opId };
   } catch (error) {

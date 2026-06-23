@@ -144,6 +144,8 @@ This scope owns:
   Installs view.
 - Running an installed tag from Installs creates another managed local instance
   and must not stop existing instances or require a data-loss acknowledgement.
+  Removing an installed tag must go through Docker Manager image removal and
+  must be non-forced so Docker refuses images still used by an Instance.
   Destructive switch, update, and retained-instance activation flows must keep
   the backup/proceed acknowledgement.
 - Activation may offer optional model provider/model/API-key helpers. Keep Main
@@ -215,6 +217,9 @@ This scope owns:
 - The local instance log viewer is a bottom popover panel driven by bounded
   Docker Manager log snapshots. It must stay read-only and must not expose a
   generic Docker command surface.
+- Backup and Restore belong in the local instance overflow menu. Backup creates
+  a core-compatible `.zip` for `/a0/usr`; Restore accepts that same backup
+  shape and writes only into `/a0/usr`, with user confirmation before starting.
 - Retained instances are rollback candidates; storage-volume cleanup belongs in
   Advanced and must remain clearly separate from instance start/stop actions.
 - Storage UI must say `Storage volumes` when referring to Docker volumes.

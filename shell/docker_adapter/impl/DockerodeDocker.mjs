@@ -508,14 +508,14 @@ export class DockerodeDocker extends DockerInterface {
     }
   }
 
-  async removeLocalImage(imageRef) {
+  async removeLocalImage(imageRef, options = {}) {
     const ref = (imageRef || '').trim();
     if (!ref) throw makeDockerInterfaceError('INVALID_INPUT', 'imageRef is required');
 
     try {
       const img = this.docker.getImage(ref);
       await new Promise((resolve, reject) => {
-        img.remove({ force: true }, (err) => (err ? reject(err) : resolve()));
+        img.remove({ force: options?.force === true }, (err) => (err ? reject(err) : resolve()));
       });
     } catch (error) {
       throw normalizeDockerError(error, { op: 'removeLocalImage', imageRef: ref, env: this.#envSummary() });
@@ -1197,6 +1197,62 @@ export class DockerodeDocker extends DockerInterface {
         sourceContainerId: sourceId,
         targetContainerId: targetId,
         sourcePath: sourceTargetPath,
+        targetPath: targetParentPath,
+        env: this.#envSummary()
+      });
+    }
+  }
+
+  async getContainerPathArchive(containerId, sourcePath) {
+    const id = (containerId || '').trim();
+    if (!id) throw makeDockerInterfaceError('INVALID_INPUT', 'containerId is required');
+    const sourceTargetPath = validateContainerFilePath(sourcePath);
+
+    try {
+      const source = this.docker.getContainer(id);
+      return await new Promise((resolve, reject) => {
+        source.getArchive({ path: sourceTargetPath }, (err, archiveStream) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(archiveStream);
+        });
+      });
+    } catch (error) {
+      throw normalizeDockerError(error, {
+        op: 'getContainerPathArchive',
+        containerId: id,
+        sourcePath: sourceTargetPath,
+        env: this.#envSummary()
+      });
+    }
+  }
+
+  async putContainerPathArchive(containerId, targetPath, archiveStream) {
+    const id = (containerId || '').trim();
+    if (!id) throw makeDockerInterfaceError('INVALID_INPUT', 'containerId is required');
+    const targetParentPath = validateContainerFilePath(targetPath);
+    if (!archiveStream || typeof archiveStream.pipe !== 'function') {
+      throw makeDockerInterfaceError('INVALID_INPUT', 'archiveStream is required');
+    }
+
+    try {
+      const target = this.docker.getContainer(id);
+      await new Promise((resolve, reject) => {
+        target.putArchive(archiveStream, { path: targetParentPath }, (err, data) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(data);
+        });
+      });
+      return { imported: true };
+    } catch (error) {
+      throw normalizeDockerError(error, {
+        op: 'putContainerPathArchive',
+        containerId: id,
         targetPath: targetParentPath,
         env: this.#envSummary()
       });

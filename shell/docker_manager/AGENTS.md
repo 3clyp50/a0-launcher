@@ -98,6 +98,10 @@ This scope owns:
 - Image installs may target Docker channel tags (`latest`, `ready`, `testing`)
   in addition to semver releases and local development tags, because first-run
   setup uses `latest` as the default image choice.
+- Image removal from Installs must validate the tag, target a locally installed
+  Agent Zero image, and call Docker image removal without force. If Docker
+  reports the image is still used by a container, return a stable UI error
+  instead of deleting related Instances or storage.
 - Progress payloads may include `headline`, `detail`, `phase`, `steps`, and
   `indeterminate` in addition to the legacy `message` and numeric progress
   fields. Runtime setup progress uses those fields for the blocking startup
@@ -155,6 +159,10 @@ This scope owns:
   single global progress operation.
 - Per-container log inspection belongs in this product layer as a bounded
   read-only snapshot. It may not expose generic Docker commands to the renderer.
+- Per-container Backup and Restore belong in this product layer. Backup should
+  copy `/a0/usr` from the selected container into a core-compatible `.zip` with
+  metadata; Restore should accept that backup shape, map only workspace entries
+  back into `/a0/usr`, and report progress as a long-running operation.
 - Cloning an instance should snapshot the source container, create a new
   launcher-managed container from that snapshot, remap published ports to
   Docker-assigned open host ports, and copy the selected `/a0/usr` workspace

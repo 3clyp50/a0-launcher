@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   getState: () => ipcRenderer.invoke('docker-manager:getState'),
   refresh: () => ipcRenderer.invoke('docker-manager:refresh'),
   installOrSync: (tag) => ipcRenderer.invoke('docker-manager:install', { tag }),
+  removeInstalledImage: (tag) => ipcRenderer.invoke('docker-manager:removeInstalledImage', { tag }),
   startActive: () => ipcRenderer.invoke('docker-manager:startActive'),
   startLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:startLocalInstance', { containerId }),
   cloneLocalInstance: (containerId, options) => {
@@ -117,6 +118,10 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   },
   openLocalInstanceStorageFolder: (containerId) =>
     ipcRenderer.invoke('docker-manager:openLocalInstanceStorageFolder', { containerId }),
+  backupLocalInstance: (containerId) =>
+    ipcRenderer.invoke('docker-manager:backupLocalInstance', { containerId }),
+  restoreLocalInstance: (containerId) =>
+    ipcRenderer.invoke('docker-manager:restoreLocalInstance', { containerId }),
   migrateLocalInstanceStorage: (containerId, options) => {
     const opts = options && typeof options === 'object' ? options : {};
     return ipcRenderer.invoke('docker-manager:migrateLocalInstanceStorage', {

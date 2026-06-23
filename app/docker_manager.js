@@ -589,6 +589,24 @@ async function installOrSync(tag) {
   );
 }
 
+async function removeInstalledImage(tag) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.removeInstalledImage !== "function") return false;
+  try {
+    const res = await api.removeInstalledImage(tag || "");
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("success", "Install removed.");
+    await refresh();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to remove install");
+    return false;
+  }
+}
+
 const FIRST_INSTANCE_RUN_KEY = "a0Launcher.pendingFirstInstanceRun.v1";
 const FIRST_INSTANCE_RUN_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -934,6 +952,44 @@ async function cloneLocalInstance(containerId, options = {}) {
   return !isErrorResponse(res);
 }
 
+async function backupLocalInstance(containerId) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.backupLocalInstance !== "function") return false;
+  try {
+    const res = await api.backupLocalInstance(containerId || "");
+    if (res?.canceled) return false;
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Backup requested.");
+    await refresh();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to start backup");
+    return false;
+  }
+}
+
+async function restoreLocalInstance(containerId) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.restoreLocalInstance !== "function") return false;
+  try {
+    const res = await api.restoreLocalInstance(containerId || "");
+    if (res?.canceled) return false;
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Restore requested.");
+    await refresh();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to start restore");
+    return false;
+  }
+}
+
 async function deleteLocalInstance(containerId) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.deleteLocalInstance !== "function") return false;
@@ -1212,9 +1268,12 @@ window.dockerManagerActions = {
   provisionRuntime,
   selectRuntimeEndpoint,
   installOrSync,
+  removeInstalledImage,
   startActive,
   startLocalInstance,
   cloneLocalInstance,
+  backupLocalInstance,
+  restoreLocalInstance,
   migrateLocalInstanceStorage,
   renameLocalInstance,
   stopActive,

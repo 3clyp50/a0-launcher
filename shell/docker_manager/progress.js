@@ -47,9 +47,10 @@ function runtimeKind(assessment = null, platform = process.platform) {
     return 'windows_wsl';
   }
   if (mode === 'colima') return 'macos_colima';
+  if (assessment?.packageManager) return 'linux';
   if (platform === 'win32') return 'windows_wsl';
   if (platform === 'darwin') return 'macos_colima';
-  if (platform === 'linux' || assessment?.packageManager) return 'linux';
+  if (platform === 'linux') return 'linux';
   return 'generic';
 }
 

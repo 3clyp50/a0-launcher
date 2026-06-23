@@ -711,8 +711,12 @@ function workspaceSlug(instanceName, containerName) {
 
 function normalizeStorageOverride(raw) {
   const input = raw && typeof raw === 'object' ? raw : {};
-  const hasMode = typeof input.storageMode === 'string' && input.storageMode.trim();
-  const mode = hasMode ? normalizeStorageMode(input.storageMode) : '';
+  const rawMode = typeof input.storageMode === 'string' && input.storageMode.trim()
+    ? input.storageMode
+    : typeof input.mode === 'string' && input.mode.trim()
+      ? input.mode
+      : '';
+  const mode = rawMode ? normalizeStorageMode(rawMode) : '';
   const hostRoot = typeof input.hostRoot === 'string' && input.hostRoot.trim() ? input.hostRoot.trim().slice(0, 512) : '';
   const volumeName = typeof input.volumeName === 'string' && input.volumeName.trim()
     ? dockerVolumeName(input.volumeName.trim())

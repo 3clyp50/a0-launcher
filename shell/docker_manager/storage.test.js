@@ -212,6 +212,19 @@ test('ephemeral workspace storage labels the container without a /a0/usr mount',
   assert.equal(detected.migrationAvailable, true);
 });
 
+test('normalized storage overrides preserve explicit ephemeral mode', async () => {
+  const storage = await resolveWorkspaceStorage({
+    preferences: { mode: 'host_directory', hostRoot: '~/agent-zero', volumePrefix: 'a0-launcher' },
+    override: { mode: 'ephemeral' },
+    instanceName: 'Agent Zero',
+    containerName: 'a0-inst-agent-zero-normalized-ephemeral'
+  });
+
+  assert.equal(storage.mode, 'ephemeral');
+  assert.equal(storage.persistent, false);
+  assert.equal(storage.mount, undefined);
+});
+
 test('workspace storage detection distinguishes legacy and persistent containers', () => {
   const legacy = workspaceStorageFromInspect({ Config: { Labels: {} }, Mounts: [] });
   assert.equal(legacy.mode, 'legacy_ephemeral');

@@ -140,6 +140,8 @@ Product language:
   user takes an explicit storage cleanup action.
 - Backup and Restore for local Instances operate on the Agent Zero workspace
   path `/a0/usr` and should use the same backup shape Agent Zero core uses.
+- Per-Instance color choices are launcher identity metadata. They should tint
+  the card visual without mutating Docker labels or changing runtime behavior.
 - Keep Docker mechanics behind purposeful controls.
 - Put `Open UI` where the instance lives, not in the global header.
 - Keep the surface quiet and precise: avoid excessive borders, nested cards, and

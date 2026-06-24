@@ -1260,12 +1260,19 @@ function computeImageBytesStats(localImages) {
   };
 }
 
-function applyLocalInstanceNames(containers, localInstanceNames) {
+function applyLocalInstanceIdentity(containers, localInstanceNames, localInstanceColors) {
   const names = isPlainObject(localInstanceNames) ? localInstanceNames : {};
+  const colors = isPlainObject(localInstanceColors) ? localInstanceColors : {};
   return (Array.isArray(containers) ? containers : []).map((container) => {
     const id = typeof container?.containerId === 'string' ? container.containerId : '';
     const override = id && typeof names[id] === 'string' ? names[id] : '';
-    return override ? { ...container, instanceName: override } : container;
+    const color = id && typeof colors[id] === 'string' ? colors[id] : '';
+    if (!override && !color) return container;
+    return {
+      ...container,
+      ...(override ? { instanceName: override } : {}),
+      ...(color ? { instanceColor: color } : {})
+    };
   });
 }
 
@@ -1524,7 +1531,7 @@ async function buildDerivedState(options = {}) {
     }
   }
 
-  const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, remoteInstances, localInstanceNames, installabilityCache, releasesResult, localImages, rawContainers, freeBytes, remoteTags] =
+  const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, remoteInstances, localInstanceNames, localInstanceColors, installabilityCache, releasesResult, localImages, rawContainers, freeBytes, remoteTags] =
     await Promise.all([
       stateStore.readRetentionPolicy(),
       stateStore.readPortPreferences(),
@@ -1532,6 +1539,7 @@ async function buildDerivedState(options = {}) {
       stateStore.readInstanceDefaults(),
       stateStore.readRemoteInstances(),
       stateStore.readLocalInstanceNames(),
+      stateStore.readLocalInstanceColors(),
       stateStore.readInstallabilityCache(),
       releasesClient.listOfficialReleases({ githubRepo, forceRefresh }),
       docker.listLocalImages(imageRepo),
@@ -1539,9 +1547,10 @@ async function buildDerivedState(options = {}) {
       bestEffortFreeBytesForUserData(),
       docker.listRemoteTags(imageRepo).catch(() => null)
     ]);
-  const containers = applyLocalInstanceNames(
+  const containers = applyLocalInstanceIdentity(
     await enrichContainersWithWorkspaceStorage(docker, await enrichContainersWithRuntimeSource(docker, rawContainers)),
-    localInstanceNames
+    localInstanceNames,
+    localInstanceColors
   );
 
   const releases = Array.isArray(releasesResult?.releases) ? releasesResult.releases : [];
@@ -3491,6 +3500,22 @@ async function renameRemoteInstance(id, name) {
   return saved;
 }
 
+async function setRemoteInstanceColor(id, color) {
+  const found = await getRemoteInstance(id);
+  const saved = await stateStore.writeRemoteInstance({
+    id: found.id,
+    name: found.name,
+    url: found.url,
+    color
+  });
+  if (_cachedState) {
+    const remoteInstances = await stateStore.readRemoteInstances();
+    _cachedState = { ..._cachedState, remoteInstances };
+    events.emit('state', _cachedState);
+  }
+  return saved;
+}
+
 async function getRemoteInstance(id) {
   const cleanId = String(id || '').trim();
   const remoteInstances = await stateStore.readRemoteInstances();
@@ -4368,6 +4393,24 @@ async function renameLocalInstance(containerId, name) {
   return { containerId: id, instanceName: saved.name };
 }
 
+async function setLocalInstanceColor(containerId, color) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+  const docker = await getManagedDocker(imageRepo);
+  const containers = await docker.listContainers(imageRepo);
+  const target = (containers || []).find((c) => c && c.containerId === id) || null;
+
+  if (!target || !target.containerId) {
+    const err = new Error('Instance not found');
+    err.code = 'INSTANCE_NOT_FOUND';
+    throw err;
+  }
+
+  const saved = await stateStore.writeLocalInstanceColor(id, color);
+  await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+  return { containerId: id, color: saved.color || '' };
+}
+
 async function startActiveInstance() {
   const imageRepo = getBackendImageRepo();
 
@@ -4454,6 +4497,7 @@ async function deleteRetainedInstance(containerId) {
 
       await docker.deleteContainer(id, { force: true });
       await stateStore.deleteLocalInstanceName(id).catch(() => {});
+      await stateStore.deleteLocalInstanceColor(id).catch(() => {});
       finishOperation('completed', null);
       updateOperationProgress({ progress: 100, message: 'Deleted' });
     } catch (error) {
@@ -4500,6 +4544,7 @@ async function deleteLocalInstance(containerId) {
         await docker.removeLocalImage(cloneImageRef).catch(() => {});
       }
       await stateStore.deleteLocalInstanceName(target.containerId).catch(() => {});
+      await stateStore.deleteLocalInstanceColor(target.containerId).catch(() => {});
     }
   });
 }
@@ -4991,9 +5036,10 @@ async function cancelOperation(opId) {
 
 async function getDockerInventory() {
   const imageRepo = getBackendImageRepo();
-  const [remoteInstances, localInstanceNames] = await Promise.all([
+  const [remoteInstances, localInstanceNames, localInstanceColors] = await Promise.all([
     stateStore.readRemoteInstances(),
-    stateStore.readLocalInstanceNames()
+    stateStore.readLocalInstanceNames(),
+    stateStore.readLocalInstanceColors()
   ]);
   const docker = await getManagedDocker(imageRepo);
   const env = await docker.getEnvironment();
@@ -5014,12 +5060,13 @@ async function getDockerInventory() {
       docker.listVolumes()
     ]);
     images = Array.isArray(results[0]) ? results[0] : [];
-    containers = applyLocalInstanceNames(
+    containers = applyLocalInstanceIdentity(
       await enrichContainersWithWorkspaceStorage(
         docker,
         await enrichContainersWithRuntimeSource(docker, Array.isArray(results[1]) ? results[1] : [])
       ),
-      localInstanceNames
+      localInstanceNames,
+      localInstanceColors
     );
     volumes = Array.isArray(results[2]) ? results[2] : [];
     listingSucceeded = images.length > 0 || containers.length > 0 || volumes.length > 0;
@@ -5167,6 +5214,7 @@ module.exports = {
   backupLocalInstance,
   restoreLocalInstance,
   renameLocalInstance,
+  setLocalInstanceColor,
   stopActiveInstance,
   stopLocalInstance,
   setRetentionPolicy,
@@ -5179,6 +5227,7 @@ module.exports = {
   addRemoteInstance,
   deleteRemoteInstance,
   renameRemoteInstance,
+  setRemoteInstanceColor,
   deleteLocalInstance,
   getRemoteInstance,
   deleteRetainedInstance,

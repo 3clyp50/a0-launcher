@@ -2720,6 +2720,11 @@ function sanitizeDockerManagerState(state) {
   const allowedCategory = new Set(['official_release', 'local_build']);
   const allowedAvailability = new Set(['available', 'installed', 'update_available', 'installing', 'error']);
   const allowedInstallability = new Set(['unknown', 'installable', 'not_yet_available']);
+  const allowedInstanceColors = new Set(['blue', 'green', 'rose', 'amber', 'violet', 'cyan', 'coral']);
+  const cleanInstanceColor = (value) => {
+    const color = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    return allowedInstanceColors.has(color) ? color : '';
+  };
 
   const versions = [];
   for (const v of versionsIn) {
@@ -2811,6 +2816,10 @@ function sanitizeDockerManagerState(state) {
     if (!containerId || !containerName) continue;
     const out = { containerId, containerName };
     if (typeof c.instanceName === 'string' || c.instanceName === null) out.instanceName = c.instanceName || null;
+    {
+      const instanceColor = cleanInstanceColor(c.instanceColor);
+      if (instanceColor) out.instanceColor = instanceColor;
+    }
     if (typeof c.imageRef === 'string') out.imageRef = c.imageRef;
     if (typeof c.tag === 'string') out.tag = c.tag;
     if (typeof c.versionTag === 'string') out.versionTag = c.versionTag;
@@ -2897,6 +2906,8 @@ function sanitizeDockerManagerState(state) {
     const url = typeof r.url === 'string' ? r.url : '';
     if (!id || !name || !isAllowedHttpUrl(url)) continue;
     const out = { id, name, url };
+    const color = cleanInstanceColor(r.color);
+    if (color) out.color = color;
     if (typeof r.createdAt === 'string') out.createdAt = r.createdAt;
     if (typeof r.updatedAt === 'string') out.updatedAt = r.updatedAt;
     remoteInstances.push(out);
@@ -3401,12 +3412,36 @@ ipcMain.handle('docker-manager:renameRemoteInstance', async (_event, body) => {
   }
 });
 
+ipcMain.handle('docker-manager:setRemoteInstanceColor', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const id = typeof body.id === 'string' ? body.id : '';
+    const color = typeof body.color === 'string' ? body.color : '';
+    const saved = await dockerManager.setRemoteInstanceColor(id, color);
+    const sanitized = sanitizeDockerManagerState({ remoteInstances: [saved] }).remoteInstances?.[0];
+    return sanitized || dockerManager.toErrorResponse({ code: 'INVALID_REMOTE_INSTANCE', message: 'Invalid remote instance' });
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
 ipcMain.handle('docker-manager:renameLocalInstance', async (_event, body) => {
   try {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     const containerId = typeof body.containerId === 'string' ? body.containerId : '';
     const name = typeof body.name === 'string' ? body.name : '';
     return await dockerManager.renameLocalInstance(containerId, name);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:setLocalInstanceColor', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const color = typeof body.color === 'string' ? body.color : '';
+    return await dockerManager.setLocalInstanceColor(containerId, color);
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

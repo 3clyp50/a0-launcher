@@ -60,9 +60,9 @@ This scope owns:
 - Running an installed image from Installs must keep the operation modal until
   the Docker Manager reports the new Instance UI ready, then hand off to the
   Instances tab so the created Instance is visible.
-- A0 CLI launch, rename, and log inspection controls belong to each local
-  instance card. Clone belongs to local containers and may appear on a saved
-  remote card only when that card points at a loopback URL backed by a
+- A0 CLI launch, rename, color selection, and log inspection controls belong to
+  each local instance card. Clone belongs to local containers and may appear on
+  a saved remote card only when that card points at a loopback URL backed by a
   discovered local container. Pass the card's local UI URL through the
   shell-owned terminal action; the shell prompts for the CLI working folder
   before opening the terminal. If the shell reports that the `a0` command is
@@ -71,6 +71,9 @@ This scope owns:
 - Local Instance Backup and Restore belong with the other card-local actions.
   They must call named renderer actions that delegate host path selection and
   container archive work to the shell and Docker Manager.
+- Per-Instance color selection is launcher identity metadata for local and saved
+  remote Instances. It should use bounded palette IDs from Docker Manager state,
+  tint only the card visual, and never imply Docker or Agent Zero runtime state.
 - Removing an Install is a named renderer action from the Installs view. The
   renderer should present it as image cleanup and let Docker Manager report
   Docker's in-use refusal rather than trying to infer container/image bindings

@@ -166,6 +166,8 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   deleteRemoteInstance: (id) => ipcRenderer.invoke('docker-manager:deleteRemoteInstance', { id }),
   renameRemoteInstance: (id, name) => ipcRenderer.invoke('docker-manager:renameRemoteInstance', { id, name }),
   renameLocalInstance: (containerId, name) => ipcRenderer.invoke('docker-manager:renameLocalInstance', { containerId, name }),
+  setRemoteInstanceColor: (id, color) => ipcRenderer.invoke('docker-manager:setRemoteInstanceColor', { id, color }),
+  setLocalInstanceColor: (containerId, color) => ipcRenderer.invoke('docker-manager:setLocalInstanceColor', { containerId, color }),
   deleteLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:deleteLocalInstance', { containerId }),
   deleteRetainedInstance: (containerId) =>
     ipcRenderer.invoke('docker-manager:deleteRetainedInstance', { containerId }),

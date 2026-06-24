@@ -1034,6 +1034,24 @@ async function renameLocalInstance(containerId, name) {
   }
 }
 
+async function setLocalInstanceColor(containerId, color) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.setLocalInstanceColor !== "function") return false;
+  try {
+    const res = await api.setLocalInstanceColor(containerId || "", color || "");
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Instance color saved.");
+    await refresh();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to save instance color");
+    return false;
+  }
+}
+
 async function getLocalInstanceLogs(containerId, options = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.getLocalInstanceLogs !== "function") return null;
@@ -1236,6 +1254,24 @@ async function renameRemoteInstance(id, name) {
   }
 }
 
+async function setRemoteInstanceColor(id, color) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.setRemoteInstanceColor !== "function") return false;
+  try {
+    const res = await api.setRemoteInstanceColor(id || "", color || "");
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Instance color saved.");
+    await refresh();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to save instance color");
+    return false;
+  }
+}
+
 async function openRemoteInstance(id) {
   return openInstanceUi({ kind: "remote", instanceId: id || "" });
 }
@@ -1291,6 +1327,7 @@ window.dockerManagerActions = {
   restoreLocalInstance,
   migrateLocalInstanceStorage,
   renameLocalInstance,
+  setLocalInstanceColor,
   stopActive,
   stopLocalInstance,
   deleteLocalInstance,
@@ -1310,6 +1347,7 @@ window.dockerManagerActions = {
   addRemoteInstance,
   deleteRemoteInstance,
   renameRemoteInstance,
+  setRemoteInstanceColor,
   openRemoteInstance,
   openInstanceUi,
   selectInstanceHome,

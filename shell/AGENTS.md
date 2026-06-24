@@ -130,10 +130,12 @@ This scope owns:
   pass a release tag, but shell code must validate the IPC body and Docker
   Manager must perform a non-forced image removal so Docker can refuse images
   still used by any container.
-- Per-instance clone and rename operations are named Docker Manager intents.
-  Clone may accept a bounded `/a0/usr` category selection, but archive copy and
-  filtering stay in `shell/docker_manager` and `shell/docker_adapter`.
-  Long-running container mutations report progress.
+- Per-instance clone, rename, and color-selection operations are named Docker
+  Manager intents. Clone may accept a bounded `/a0/usr` category selection, but
+  archive copy and filtering stay in `shell/docker_manager` and
+  `shell/docker_adapter`. Color selection may accept only bounded palette IDs
+  and must stay launcher metadata. Long-running container mutations report
+  progress.
 - Per-instance Backup and Restore are named Docker Manager intents. The shell
   owns native save/open dialogs for `.zip` files; Docker Manager owns the
   `/a0/usr` archive semantics and progress events.

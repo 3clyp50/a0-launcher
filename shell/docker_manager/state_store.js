@@ -83,6 +83,9 @@ const DEFAULT_STORAGE_PREFERENCES = Object.freeze({
 
 const MAX_REMOTE_INSTANCES = 64;
 const MAX_LOCAL_INSTANCE_NAMES = 256;
+const MAX_LOCAL_INSTANCE_COLORS = 256;
+const INSTANCE_COLOR_IDS = Object.freeze(['blue', 'green', 'rose', 'amber', 'violet', 'cyan', 'coral']);
+const INSTANCE_COLOR_SET = new Set(INSTANCE_COLOR_IDS);
 
 const INSTANCE_DEFAULT_SLOT_IDS = Object.freeze(['Main', 'Utility', 'Embedding']);
 const DEFAULT_INSTANCE_PROVIDERS = Object.freeze({
@@ -364,6 +367,11 @@ function localInstanceNameError(message = 'Invalid instance name') {
   return err;
 }
 
+function normalizeInstanceColor(value) {
+  const color = String(value || '').trim().toLowerCase();
+  return INSTANCE_COLOR_SET.has(color) ? color : '';
+}
+
 function normalizeLocalInstanceId(value) {
   const v = String(value || '').trim();
   if (!v || v.length > 128) return '';
@@ -397,9 +405,27 @@ function normalizeLocalInstanceNames(value) {
   return out;
 }
 
+function normalizeLocalInstanceColors(value) {
+  const out = {};
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  for (const [idRaw, colorRaw] of Object.entries(source)) {
+    const id = normalizeLocalInstanceId(idRaw);
+    const color = normalizeInstanceColor(colorRaw);
+    if (!id || !color) continue;
+    out[id] = color;
+    if (Object.keys(out).length >= MAX_LOCAL_INSTANCE_COLORS) break;
+  }
+  return out;
+}
+
 async function readLocalInstanceNames() {
   const state = await readJson(stateFile(), {});
   return normalizeLocalInstanceNames(state?.localInstanceNames);
+}
+
+async function readLocalInstanceColors() {
+  const state = await readJson(stateFile(), {});
+  return normalizeLocalInstanceColors(state?.localInstanceColors);
 }
 
 async function writeLocalInstanceName(containerId, name) {
@@ -424,6 +450,29 @@ async function deleteLocalInstanceName(containerId) {
   return true;
 }
 
+async function writeLocalInstanceColor(containerId, color) {
+  const id = normalizeLocalInstanceId(containerId);
+  if (!id) throw localInstanceNameError('Invalid instance');
+  const state = await readJson(stateFile(), {});
+  const current = normalizeLocalInstanceColors(state?.localInstanceColors);
+  const cleanColor = normalizeInstanceColor(color);
+  if (cleanColor) current[id] = cleanColor;
+  else delete current[id];
+  await writeJson(stateFile(), { ...state, localInstanceColors: current, updatedAt: new Date().toISOString() });
+  return { containerId: id, color: cleanColor };
+}
+
+async function deleteLocalInstanceColor(containerId) {
+  const id = normalizeLocalInstanceId(containerId);
+  if (!id) return false;
+  const state = await readJson(stateFile(), {});
+  const current = normalizeLocalInstanceColors(state?.localInstanceColors);
+  if (!Object.prototype.hasOwnProperty.call(current, id)) return false;
+  delete current[id];
+  await writeJson(stateFile(), { ...state, localInstanceColors: current, updatedAt: new Date().toISOString() });
+  return true;
+}
+
 function normalizeRemoteInstance(value, existing = null, options = {}) {
   const input = value && typeof value === 'object' ? value : {};
   const url = normalizeRemoteInstanceUrl(input.url);
@@ -435,14 +484,18 @@ function normalizeRemoteInstance(value, existing = null, options = {}) {
   const updatedAt = shouldTouch
     ? new Date().toISOString()
     : (typeof existing?.updatedAt === 'string' ? existing.updatedAt : createdAt);
+  const hasColorInput = Object.prototype.hasOwnProperty.call(input, 'color');
+  const color = normalizeInstanceColor(hasColorInput ? input.color : existing?.color);
 
-  return {
+  const out = {
     id,
     name: normalizeRemoteInstanceName(input.name ?? existing?.name, url),
     url,
     createdAt,
     updatedAt
   };
+  if (color) out.color = color;
+  return out;
 }
 
 function normalizeRemoteInstanceForRead(value) {
@@ -547,6 +600,9 @@ module.exports = {
   readLocalInstanceNames,
   writeLocalInstanceName,
   deleteLocalInstanceName,
+  readLocalInstanceColors,
+  writeLocalInstanceColor,
+  deleteLocalInstanceColor,
 
   // Runtime setup resume
   readRuntimeSetupResume,

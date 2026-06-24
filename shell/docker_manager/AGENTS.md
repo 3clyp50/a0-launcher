@@ -18,7 +18,8 @@ This scope owns:
   and log inspection, port, storage, developer custom-image runs, runtime setup,
   and progress operations.
 - `state_store.js`: persisted launcher state under Electron `userData`,
-  including preferences, remote instances, and local instance display names.
+  including preferences, remote instances, local instance display names, and
+  local instance color overrides.
 - `releases_client.js`: GitHub release discovery for Agent Zero backend
   versions.
 - `release_tags.js`: shared validation and ordering for Agent Zero release tags.
@@ -70,8 +71,10 @@ This scope owns:
   inspection rather than renderer guesses.
 - Persist user preferences and remote instances through `state_store.js`; do not
   invent parallel files.
-- Local instance display-name overrides are persisted through `state_store.js`
-  because Docker labels on existing containers cannot be mutated safely.
+- Local instance display-name and color overrides are persisted through
+  `state_store.js` because Docker labels on existing containers cannot be
+  mutated safely. Local colors are stored as a container-id keyed
+  `localInstanceColors` map with bounded palette IDs.
 - Port preferences are stored as UI and SSH host-port preferences.
 - Host-port requests using `0` must be settled to explicit loopback host ports
   before Docker container creation so a container's published port remains
@@ -94,7 +97,9 @@ This scope owns:
   are detected, and all Docker Manager operations should continue through the
   selected endpoint while it remains reachable.
 - Retention policy is stored as a retained-instance count.
-- Remote instances must normalize and validate URLs before persistence.
+- Remote instances must normalize and validate URLs before persistence. Their
+  optional saved `color` field uses the same bounded palette IDs as local
+  Instance color overrides.
 - Retained local containers are rollback targets and should keep enough metadata
   for the renderer to display them without re-inspecting every container
   needlessly.
@@ -156,11 +161,12 @@ This scope owns:
   canonical `/a0/usr` mount. Explicit ephemeral runs should still be labeled
   with storage metadata even though they do not receive the mount. Clones must
   receive a fresh workspace rather than reusing the source workspace mount.
-- Per-container start/stop/delete/clone/rename actions from the Instances card
-  menu still belong in this product layer. Container mutations must target the
-  requested container id, return an operation id, refresh state afterward, and
-  keep storage-volume deletion separate from container deletion. Rename is a
-  fast launcher metadata update and may return synchronously.
+- Per-container start/stop/delete/clone/rename/color actions from the Instances
+  card menu still belong in this product layer. Container mutations must target
+  the requested container id, return an operation id, refresh state afterward,
+  and keep storage-volume deletion separate from container deletion. Rename and
+  color selection are fast launcher metadata updates and may return
+  synchronously.
 - Local instance card start/stop/delete actions run through an in-memory
   per-container background queue and do not occupy the global Docker Manager
   operation slot. They return `{ opId, queued: true, background: true }`, publish

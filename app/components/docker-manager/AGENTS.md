@@ -35,8 +35,9 @@ This scope owns:
 - `official-versions/`: install/version cards, activation dialog, saved
   Instance defaults, port/env overrides, data-loss acknowledgement, and
   update/switch actions.
-- `local-testing/`: local containers, per-instance action menus, rename,
-  clone/log inspection controls, remote instance CRUD, and instance opening.
+- `local-testing/`: local containers, per-instance action menus, rename, color
+  selection, clone/log inspection controls, remote instance CRUD, and instance
+  opening.
 - `advanced/`: tabbed developer-mode custom image runner with inline Docker
   Compose composer, diagnostics, and storage-volume maintenance.
 - `settings/`: port preferences and saved Instance provider/model defaults.
@@ -178,6 +179,8 @@ This scope owns:
   Secondary management and inspection actions such as `Rename`, `See logs`,
   `Open storage folder`, `Clone`, `Open A0 CLI`, `Stop`, and `Delete` belong in
   the card overflow menu so they always apply to the specific instance shown.
+  The card overflow menu should choose its up/down direction from available
+  viewport space and use bounded internal scrolling when the window is short.
   `Open A0 CLI` should let the shell show the native working-folder picker
   before terminal launch; canceling that picker should not display an error.
   If the shell reports that the host `a0` command is unavailable, the same menu
@@ -191,10 +194,11 @@ This scope owns:
   persistence-migration entry points must warn that the source container is
   paused and resumed, and that running AI work stops and must be resumed
   manually.
-- Local instance cards should use the launcher-visible instance name as the
-  primary visual identity. The visual version chip should prefer the runtime
-  branch reported from inside the container over the original Docker image tag,
-  because self-updated containers can run `ready` code from a `latest` image.
+- Local instance cards should use the launcher-visible instance name and saved
+  card color as visual identity. The visual version chip should prefer the
+  runtime branch reported from inside the container over the original Docker
+  image tag, because self-updated containers can run `ready` code from a
+  `latest` image.
   Keep the metadata compact: show runtime branch/commit first, put the URL on
   its own line, and avoid listing routine `image latest` or persistent
   workspace fragments in the primary card text.
@@ -214,6 +218,9 @@ This scope owns:
 - Renaming a local instance changes the launcher-visible display name. It must
   not rely on mutating existing Docker labels, because Docker labels are
   immutable after container creation.
+- Selecting an Instance color changes only launcher metadata and should use the
+  same bounded palette for local and saved remote cards. Do not persist raw CSS,
+  arbitrary color strings, or Docker labels for this preference.
 - Saved remote URL-only instance cards must not expose Docker mutation actions.
   A saved remote card may show `Clone locally` only when its URL is loopback
   (`localhost`, `127.0.0.1`, or IPv6 loopback) and the port matches a discovered

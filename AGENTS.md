@@ -109,6 +109,9 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   `electron-updater` metadata files. Release content remains `content.json`.
   Linux DEB/RPM and Windows Squirrel/NuGet artifacts are intentionally omitted
   from the updater-capable release path unless the product decision changes.
+- Windows NSIS installers use `packaging/platforms/windows/installer.nsh` for
+  installer diagnostics, hardened running-app shutdown, and direct executable
+  launch after installation so first run does not depend on shortcut creation.
 - If a release tag is moved to include a metadata fix, keep `main`, the tag, and
   both remotes intentionally aligned.
 

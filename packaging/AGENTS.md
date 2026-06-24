@@ -14,6 +14,8 @@ This scope owns:
 - `package.json` and `package-lock.json`: packaging-only Electron and
   electron-builder dependencies.
 - `release-asset-filters.yaml`: public installer asset selection before upload.
+- `platforms/windows/installer.nsh`: Windows NSIS installer diagnostics,
+  running-app shutdown hardening, and first-run launch behavior.
 - `scripts/desktop-builder.js`: platform/arch packaging orchestration and
   electron-builder config shaping.
 - `scripts/*-package.js` and `scripts/host-package.js`: local platform entry

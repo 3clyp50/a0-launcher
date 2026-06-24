@@ -73,7 +73,10 @@ This scope owns:
   path matters for Windows RunOnce runtime setup resumes, where the original
   environment variables may be gone.
 - Non-local content comes from the configured GitHub Release `content.json`
-  asset and is unpacked under Electron `userData`.
+  asset and is unpacked under Electron `userData`. Downloaded release content
+  must be written to a staging directory first, then swapped into
+  `app_content`, so a failed cleanup or partial extraction cannot destroy the
+  last usable cache.
 - Packaged launcher executable update prompts use `electron-updater` metadata
   from the launcher GitHub Release. A newer executable may hold
   `shell/loading.html` with `Update` and `Continue`; `Update` downloads the

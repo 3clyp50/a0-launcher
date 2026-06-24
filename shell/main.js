@@ -146,8 +146,14 @@ if (USING_LOCAL_CONTENT) {
 }
 
 // Paths
-const CONTENT_DIR = path.join(app.getPath('userData'), 'app_content');
-const META_FILE = path.join(app.getPath('userData'), 'content_meta.json');
+const USER_DATA_DIR = app.getPath('userData');
+const CONTENT_DIR = path.join(USER_DATA_DIR, 'app_content');
+const META_FILE = path.join(USER_DATA_DIR, 'content_meta.json');
+const CONTENT_STAGING_PREFIX = 'app_content_pending-';
+const CONTENT_BACKUP_PREFIX = 'app_content_previous-';
+const CONTENT_REMOVE_OPTIONS = { recursive: true, force: true, maxRetries: 8, retryDelay: 150 };
+const CONTENT_SWAP_MAX_RETRIES = 8;
+const CONTENT_SWAP_RETRY_DELAY_MS = 150;
 
 let mainWindow;
 let contentInitialized = false;
@@ -913,7 +919,7 @@ function shouldHoldStartupForLauncherUpdate() {
   return true;
 }
 
-function resolveContentBundlePath(filePath) {
+function resolveContentBundlePath(filePath, contentRootDir = CONTENT_DIR) {
   if (typeof filePath !== 'string' || !filePath || filePath.includes('\0')) {
     throw new Error(`Invalid bundled content path: ${filePath}`);
   }
@@ -922,7 +928,7 @@ function resolveContentBundlePath(filePath) {
     throw new Error(`Unsafe bundled content path: ${filePath}`);
   }
 
-  const contentRoot = path.resolve(CONTENT_DIR);
+  const contentRoot = path.resolve(contentRootDir);
   const fullPath = path.resolve(contentRoot, filePath);
   if (fullPath === contentRoot || !fullPath.startsWith(contentRoot + path.sep)) {
     throw new Error(`Unsafe bundled content path: ${filePath}`);
@@ -966,6 +972,101 @@ function assertValidContentBundle(contentJson) {
   }
 }
 
+async function removeContentPath(targetPath, options = {}) {
+  const quiet = !!options.quiet;
+  try {
+    await fs.rm(targetPath, CONTENT_REMOVE_OPTIONS);
+    return true;
+  } catch (error) {
+    if (!quiet) {
+      throw error;
+    }
+    console.warn(`[content] Could not remove stale path ${targetPath}:`, error);
+    return false;
+  }
+}
+
+function isRetriableContentFsError(error) {
+  return ['EACCES', 'EBUSY', 'ENOTEMPTY', 'EPERM'].includes(error?.code);
+}
+
+async function renameContentPath(sourcePath, targetPath, options = {}) {
+  const allowMissing = !!options.allowMissing;
+
+  for (let attempt = 0; attempt <= CONTENT_SWAP_MAX_RETRIES; attempt += 1) {
+    try {
+      await fs.rename(sourcePath, targetPath);
+      return true;
+    } catch (error) {
+      if (allowMissing && error.code === 'ENOENT') {
+        return false;
+      }
+
+      if (error.code === 'ENOENT' || attempt >= CONTENT_SWAP_MAX_RETRIES || !isRetriableContentFsError(error)) {
+        throw error;
+      }
+
+      await wait(CONTENT_SWAP_RETRY_DELAY_MS);
+    }
+  }
+
+  return false;
+}
+
+async function cleanupStaleContentSwapDirs() {
+  let entries = [];
+  try {
+    entries = await fs.readdir(USER_DATA_DIR, { withFileTypes: true });
+  } catch (error) {
+    console.warn('[content] Could not inspect stale content swap directories.', error);
+    return;
+  }
+
+  await Promise.all(entries
+    .filter(entry => entry.isDirectory())
+    .filter(entry => entry.name.startsWith(CONTENT_STAGING_PREFIX) || entry.name.startsWith(CONTENT_BACKUP_PREFIX))
+    .map(entry => removeContentPath(path.join(USER_DATA_DIR, entry.name), { quiet: true })));
+}
+
+function createContentSwapDir(prefix) {
+  return path.join(USER_DATA_DIR, `${prefix}${Date.now()}-${process.pid}`);
+}
+
+async function unpackContentBundle(contentJson, targetDir) {
+  await fs.mkdir(targetDir, { recursive: true });
+
+  for (const [filePath, entry] of Object.entries(contentJson.files)) {
+    const fullPath = resolveContentBundlePath(filePath, targetDir);
+    const dir = path.dirname(fullPath);
+    const { data, options } = decodeContentBundleEntry(filePath, entry);
+
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(fullPath, data, options);
+  }
+}
+
+async function replaceContentDirectory(stagingDir) {
+  const backupDir = createContentSwapDir(CONTENT_BACKUP_PREFIX);
+  const backupCreated = await renameContentPath(CONTENT_DIR, backupDir, { allowMissing: true });
+
+  try {
+    await renameContentPath(stagingDir, CONTENT_DIR);
+  } catch (error) {
+    if (backupCreated) {
+      try {
+        await renameContentPath(backupDir, CONTENT_DIR);
+      } catch (restoreError) {
+        console.error('[content] Could not restore previous content after failed swap.', restoreError);
+      }
+    }
+    throw error;
+  }
+
+  if (backupCreated) {
+    await removeContentPath(backupDir, { quiet: true });
+  }
+}
+
 /**
  * Download and extract content from the release asset
  */
@@ -986,20 +1087,19 @@ async function downloadContent(downloadUrl) {
   const contentJson = await response.json();
   assertValidContentBundle(contentJson);
 
-  // Clear existing content directory
-  await fs.rm(CONTENT_DIR, { recursive: true, force: true });
-  await fs.mkdir(CONTENT_DIR, { recursive: true });
+  await cleanupStaleContentSwapDirs();
 
-  // Write each file from the JSON bundle
+  const stagingDir = createContentSwapDir(CONTENT_STAGING_PREFIX);
+
+  // Write the full bundle before replacing the live content directory.
   sendStatus('Extracting content...');
 
-  for (const [filePath, entry] of Object.entries(contentJson.files)) {
-    const fullPath = resolveContentBundlePath(filePath);
-    const dir = path.dirname(fullPath);
-    const { data, options } = decodeContentBundleEntry(filePath, entry);
-
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(fullPath, data, options);
+  try {
+    await unpackContentBundle(contentJson, stagingDir);
+    await replaceContentDirectory(stagingDir);
+  } catch (error) {
+    await removeContentPath(stagingDir, { quiet: true });
+    throw error;
   }
 
   console.log(`Extracted ${Object.keys(contentJson.files).length} files`);

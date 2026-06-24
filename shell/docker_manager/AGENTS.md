@@ -47,6 +47,9 @@ This scope owns:
 - Containers may be enriched with bounded runtime source metadata from the
   Agent Zero checkout inside the container. Keep the Docker image tag as
   provenance, and expose runtime branch/commit as separate structured state.
+- Channel-tagged images and containers may expose `matchedReleaseTag` when the
+  local tag can be tied to a concrete semver release through digest matching or
+  local evidence for the current `latest` release tag.
 - Start, switch, and run flows should give the Agent Zero UI enough time to
   finish a slow first boot before rolling back a newly-created container.
 - New managed Instance run progress should mark `uiReady: true` only after the

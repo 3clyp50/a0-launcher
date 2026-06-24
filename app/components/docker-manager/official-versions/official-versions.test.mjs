@@ -11,7 +11,7 @@ globalThis.window = {
   dockerManagerActions: {}
 };
 
-const { actionForEntry, canRemoveEntry, defaultInstanceName } = await import('./official-versions.js');
+const { actionForEntry, canRemoveEntry, defaultInstanceName, releaseMatchBadgeLabel } = await import('./official-versions.js');
 
 test('installed active entries still expose Run for additional instances', () => {
   const action = actionForEntry({
@@ -52,4 +52,9 @@ test('default run names increment when same-tag instances exist', () => {
   });
 
   assert.equal(name, 'agent-zero-latest-3');
+});
+
+test('release match badge labels omit leading v', () => {
+  assert.equal(releaseMatchBadgeLabel('v1.20'), '1.20');
+  assert.equal(releaseMatchBadgeLabel('ready'), 'ready');
 });

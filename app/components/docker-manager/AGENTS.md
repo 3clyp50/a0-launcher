@@ -195,10 +195,12 @@ This scope owns:
   paused and resumed, and that running AI work stops and must be resumed
   manually.
 - Local instance cards should use the launcher-visible instance name and saved
-  card color as visual identity. The visual version chip should prefer the
-  runtime branch reported from inside the container over the original Docker
-  image tag, because self-updated containers can run `ready` code from a
-  `latest` image.
+  card color as visual identity. For channel-launched local instances, the
+  visual version chip should show the original channel plus matched concrete
+  release when Docker Manager provides `matchedReleaseTag`, such as
+  `latest · 1.20` or `ready · 1.20`. Otherwise, prefer the runtime branch
+  reported from inside the container over the original Docker image tag, because
+  self-updated containers can run `ready` code from a `latest` image.
   Keep the metadata compact: show runtime branch/commit first, put the URL on
   its own line, and avoid listing routine `image latest` or persistent
   workspace fragments in the primary card text.

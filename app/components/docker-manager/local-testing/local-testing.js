@@ -76,8 +76,17 @@ function imageTagForContainer(c) {
     "";
 }
 
+function releaseTagLabel(tag) {
+  return String(tag || "").trim().replace(/^v(?=\d)/i, "");
+}
+
 function instanceVisualBadge(c) {
-  return runtimeBranch(c) || imageTagForContainer(c);
+  const imageTag = imageTagForContainer(c);
+  const matchedReleaseTag = releaseTagLabel(c?.matchedReleaseTag);
+  if ((imageTag === "latest" || imageTag === "ready") && matchedReleaseTag) {
+    return `${imageTag} · ${matchedReleaseTag}`;
+  }
+  return runtimeBranch(c) || imageTag;
 }
 
 function dockerInstanceRuntimeSummary(c) {
@@ -1152,6 +1161,8 @@ function render(state) {
     renderRemoteInstance(list, remote, state);
   }
 }
+
+export { instanceVisualBadge };
 
 window.addEventListener("dm:state", (e) => render(e.detail || {}));
 bindActions();

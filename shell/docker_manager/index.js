@@ -652,6 +652,62 @@ function buildDigestHint(publishedDigest, localDigest) {
   return `Published: ${pub} / Local: ${loc}`;
 }
 
+function releaseTagLabel(tag) {
+  const t = String(tag || '').trim();
+  return t.startsWith('v') ? t.slice(1) : t;
+}
+
+function matchedSemverReleaseTagForDigest(localDigest, knownRemoteDigests) {
+  const digest = String(localDigest || '').trim();
+  if (!digest) return '';
+  const match = (Array.isArray(knownRemoteDigests) ? knownRemoteDigests : [])
+    .find((d) => d?.digest === digest && isSemverReleaseTag(d?.tag));
+  return match?.tag || '';
+}
+
+function matchedReleaseTagForLocalTag(tag, localByTag, knownRemoteDigests, latestReleaseTag) {
+  const channelTag = String(tag || '').trim();
+  if (!isChannelTag(channelTag)) return '';
+  const img = localByTag instanceof Map ? localByTag.get(channelTag) : null;
+  const localDigest = extractLocalDigest(img?.repoDigests);
+  const matchedReleaseTag = matchedSemverReleaseTagForDigest(localDigest, knownRemoteDigests);
+  if (matchedReleaseTag) return matchedReleaseTag;
+  if (channelTag === 'latest' && latestReleaseTag) {
+    if (img && !localDigest) return latestReleaseTag;
+    if (!img && localByTag instanceof Map && localByTag.has(latestReleaseTag)) return latestReleaseTag;
+  }
+  return '';
+}
+
+function tagFromImageRef(imageRef) {
+  const raw = String(imageRef || '').trim();
+  if (!raw) return '';
+  const lastSlash = raw.lastIndexOf('/');
+  const lastColon = raw.lastIndexOf(':');
+  return lastColon > lastSlash ? raw.slice(lastColon + 1).trim() : '';
+}
+
+function imageTagForContainer(container) {
+  const labels = isPlainObject(container?.labels) ? container.labels : {};
+  return String(
+    container?.versionTag ||
+    labels['a0.launcher.versionTag'] ||
+    container?.tag ||
+    tagFromImageRef(container?.imageRef) ||
+    ''
+  ).trim();
+}
+
+function applyContainerMatchedReleaseTags(containers, matchedReleaseTagByTag) {
+  const matches = matchedReleaseTagByTag instanceof Map ? matchedReleaseTagByTag : new Map();
+  return (Array.isArray(containers) ? containers : []).map((container) => {
+    const imageTag = imageTagForContainer(container);
+    const matchedReleaseTag = imageTag ? matches.get(imageTag) : '';
+    if (!matchedReleaseTag) return container;
+    return { ...container, matchedReleaseTag };
+  });
+}
+
 function normalizeStorageMode(value, fallback = STORAGE_MODE_HOST_DIRECTORY) {
   const mode = String(value || '').trim();
   if (
@@ -1547,7 +1603,7 @@ async function buildDerivedState(options = {}) {
       bestEffortFreeBytesForUserData(),
       docker.listRemoteTags(imageRepo).catch(() => null)
     ]);
-  const containers = applyLocalInstanceIdentity(
+  let containers = applyLocalInstanceIdentity(
     await enrichContainersWithWorkspaceStorage(docker, await enrichContainersWithRuntimeSource(docker, rawContainers)),
     localInstanceNames,
     localInstanceColors
@@ -1711,6 +1767,13 @@ async function buildDerivedState(options = {}) {
     }
   }
 
+  const matchedReleaseTagByTag = new Map();
+  for (const tag of CHANNEL_TAGS) {
+    const matchedReleaseTag = matchedReleaseTagForLocalTag(tag, localByTag, knownRemoteDigests, latestReleaseTag);
+    if (matchedReleaseTag) matchedReleaseTagByTag.set(tag, matchedReleaseTag);
+  }
+  containers = applyContainerMatchedReleaseTags(containers, matchedReleaseTagByTag);
+
   // First-class channel tags (not derived from GitHub Releases).
   for (const tag of CHANNEL_TAGS) {
     const img = localByTag.get(tag) || null;
@@ -1721,17 +1784,15 @@ async function buildDerivedState(options = {}) {
     const differsFromPublished = !!(localDigest && publishedDigest && localDigest !== publishedDigest);
     let matchHint = differsFromPublished ? `Differs from published ${tag === 'testing' ? 'preview' : tag}` : null;
     const digestHint = differsFromPublished ? buildDigestHint(publishedDigest, localDigest) : null;
+    const matchedReleaseTag = matchedReleaseTagByTag.get(tag) || '';
 
-    if (!matchHint && localDigest) {
-      const match = knownRemoteDigests.find((d) => d.digest === localDigest && isSemverReleaseTag(d.tag));
-      if (match && isSemverReleaseTag(match.tag)) {
-        matchHint = tag === 'latest'
-          ? `Matches latest release ${match.tag.startsWith('v') ? match.tag.slice(1) : match.tag}`
-          : `Matches published version ${match.tag.startsWith('v') ? match.tag.slice(1) : match.tag}`;
-      }
+    if (!matchHint && localDigest && matchedReleaseTag) {
+      matchHint = tag === 'latest'
+        ? `Matches latest release ${releaseTagLabel(matchedReleaseTag)}`
+        : `Matches published version ${releaseTagLabel(matchedReleaseTag)}`;
     }
     if (!matchHint && tag === 'latest' && latestReleaseTag) {
-      matchHint = `Tracks latest release ${latestReleaseTag.startsWith('v') ? latestReleaseTag.slice(1) : latestReleaseTag}`;
+      matchHint = `Tracks latest release ${releaseTagLabel(latestReleaseTag)}`;
     }
 
     releaseEntries.push({
@@ -1742,6 +1803,7 @@ async function buildDerivedState(options = {}) {
       availability: img ? 'installed' : 'available',
       installability: cacheEntry?.status === 'installable' ? 'installable' : cacheEntry?.status === 'not_yet_available' ? 'not_yet_available' : 'unknown',
       matchHint,
+      matchedReleaseTag,
       digestHint,
       differsFromPublished,
       isActive,
@@ -5267,7 +5329,12 @@ module.exports = {
     workspaceTarEntryFromBackupEntry,
     buildAgentZeroBackupMetadata,
     createAgentZeroBackupZip,
-    restoreAgentZeroBackupZip
+    restoreAgentZeroBackupZip,
+    releaseTagLabel,
+    matchedSemverReleaseTagForDigest,
+    matchedReleaseTagForLocalTag,
+    imageTagForContainer,
+    applyContainerMatchedReleaseTags
   },
 
   // Error helpers for IPC handlers

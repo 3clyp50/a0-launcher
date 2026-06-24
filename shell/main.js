@@ -2725,6 +2725,10 @@ function sanitizeDockerManagerState(state) {
     const color = typeof value === 'string' ? value.trim().toLowerCase() : '';
     return allowedInstanceColors.has(color) ? color : '';
   };
+  const cleanMatchedReleaseTag = (value) => {
+    const tag = typeof value === 'string' ? value.trim() : '';
+    return dockerManager.isSemverReleaseTag(tag) ? tag : '';
+  };
 
   const versions = [];
   for (const v of versionsIn) {
@@ -2767,6 +2771,11 @@ function sanitizeDockerManagerState(state) {
       out.digestHint = null;
     } else if (typeof v.digestHint === 'string') {
       out.digestHint = v.digestHint;
+    }
+
+    {
+      const matchedReleaseTag = cleanMatchedReleaseTag(v.matchedReleaseTag);
+      if (matchedReleaseTag) out.matchedReleaseTag = matchedReleaseTag;
     }
 
     if (typeof v.differsFromPublished === 'boolean') {
@@ -2823,6 +2832,10 @@ function sanitizeDockerManagerState(state) {
     if (typeof c.imageRef === 'string') out.imageRef = c.imageRef;
     if (typeof c.tag === 'string') out.tag = c.tag;
     if (typeof c.versionTag === 'string') out.versionTag = c.versionTag;
+    {
+      const matchedReleaseTag = cleanMatchedReleaseTag(c.matchedReleaseTag);
+      if (matchedReleaseTag) out.matchedReleaseTag = matchedReleaseTag;
+    }
     if (typeof c.runtimeBranch === 'string' || c.runtimeBranch === null) out.runtimeBranch = c.runtimeBranch || null;
     if (typeof c.runtimeCommit === 'string' || c.runtimeCommit === null) out.runtimeCommit = c.runtimeCommit || null;
     if (typeof c.runtimeShortCommit === 'string' || c.runtimeShortCommit === null) out.runtimeShortCommit = c.runtimeShortCommit || null;

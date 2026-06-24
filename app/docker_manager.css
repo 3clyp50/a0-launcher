@@ -790,6 +790,12 @@ body {
   border-color: var(--color-primary);
 }
 
+.badge-release-match {
+  color: var(--color-text);
+  border-color: color-mix(in srgb, var(--color-highlight) 64%, var(--color-border));
+  background: color-mix(in srgb, var(--color-highlight) 10%, transparent);
+}
+
 .status {
   font-size: 0.72rem;
   font-weight: 500;

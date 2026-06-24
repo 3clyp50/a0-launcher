@@ -57,6 +57,10 @@ function isHiddenEntry(entry) {
   return isTestingEntry(entry);
 }
 
+function releaseMatchBadgeLabel(tag) {
+  return String(tag || "").trim().replace(/^v(?=\d)/i, "");
+}
+
 function isReleaseTag(entry) {
   return !!parseReleaseTagParts(entry?.tag);
 }
@@ -137,6 +141,7 @@ function normalizeVersionEntries(state) {
       publishedAt: v?.publishedAt || null,
       sizeBytes: v?.sizeBytes || null,
       matchHint: v?.matchHint || "",
+      matchedReleaseTag: v?.matchedReleaseTag || "",
       digestHint: v?.digestHint || "",
       differsFromPublished: !!v?.differsFromPublished
     })).filter((entry) => entry.tag);
@@ -436,6 +441,12 @@ function render(state) {
       badge.textContent = "local";
       title.appendChild(badge);
     }
+    if (isPinnedChannelEntry(entry) && entry.matchedReleaseTag) {
+      const badge = document.createElement("span");
+      badge.className = "badge badge-release-match";
+      badge.textContent = releaseMatchBadgeLabel(entry.matchedReleaseTag);
+      title.appendChild(badge);
+    }
     body.appendChild(title);
 
     const meta = document.createElement("div");
@@ -499,7 +510,7 @@ function render(state) {
   }
 }
 
-export { actionForEntry, canRemoveEntry, defaultInstanceName };
+export { actionForEntry, canRemoveEntry, defaultInstanceName, releaseMatchBadgeLabel };
 
 window.addEventListener("dm:state", (e) => render(e.detail || {}));
 if (window.__dmLastState) render(window.__dmLastState);

@@ -42,14 +42,6 @@ const SETUP_SHOWCASE_SLIDES = Object.freeze([
     mediaLabel: "Agent Zero Time Travel interface with snapshots and diffs."
   }),
   Object.freeze({
-    id: "space-agent",
-    title: "Space Agent",
-    description: "Let the AI reshape the workspace, build tools into the running interface, and extend itself through simple SKILL.md files.",
-    mediaType: "image",
-    media: `${SHOWCASE_ASSET_BASE}/space-agent-demo-poster.png`,
-    mediaLabel: "Space Agent workspace with AI-built tools running inside the interface."
-  }),
-  Object.freeze({
     id: "a0-cli",
     title: "A0 CLI: Your Browser and Computer",
     description: "Connect host files, Host Web Browser, and Computer Use beyond the Agent Zero sandbox when A0 CLI is installed.",

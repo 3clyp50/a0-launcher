@@ -143,8 +143,13 @@ This scope owns:
   active, visible channel tags (`latest`, `ready`), local builds, matching
   digest, and differing digest states without exposing raw Docker mechanics as
   the main story. Fresh machines must have a visible install action once Docker
-  is ready. The unmaintained `testing` tag is intentionally hidden from the
-  Installs view.
+  is ready. The `latest` and `ready` cards should show channel update dates
+  when Docker Manager provides them, falling back to the matched numbered
+  release date when available. Their primary card meta should stay compact:
+  visible date plus size only, even when structured match/digest hints are
+  present in state. Numbered release cards should be grouped by major version,
+  with only the highest major version group expanded by default. The
+  unmaintained `testing` tag is intentionally hidden from the Installs view.
 - Running an installed tag from Installs creates another managed local instance
   and must not stop existing instances or require a data-loss acknowledgement.
   After the run operation reports completed with the UI-ready marker, the

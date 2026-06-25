@@ -277,3 +277,38 @@ test('Docker Hub token cache separates anonymous and authenticated requests', as
   assert.equal(tagCalls[0].authorization, 'Bearer anon-token');
   assert.equal(tagCalls[1].authorization, 'Bearer auth-token');
 });
+
+test('Docker Hub tag metadata normalizes update timestamps', async (t) => {
+  const previousFetch = globalThis.fetch;
+
+  t.after(() => {
+    globalThis.fetch = previousFetch;
+  });
+
+  globalThis.fetch = async (url, options = {}) => {
+    assert.match(String(url), /hub\.docker\.com\/v2\/repositories\/agent0ai\/agent-zero\/tags\/ready$/);
+    assert.equal(options?.headers?.Accept, 'application/json');
+    return new Response(JSON.stringify({
+      name: 'ready',
+      last_updated: '2026-06-25T12:44:56.141405Z',
+      tag_last_pushed: '2026-06-25T12:44:56.141405Z',
+      full_size: 3141377939,
+      digest: 'sha256:648b9703656b11ed653daba4443b04be44fa5ebbe634dcce8ba17d09291c8cb3'
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+
+  const registry = new DockerHubRegistry();
+  const metadata = await registry.getTagMetadata('agent0ai/agent-zero', 'ready');
+
+  assert.deepEqual(metadata, {
+    exists: true,
+    updatedAt: '2026-06-25T12:44:56.141Z',
+    pushedAt: '2026-06-25T12:44:56.141Z',
+    sizeBytes: 3141377939,
+    digest: 'sha256:648b9703656b11ed653daba4443b04be44fa5ebbe634dcce8ba17d09291c8cb3',
+    rateLimit: null
+  });
+});

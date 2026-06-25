@@ -126,8 +126,9 @@ This scope owns:
 - The Windows loopback bridge may run its WSL helper as `root` so users do not
   need to manage Linux `docker` group membership during onboarding.
 - Concrete implementations live under `impl/` and are loaded on demand.
-- Docker Hub calls should expose digest/content-type/rate-limit metadata without
-  forcing renderer or Docker Manager code to parse registry responses directly.
+- Docker Hub calls should expose digest/content-type/rate-limit and tag update
+  metadata without forcing renderer or Docker Manager code to parse registry
+  responses directly.
 - Dockerode image pulls and Docker Hub metadata requests should reuse Docker CLI
   registry credentials from `DOCKER_CONFIG` or `~/.docker/config.json`, including
   configured credential helpers, so the launcher honors a successful

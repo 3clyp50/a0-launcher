@@ -268,6 +268,10 @@ function isChannelTag(tag) {
   return isLatestTag(tag) || isReadyTag(tag) || isTestingTag(tag);
 }
 
+function isVisibleChannelTag(tag) {
+  return isLatestTag(tag) || isReadyTag(tag);
+}
+
 function isCanonicalLocalTag(tag) {
   const t = (tag || '').trim();
   return CANONICAL_LOCAL_TAGS.includes(t);
@@ -627,6 +631,11 @@ function isoToMs(value) {
   return Number.isFinite(ms) ? ms : NaN;
 }
 
+function normalizeIsoString(value) {
+  const ms = isoToMs(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
 function extractLocalDigest(repoDigests) {
   for (const d of Array.isArray(repoDigests) ? repoDigests : []) {
     if (typeof d !== 'string') continue;
@@ -677,6 +686,26 @@ function matchedReleaseTagForLocalTag(tag, localByTag, knownRemoteDigests, lates
     if (!img && localByTag instanceof Map && localByTag.has(latestReleaseTag)) return latestReleaseTag;
   }
   return '';
+}
+
+async function bestEffortRemoteTagMetadata(docker, imageRepo, tag) {
+  if (!isVisibleChannelTag(tag)) {
+    return null;
+  }
+  if (!docker || typeof docker.getRemoteTagMetadata !== 'function') {
+    return { tagUpdatedAt: null, tagMetadataCheckedAt: nowIso() };
+  }
+  try {
+    const metadata = await docker.getRemoteTagMetadata(imageRepo, tag);
+    if (!metadata?.exists) return null;
+    return {
+      tagUpdatedAt: normalizeIsoString(metadata.updatedAt || metadata.pushedAt),
+      tagMetadataCheckedAt: nowIso()
+    };
+  } catch (error) {
+    logDockerManagerError('inventory.getRemoteTagMetadata', error, { tag });
+    return { tagUpdatedAt: null, tagMetadataCheckedAt: nowIso() };
+  }
 }
 
 function tagFromImageRef(imageRef) {
@@ -1716,7 +1745,17 @@ async function buildDerivedState(options = {}) {
 
       let fresh = false;
       if (!forceRefresh) {
-        if (existingStatus === 'installable' && Number.isFinite(checkedAtMs) && nowMs - checkedAtMs < 24 * 60 * 60 * 1000) {
+        const tagUpdatedAtMs = isoToMs(existing?.tagUpdatedAt);
+        const tagMetadataCheckedAtMs = isoToMs(existing?.tagMetadataCheckedAt);
+        const channelMetadataFresh = !isVisibleChannelTag(tag) ||
+          Number.isFinite(tagUpdatedAtMs) ||
+          (Number.isFinite(tagMetadataCheckedAtMs) && nowMs - tagMetadataCheckedAtMs < 24 * 60 * 60 * 1000);
+        if (
+          existingStatus === 'installable' &&
+          Number.isFinite(checkedAtMs) &&
+          nowMs - checkedAtMs < 24 * 60 * 60 * 1000 &&
+          channelMetadataFresh
+        ) {
           fresh = true;
         }
         if (existingStatus === 'not_yet_available' && Number.isFinite(recheckAfterMs) && nowMs < recheckAfterMs) {
@@ -1730,12 +1769,16 @@ async function buildDerivedState(options = {}) {
         const digestInfo = await docker.getRemoteDigest(imageRepo, tag);
         const exists = !!digestInfo?.exists;
         if (exists) {
+          const tagMetadata = await bestEffortRemoteTagMetadata(docker, imageRepo, tag);
+          const existingTagUpdatedAt = normalizeIsoString(existing?.tagUpdatedAt);
           entries[tag] = {
             status: 'installable',
             checkedAt: nowIso(),
             recheckAfter: null,
             digest: digestInfo?.digest || null,
-            contentType: digestInfo?.contentType || null
+            contentType: digestInfo?.contentType || null,
+            tagUpdatedAt: tagMetadata?.tagUpdatedAt || existingTagUpdatedAt || null,
+            tagMetadataCheckedAt: tagMetadata?.tagMetadataCheckedAt || null
           };
         } else {
           entries[tag] = {
@@ -1809,6 +1852,7 @@ async function buildDerivedState(options = {}) {
       isActive,
       activeState: isActive ? activeState : null,
       publishedAt: null,
+      updatedAt: normalizeIsoString(cacheEntry?.tagUpdatedAt),
       sizeBytes: img?.sizeBytes || null
     });
   }
@@ -1849,6 +1893,7 @@ async function buildDerivedState(options = {}) {
       isActive,
       activeState: isActive ? activeState : null,
       publishedAt: r?.publishedAt || null,
+      updatedAt: null,
       sizeBytes: img?.sizeBytes || null
     });
   }
@@ -1929,6 +1974,7 @@ async function buildDerivedState(options = {}) {
       isActive,
       activeState: isActive ? activeState : null,
       publishedAt: null,
+      updatedAt: null,
       sizeBytes: img?.sizeBytes || null
     });
   }

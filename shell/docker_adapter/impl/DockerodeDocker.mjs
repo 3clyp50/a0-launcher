@@ -457,6 +457,25 @@ export class DockerodeDocker extends DockerInterface {
     }
   }
 
+  async getRemoteTagMetadata(imageRepo, tag) {
+    try {
+      const r = await this.registry.getTagMetadata((imageRepo || this.imageRepo).trim(), tag);
+      return {
+        exists: !!r.exists,
+        updatedAt: r.updatedAt || null,
+        pushedAt: r.pushedAt || null,
+        sizeBytes: Number.isFinite(Number(r.sizeBytes)) ? Number(r.sizeBytes) : null,
+        digest: r.digest || null,
+        rateLimit: r.rateLimit || null
+      };
+    } catch (error) {
+      if (error && typeof error === 'object') {
+        error.details = { ...(error.details || {}), env: this.#envSummary() };
+      }
+      throw error;
+    }
+  }
+
   async getRemoteLayerSizes(imageRepo, tag, options = {}) {
     try {
       const desiredArch = (options?.arch || this.env?.arch || process.arch || '').trim();

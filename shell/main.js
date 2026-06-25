@@ -2771,6 +2771,12 @@ function sanitizeDockerManagerState(state) {
       out.publishedAt = v.publishedAt;
     }
 
+    if (v.updatedAt === null) {
+      out.updatedAt = null;
+    } else if (typeof v.updatedAt === 'string') {
+      out.updatedAt = v.updatedAt;
+    }
+
     if (v.sizeBytes === null) {
       out.sizeBytes = null;
     } else if (Number.isFinite(Number(v.sizeBytes))) {

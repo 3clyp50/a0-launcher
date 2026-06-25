@@ -11,7 +11,15 @@ globalThis.window = {
   dockerManagerActions: {}
 };
 
-const { actionForEntry, canRemoveEntry, defaultInstanceName, releaseMatchBadgeLabel } = await import('./official-versions.js');
+const {
+  actionForEntry,
+  buildInstallCatalogModel,
+  canRemoveEntry,
+  defaultInstanceName,
+  displayDateForEntry,
+  metaPartsForEntry,
+  releaseMatchBadgeLabel
+} = await import('./official-versions.js');
 
 test('installed active entries still expose Run for additional instances', () => {
   const action = actionForEntry({
@@ -57,4 +65,59 @@ test('default run names increment when same-tag instances exist', () => {
 test('release match badge labels omit leading v', () => {
   assert.equal(releaseMatchBadgeLabel('v1.20'), '1.20');
   assert.equal(releaseMatchBadgeLabel('ready'), 'ready');
+});
+
+test('channel install cards display update dates from channel metadata or matched releases', () => {
+  const entries = [
+    { tag: 'latest', title: 'latest', matchedReleaseTag: 'v2.0' },
+    { tag: 'ready', title: 'ready', updatedAt: '2026-06-25T12:44:56.141Z' },
+    { tag: 'v2.0', title: '2.0', publishedAt: '2026-06-24T12:00:00Z', badges: ['latest'] }
+  ];
+
+  assert.deepEqual(displayDateForEntry(entries[0], entries), {
+    label: 'Released',
+    value: '2026-06-24T12:00:00Z'
+  });
+  assert.deepEqual(displayDateForEntry(entries[1], entries), {
+    label: 'Updated',
+    value: '2026-06-25T12:44:56.141Z'
+  });
+  assert.deepEqual(displayDateForEntry(entries[2], entries), {
+    label: 'Released',
+    value: '2026-06-24T12:00:00Z'
+  });
+});
+
+test('channel install card meta keeps only date and size', () => {
+  const entries = [
+    {
+      tag: 'ready',
+      title: 'ready',
+      updatedAt: '2026-06-25T12:44:56.141Z',
+      sizeBytes: 12348030976,
+      matchHint: 'Differs from published ready',
+      digestHint: 'Published: 648b9703656b / Local: dea8d7301edd'
+    }
+  ];
+
+  assert.deepEqual(metaPartsForEntry(entries[0], entries), [
+    'Updated Jun 25, 2026',
+    '11.5 GB'
+  ]);
+});
+
+test('install catalog groups numbered versions by major and collapses older majors by default', () => {
+  const model = buildInstallCatalogModel([
+    { tag: 'v1.20', title: '1.20' },
+    { tag: 'ready', title: 'ready' },
+    { tag: 'v0.9', title: '0.9' },
+    { tag: 'v2.0', title: '2.0' },
+    { tag: 'latest', title: 'latest' },
+    { tag: 'v1.19', title: '1.19' }
+  ]);
+
+  assert.deepEqual(model.channels.map((entry) => entry.tag), ['latest', 'ready']);
+  assert.deepEqual(model.groups.map((group) => group.major), [2, 1, 0]);
+  assert.deepEqual(model.groups.map((group) => group.defaultOpen), [true, false, false]);
+  assert.deepEqual(model.groups[1].entries.map((entry) => entry.tag), ['v1.20', 'v1.19']);
 });

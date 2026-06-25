@@ -49,7 +49,9 @@ This scope owns:
   provenance, and expose runtime branch/commit as separate structured state.
 - Channel-tagged images and containers may expose `matchedReleaseTag` when the
   local tag can be tied to a concrete semver release through digest matching or
-  local evidence for the current `latest` release tag.
+  local evidence for the current `latest` release tag. Channel install entries
+  may also expose an optional `updatedAt` timestamp derived from cached Docker
+  Hub tag metadata.
 - Start, switch, and run flows should give the Agent Zero UI enough time to
   finish a slow first boot before rolling back a newly-created container.
 - New managed Instance run progress should mark `uiReady: true` only after the
@@ -212,6 +214,9 @@ This scope owns:
   that match or differ from published releases.
 - If a new persisted field is introduced, document its shape here and keep
   migration/default behavior tolerant of older state files.
+- The installability cache may persist optional `tagUpdatedAt` and
+  `tagMetadataCheckedAt` ISO timestamps for Docker Hub channel tags. Treat them
+  as best-effort metadata and tolerate their absence in older caches.
 
 ## Verification
 

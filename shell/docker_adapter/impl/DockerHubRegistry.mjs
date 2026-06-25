@@ -5,6 +5,7 @@ import {
 
 const DEFAULT_USER_AGENT = 'A0-Launcher';
 const REGISTRY_BASE_URL = 'https://registry-1.docker.io';
+const HUB_API_BASE_URL = 'https://hub.docker.com/v2/repositories';
 const AUTH_BASE_URL = 'https://auth.docker.io';
 const LAYER_SIZES_CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -83,6 +84,14 @@ function buildManifestUrl(imageRepo, tag) {
   return `${REGISTRY_BASE_URL}/v2/${imageRepo}/manifests/${encodeURIComponent(tag)}`;
 }
 
+function buildHubTagUrl(imageRepo, tag) {
+  const repoPath = String(imageRepo || '')
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+  return `${HUB_API_BASE_URL}/${repoPath}/tags/${encodeURIComponent(tag)}`;
+}
+
 function buildTokenUrl(imageRepo) {
   const u = new URL(`${AUTH_BASE_URL}/token`);
   u.searchParams.set('service', 'registry.docker.io');
@@ -96,6 +105,17 @@ function makeError(code, message, details = {}) {
   err.code = code;
   err.details = details;
   return err;
+}
+
+function normalizedIsoTimestamp(value) {
+  const ms = Date.parse(value || '');
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms).toISOString();
+}
+
+function finiteNumberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 export class DockerHubRegistry {
@@ -382,6 +402,61 @@ export class DockerHubRegistry {
     }
 
     return { exists: true, digest, contentType: contentType || null, rateLimit };
+  }
+
+  /**
+   * Retrieve public Docker Hub tag metadata such as last update/push time.
+   * Docker Registry v2 manifest responses do not include these fields.
+   *
+   * @param {string} imageRepo
+   * @param {string} tag
+   * @returns {Promise<{exists: boolean, updatedAt: string|null, pushedAt: string|null, sizeBytes: number|null, digest: string|null, rateLimit: Object|null}>}
+   */
+  async getTagMetadata(imageRepo, tag) {
+    const repo = (imageRepo || '').trim();
+    const t = (tag || '').trim();
+    if (!repo) throw makeError('INVALID_INPUT', 'imageRepo is required');
+    if (!t) throw makeError('INVALID_INPUT', 'tag is required');
+
+    const res = await fetch(buildHubTagUrl(repo, t), {
+      method: 'GET',
+      headers: {
+        'User-Agent': this.userAgent,
+        'Accept': 'application/json'
+      }
+    });
+
+    const rateLimit = extractRateLimit(res.headers);
+
+    if (res.status === 404) {
+      return { exists: false, updatedAt: null, pushedAt: null, sizeBytes: null, digest: null, rateLimit };
+    }
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        throw makeError('REGISTRY_RATE_LIMIT', 'Docker Hub rate limit exceeded', { status: res.status, rateLimit });
+      }
+      const txt = await res.text().catch(() => '');
+      throw makeError('REGISTRY_ERROR', 'Failed to fetch tag metadata from Docker Hub', {
+        status: res.status,
+        rateLimit,
+        body: txt ? txt.slice(0, 500) : null
+      });
+    }
+
+    const json = await res.json();
+    const updatedAt = normalizedIsoTimestamp(json?.last_updated);
+    const pushedAt = normalizedIsoTimestamp(json?.tag_last_pushed);
+    const digest = typeof json?.digest === 'string' && json.digest ? json.digest : null;
+
+    return {
+      exists: true,
+      updatedAt: updatedAt || pushedAt,
+      pushedAt: pushedAt || updatedAt,
+      sizeBytes: finiteNumberOrNull(json?.full_size),
+      digest,
+      rateLimit
+    };
   }
 
   /**

@@ -62,6 +62,16 @@ const DOCKER_CONTEXT_TIMEOUT_MS = 1200;
  */
 
 /**
+ * @typedef {Object} RemoteTagMetadata
+ * @property {boolean} exists
+ * @property {string|null} updatedAt
+ * @property {string|null} pushedAt
+ * @property {number|null} sizeBytes
+ * @property {string|null} digest
+ * @property {Object|null} rateLimit
+ */
+
+/**
  * @typedef {Object} PullState
  * @property {string} opId
  * @property {string} imageRef
@@ -339,6 +349,16 @@ export class DockerInterface {
    */
   async getRemoteDigest(_imageRepo, _tag) {
     throw new Error('DockerInterface.getRemoteDigest is abstract');
+  }
+
+  /**
+   * Retrieve public Docker Hub metadata for a tag when available.
+   * @param {string} imageRepo
+   * @param {string} tag
+   * @returns {Promise<RemoteTagMetadata>}
+   */
+  async getRemoteTagMetadata(_imageRepo, _tag) {
+    throw new Error('DockerInterface.getRemoteTagMetadata is abstract');
   }
 
   /**

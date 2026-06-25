@@ -444,6 +444,56 @@ body {
   gap: 0.85rem;
 }
 
+.dm-version-group {
+  grid-column: 1 / -1;
+  padding-top: 0.15rem;
+  border-top: 1px solid var(--dm-line-soft);
+}
+
+.dm-version-group:first-of-type {
+  margin-top: 0.1rem;
+}
+
+.dm-version-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.2rem;
+  cursor: pointer;
+  list-style: none;
+  color: var(--color-text);
+}
+
+.dm-version-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.dm-version-group-title {
+  font-family: "Rubik", Arial, Helvetica, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.dm-version-group-count {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+}
+
+.dm-version-group-icon {
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+  transition: transform 0.16s ease;
+}
+
+.dm-version-group[open] .dm-version-group-icon {
+  transform: rotate(180deg);
+}
+
+.dm-version-group-grid {
+  margin-top: 0.65rem;
+}
+
 .dm-card {
   position: relative;
   display: flex;

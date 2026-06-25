@@ -360,12 +360,6 @@ function computeCardMenuPlacement({
   };
 }
 
-function fixedResourceFooterHeight() {
-  const footer = document.querySelector?.(".dm-resource-footer");
-  const rect = footer?.getBoundingClientRect?.();
-  return rect?.height ? Math.ceil(rect.height) : 0;
-}
-
 function resetCardMenuPosition(menu) {
   if (!menu) return;
   menu.classList.remove("open-up", "open-down", "measuring");
@@ -403,7 +397,7 @@ function positionCardMenu(menu) {
     popoverHeight: popover.scrollHeight || popoverRect.height || 0,
     viewportWidth,
     viewportHeight,
-    footerHeight: fixedResourceFooterHeight(),
+    footerHeight: 0,
     edgeGap,
     menuGap
   });

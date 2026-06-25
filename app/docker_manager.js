@@ -1475,7 +1475,7 @@ function initNavigationRefresh() {
   });
 }
 
-function initResourceFooter() {
+function initResourceLinks() {
   document.querySelectorAll("[data-resource-link]").forEach((button) => {
     if (button.dataset.boundResourceLink) return;
     button.dataset.boundResourceLink = "1";
@@ -1490,7 +1490,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   emitState();
   initSubscriptions();
   initNavigationRefresh();
-  initResourceFooter();
+  initResourceLinks();
   initInstanceTabBoundsObserver();
   if (typeof window.dockerManagerAPI?.getInstanceTabs === "function") {
     try {

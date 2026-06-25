@@ -31,7 +31,8 @@ This scope owns:
   long Agent Zero image pull phase.
 - `onboarding/`: retired runtime setup banner files kept only for compatibility
   until they are removed.
-- `sidebar/`: tab navigation and `dm:nav` event publication.
+- `sidebar/`: tab navigation, `dm:nav` event publication, and sidebar resource
+  links.
 - `official-versions/`: install/version cards, activation dialog, saved
   Instance defaults, port/env overrides, data-loss acknowledgement, and
   update/switch actions.
@@ -199,8 +200,8 @@ This scope owns:
   mirror `Open UI`; the body/meta area should stay ordinary selectable text so
   values such as URLs remain easy to copy.
   The card overflow menu should choose its up/down direction from available
-  viewport space, reserve fixed bottom launcher chrome such as the resource
-  footer, and use bounded internal scrolling when the window is short.
+  viewport space, reserve any fixed bottom launcher chrome, and use bounded
+  internal scrolling when the window is short.
   `Open A0 CLI` should let the shell show the native working-folder picker
   before terminal launch; canceling that picker should not display an error.
   If the shell reports that the host `a0` command is unavailable, the same menu

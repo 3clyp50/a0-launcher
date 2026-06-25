@@ -34,7 +34,7 @@
     </div>
     <x-component class="dm-instance-tabs-host" path="components/docker-manager/instance-tabs/index.html"></x-component>
     <div class="dm-layout">
-      <x-component path="components/docker-manager/sidebar/index.html"></x-component>
+      <x-component class="dm-sidebar-host" path="components/docker-manager/sidebar/index.html"></x-component>
       <main class="dm-main">
         <div class="dm-tab-content active" data-tab="sessions">
           <x-component path="components/docker-manager/local-testing/index.html"></x-component>
@@ -51,13 +51,6 @@
       </main>
     </div>
   </div>
-  <footer class="dm-resource-footer" aria-label="Agent Zero resources">
-    <nav class="dm-resource-links">
-      <button class="dm-resource-link" type="button" data-resource-link="docs">Docs</button>
-      <button class="dm-resource-link" type="button" data-resource-link="apiDashboard">API Dashboard</button>
-      <button class="dm-resource-link" type="button" data-resource-link="support">Support</button>
-    </nav>
-  </footer>
   <div id="dmToastStack" class="dm-toast-stack" aria-live="polite" aria-atomic="false"></div>
 
   <script type="module" src="./docker_manager.js"></script>

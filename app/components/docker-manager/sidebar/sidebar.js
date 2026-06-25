@@ -66,9 +66,20 @@ function bindNav() {
   });
 }
 
+function bindResourceLinks() {
+  document.querySelectorAll("[data-resource-link]").forEach((button) => {
+    if (button.dataset.boundResourceLink) return;
+    button.dataset.boundResourceLink = "1";
+    button.addEventListener("click", () => {
+      window.dockerManagerActions?.openResourceLink?.(button.dataset.resourceLink || "");
+    });
+  });
+}
+
 function init() {
   bindProgrammaticNavigation();
   bindNav();
+  bindResourceLinks();
   navigateToTab(getActiveTab(), { userInitiated: false, source: "initial" });
 }
 

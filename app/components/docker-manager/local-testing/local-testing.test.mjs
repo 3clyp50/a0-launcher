@@ -171,7 +171,7 @@ test('empty Instances state offers latest install after first inventory', () => 
   );
 });
 
-test('card menu placement reserves fixed footer space in short windows', () => {
+test('card menu placement reserves fixed bottom chrome in short windows', () => {
   const placement = computeCardMenuPlacement({
     triggerRect: { top: 500, right: 590, bottom: 532 },
     popoverWidth: 184,

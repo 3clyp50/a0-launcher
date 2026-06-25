@@ -165,6 +165,67 @@ function bindOpenableCardHeader(header, onOpen, options = {}) {
   });
 }
 
+function emptyInstancesStateModel(state = {}) {
+  const containers = Array.isArray(state?.containers) ? state.containers : [];
+  const remoteInstances = Array.isArray(state?.remoteInstances) ? state.remoteInstances : [];
+  if (containers.length || remoteInstances.length) return null;
+  if (!state?.stateLoaded) {
+    return {
+      kind: "checking",
+      message: "Checking Instances..."
+    };
+  }
+  const operationRunning = state?.progress?.status === "running";
+  return {
+    kind: "install_latest",
+    title: "No Instances yet",
+    detail: "Download Agent Zero and create your first Instance.",
+    actionLabel: "Install latest version",
+    disabled: operationRunning,
+    actionTitle: operationRunning ? "Another operation is running" : "Install latest Agent Zero version"
+  };
+}
+
+function renderEmptyInstances(list, state = {}) {
+  const model = emptyInstancesStateModel(state);
+  if (!list || !model) return false;
+  list.innerHTML = "";
+  if (model.kind === "checking") {
+    const empty = document.createElement("div");
+    empty.className = "dm-empty";
+    empty.textContent = model.message;
+    list.appendChild(empty);
+    return true;
+  }
+
+  const banner = document.createElement("div");
+  banner.className = "dm-install-empty";
+  const content = document.createElement("div");
+  content.className = "dm-install-empty-content";
+  const title = document.createElement("h3");
+  title.className = "dm-install-empty-title";
+  title.textContent = model.title;
+  const detail = document.createElement("p");
+  detail.className = "dm-install-empty-copy";
+  detail.textContent = model.detail;
+  const action = document.createElement("button");
+  action.className = "button confirm dm-install-empty-action";
+  action.type = "button";
+  action.disabled = !!model.disabled;
+  action.title = model.actionTitle;
+  action.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">download</span><span></span>';
+  action.querySelector("span:last-child").textContent = model.actionLabel;
+  action.addEventListener("click", () => {
+    window.dockerManagerActions?.installOrSync?.("latest");
+  });
+  content.appendChild(title);
+  content.appendChild(detail);
+  content.appendChild(action);
+  banner.appendChild(content);
+  list.appendChild(banner);
+  return true;
+}
+
 const CLONE_WORKSPACE_OPTIONS = Object.freeze([
   {
     id: "auth",
@@ -1296,7 +1357,7 @@ function render(state) {
 
   list.innerHTML = "";
   if (!containers.length && !remoteInstances.length) {
-    list.innerHTML = '<div class="dm-empty">No Instances found. Run an install or add a remote Instance.</div>';
+    renderEmptyInstances(list, state);
     return;
   }
 
@@ -1311,6 +1372,7 @@ function render(state) {
 export {
   bindOpenableCardHeader,
   computeCardMenuPlacement,
+  emptyInstancesStateModel,
   instancePowerMenuConfig,
   instanceVisualBadge,
   openCardMenu

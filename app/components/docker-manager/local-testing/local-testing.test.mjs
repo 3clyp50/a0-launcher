@@ -16,6 +16,7 @@ globalThis.window = {
 const {
   bindOpenableCardHeader,
   computeCardMenuPlacement,
+  emptyInstancesStateModel,
   instancePowerMenuConfig,
   instanceVisualBadge,
   openCardMenu
@@ -128,6 +129,46 @@ test('openable card header binds click and keyboard activation', () => {
 
   assert.equal(opened, 2);
   assert.equal(prevented, true);
+});
+
+test('empty Instances state offers latest install after first inventory', () => {
+  assert.deepEqual(
+    emptyInstancesStateModel({ stateLoaded: false, loading: true, containers: [], remoteInstances: [] }),
+    {
+      kind: 'checking',
+      message: 'Checking Instances...'
+    }
+  );
+
+  assert.deepEqual(
+    emptyInstancesStateModel({ stateLoaded: true, loading: false, containers: [], remoteInstances: [] }),
+    {
+      kind: 'install_latest',
+      title: 'No Instances yet',
+      detail: 'Download Agent Zero and create your first Instance.',
+      actionLabel: 'Install latest version',
+      disabled: false,
+      actionTitle: 'Install latest Agent Zero version'
+    }
+  );
+
+  assert.equal(
+    emptyInstancesStateModel({ stateLoaded: true, containers: [{ containerId: 'abc' }], remoteInstances: [] }),
+    null
+  );
+  assert.equal(
+    emptyInstancesStateModel({ stateLoaded: true, containers: [], remoteInstances: [{ id: 'remote' }] }),
+    null
+  );
+  assert.equal(
+    emptyInstancesStateModel({
+      stateLoaded: true,
+      containers: [],
+      remoteInstances: [],
+      progress: { status: 'running' }
+    }).disabled,
+    true
+  );
 });
 
 test('card menu placement reserves fixed footer space in short windows', () => {

@@ -176,6 +176,10 @@ This scope owns:
   renderer-inferred runtime guesses.
 - The Instances tab owns both local Docker containers and saved remote
   instances. Visible copy must say `Instances`, not `Sessions`.
+  When the first inventory has loaded and there are no local or saved remote
+  Instances, show a centered `Install latest version` action that calls the
+  existing latest-image install flow so the first-Instance setup modal still
+  owns model/provider/name choices.
 - Local instance cards keep `Open UI` or `Start` as the visible primary action.
   Secondary management and inspection actions such as `Rename`, `See logs`,
   `Open storage folder`, `Clone`, `Open A0 CLI`, dynamic `Start`/`Stop`, and

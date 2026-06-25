@@ -47,7 +47,7 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
   home.type = "button";
   home.className = `dm-instance-tab dm-instance-home-tab${homeActive ? " active" : ""}`;
   home.title = "Launcher";
-  home.setAttribute("aria-label", "Show launcher home");
+  home.setAttribute("aria-label", "Show launcher");
   home.addEventListener("click", () => window.dockerManagerActions?.selectInstanceHome?.());
 
   const homeIcon = document.createElement("span");
@@ -57,7 +57,7 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
 
   const homeLabel = document.createElement("span");
   homeLabel.className = "dm-instance-tab-title";
-  homeLabel.textContent = "Home";
+  homeLabel.textContent = "Launcher";
 
   home.appendChild(homeIcon);
   home.appendChild(homeLabel);

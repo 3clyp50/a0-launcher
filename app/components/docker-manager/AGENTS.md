@@ -41,9 +41,9 @@ This scope owns:
 - `advanced/`: tabbed developer-mode custom image runner with inline Docker
   Compose composer, diagnostics, and storage-volume maintenance.
 - `settings/`: port preferences and saved Instance provider/model defaults.
-- `instance-tabs/`: browser-style tab chrome, Home tab, active-tab controls,
-  empty state, and viewport bounds reporting for shell-owned Agent Zero UI
-  views.
+- `instance-tabs/`: browser-style tab chrome, Launcher tab, active-tab
+  controls, empty state, and viewport bounds reporting for shell-owned Agent
+  Zero UI views.
 
 ## Local Contracts
 
@@ -245,9 +245,9 @@ This scope owns:
 - `Open UI` opens local and remote instances in a launcher tab by default.
   Reopening the same target focuses the existing tab. Detach moves the target
   into a standalone secure Electron window without stopping the instance.
-- Instance tab chrome keeps a Home tab as the first tab whenever any instance UI
-  tab is open. Selecting Home clears the active shell-owned view and leaves the
-  launcher surface usable below the tab strip.
+- Instance tab chrome keeps a Launcher tab as the first tab whenever any
+  instance UI tab is open. Selecting Launcher clears the active shell-owned
+  view and leaves the launcher surface usable below the tab strip.
 
 ## Work Guidance
 

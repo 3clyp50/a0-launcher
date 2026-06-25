@@ -13,7 +13,12 @@ globalThis.window = {
   dockerManagerActions: {}
 };
 
-const { computeCardMenuPlacement, instanceVisualBadge, openCardMenu } = await import('./local-testing.js');
+const {
+  computeCardMenuPlacement,
+  instancePowerMenuConfig,
+  instanceVisualBadge,
+  openCardMenu
+} = await import('./local-testing.js');
 
 function fakeClassList(initial = []) {
   const values = new Set(initial);
@@ -57,6 +62,40 @@ test('instance chips still prefer runtime branch without a channel release match
       runtimeBranch: 'ready'
     }),
     'ready'
+  );
+});
+
+test('instance power menu switches between stop and start', () => {
+  assert.deepEqual(
+    instancePowerMenuConfig({
+      isRunning: true,
+      canStart: false,
+      containerId: 'abc123',
+      containerOperationRunning: false
+    }),
+    {
+      action: 'stop',
+      icon: 'stop_circle',
+      label: 'Stop',
+      disabled: false,
+      title: 'Stop this instance'
+    }
+  );
+
+  assert.deepEqual(
+    instancePowerMenuConfig({
+      isRunning: false,
+      canStart: true,
+      containerId: 'abc123',
+      containerOperationRunning: false
+    }),
+    {
+      action: 'start',
+      icon: 'play_arrow',
+      label: 'Start',
+      disabled: false,
+      title: 'Start this instance'
+    }
   );
 });
 

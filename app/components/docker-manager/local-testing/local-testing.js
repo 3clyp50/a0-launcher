@@ -125,6 +125,31 @@ function backgroundOperationLabel(operation) {
   return queued ? "Queued" : "Working";
 }
 
+function instancePowerMenuConfig({ isRunning, canStart, containerId, containerOperationRunning } = {}) {
+  const hasContainer = !!String(containerId || "").trim();
+  const busy = !!containerOperationRunning;
+  if (isRunning) {
+    return {
+      action: "stop",
+      icon: "stop_circle",
+      label: "Stop",
+      disabled: !hasContainer || busy,
+      title: busy ? "An action is already queued for this instance" : "Stop this instance"
+    };
+  }
+  return {
+    action: "start",
+    icon: "play_arrow",
+    label: "Start",
+    disabled: !hasContainer || !canStart || busy,
+    title: busy
+      ? "An action is already queued for this instance"
+      : canStart
+        ? "Start this instance"
+        : "Start is available for launcher-managed instances"
+  };
+}
+
 const CLONE_WORKSPACE_OPTIONS = Object.freeze([
   {
     id: "auth",
@@ -988,6 +1013,13 @@ function renderDockerInstance(list, c, state) {
   const isActiveInstance = String(c?.containerName || "").includes("-active__");
   const isManagedLocalInstance = c?.labels?.["a0.launcher.managed"] === "true" || role === "developer" || role === "clone";
   const isRunning = st === "running";
+  const canStartLocalInstance = !isRunning && (isActiveInstance || isManagedLocalInstance);
+  const powerMenuItem = instancePowerMenuConfig({
+    isRunning,
+    canStart: canStartLocalInstance,
+    containerId,
+    containerOperationRunning
+  });
 
   if (isRunning) {
     const openBtn = document.createElement("button");
@@ -1004,17 +1036,7 @@ function renderDockerInstance(list, c, state) {
       });
     });
     actions.appendChild(openBtn);
-  } else if (isActiveInstance) {
-    const startBtn = document.createElement("button");
-    startBtn.className = "button confirm";
-    startBtn.type = "button";
-    startBtn.textContent = "Start";
-    startBtn.disabled = containerOperationRunning;
-    startBtn.addEventListener("click", () => {
-      window.dockerManagerActions?.startLocalInstance?.(containerId);
-    });
-    actions.appendChild(startBtn);
-  } else if (isManagedLocalInstance) {
+  } else if (canStartLocalInstance) {
     const startBtn = document.createElement("button");
     startBtn.className = "button confirm";
     startBtn.type = "button";
@@ -1098,11 +1120,15 @@ function renderDockerInstance(list, c, state) {
             : "A0 CLI requires a running local Web UI"
         : "Install A0 CLI on this computer"
     }),
-    menuButton("stop_circle", "Stop", () => {
+    menuButton(powerMenuItem.icon, powerMenuItem.label, () => {
+      if (powerMenuItem.action === "start") {
+        window.dockerManagerActions?.startLocalInstance?.(containerId);
+        return;
+      }
       window.dockerManagerActions?.stopLocalInstance?.(containerId);
     }, {
-      disabled: !isRunning || !containerId || containerOperationRunning,
-      title: containerOperationRunning ? "An action is already queued for this instance" : isRunning ? "Stop this instance" : "Instance is not running"
+      disabled: powerMenuItem.disabled,
+      title: powerMenuItem.title
     }),
     menuButton("delete", "Delete", async () => {
       const verb = isRunning ? "Stop and delete" : "Delete";
@@ -1254,7 +1280,7 @@ function render(state) {
   }
 }
 
-export { computeCardMenuPlacement, instanceVisualBadge, openCardMenu };
+export { computeCardMenuPlacement, instancePowerMenuConfig, instanceVisualBadge, openCardMenu };
 
 window.addEventListener("dm:state", (e) => render(e.detail || {}));
 bindActions();

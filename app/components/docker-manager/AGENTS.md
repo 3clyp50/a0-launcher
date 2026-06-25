@@ -177,8 +177,9 @@ This scope owns:
   instances. Visible copy must say `Instances`, not `Sessions`.
 - Local instance cards keep `Open UI` or `Start` as the visible primary action.
   Secondary management and inspection actions such as `Rename`, `See logs`,
-  `Open storage folder`, `Clone`, `Open A0 CLI`, `Stop`, and `Delete` belong in
-  the card overflow menu so they always apply to the specific instance shown.
+  `Open storage folder`, `Clone`, `Open A0 CLI`, dynamic `Start`/`Stop`, and
+  `Delete` belong in the card overflow menu so they always apply to the
+  specific instance shown.
   The card overflow menu should choose its up/down direction from available
   viewport space, reserve fixed bottom launcher chrome such as the resource
   footer, and use bounded internal scrolling when the window is short.

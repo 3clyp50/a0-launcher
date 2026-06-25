@@ -13,7 +13,22 @@ globalThis.window = {
   dockerManagerActions: {}
 };
 
-const { computeCardMenuPlacement, instanceVisualBadge } = await import('./local-testing.js');
+const { computeCardMenuPlacement, instanceVisualBadge, openCardMenu } = await import('./local-testing.js');
+
+function fakeClassList(initial = []) {
+  const values = new Set(initial);
+  return {
+    add: (...names) => names.forEach((name) => values.add(name)),
+    remove: (...names) => names.forEach((name) => values.delete(name)),
+    toggle: (name, force) => {
+      const shouldAdd = typeof force === 'boolean' ? force : !values.has(name);
+      if (shouldAdd) values.add(name);
+      else values.delete(name);
+      return shouldAdd;
+    },
+    contains: (name) => values.has(name)
+  };
+}
 
 test('channel instance chips include the matched concrete release', () => {
   assert.equal(
@@ -72,4 +87,51 @@ test('card menu placement clamps horizontal overflow', () => {
 
   assert.equal(placement.left, 12);
   assert.ok(placement.left + 220 <= 260 - 12);
+});
+
+test('card menu is positioned while hidden before it opens', () => {
+  window.innerWidth = 720;
+  window.innerHeight = 520;
+
+  const menuClasses = fakeClassList(['dm-card-menu']);
+  const cardClasses = fakeClassList(['dm-card']);
+  const triggerAttributes = {};
+  let measuredWhileHidden = false;
+
+  const trigger = {
+    setAttribute: (name, value) => { triggerAttributes[name] = String(value); },
+    getBoundingClientRect: () => ({ top: 360, right: 620, bottom: 392 })
+  };
+  const popover = {
+    style: {},
+    scrollWidth: 184,
+    scrollHeight: 260,
+    getBoundingClientRect: () => {
+      measuredWhileHidden = true;
+      assert.equal(menuClasses.contains('measuring'), true);
+      assert.equal(menuClasses.contains('open'), false);
+      return { width: 184, height: 260 };
+    }
+  };
+  const card = { classList: cardClasses };
+  const menu = {
+    classList: menuClasses,
+    closest: (selector) => selector === '.dm-card' ? card : null,
+    querySelector: (selector) => {
+      if (selector === '.dm-card-menu-trigger') return trigger;
+      if (selector === '.dm-card-menu-popover') return popover;
+      return null;
+    }
+  };
+
+  openCardMenu(menu, trigger);
+
+  assert.equal(measuredWhileHidden, true);
+  assert.equal(menuClasses.contains('measuring'), false);
+  assert.equal(menuClasses.contains('open'), true);
+  assert.equal(cardClasses.contains('menu-open'), true);
+  assert.equal(triggerAttributes['aria-expanded'], 'true');
+  assert.match(popover.style.left, /^\d+px$/);
+  assert.match(popover.style.top, /^\d+px$/);
+  assert.match(popover.style.maxHeight, /^\d+px$/);
 });

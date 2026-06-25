@@ -267,7 +267,7 @@ function fixedResourceFooterHeight() {
 
 function resetCardMenuPosition(menu) {
   if (!menu) return;
-  menu.classList.remove("open-up", "open-down");
+  menu.classList.remove("open-up", "open-down", "measuring");
   menu.closest?.(".dm-card")?.classList.remove("menu-open");
   const popover = menu.querySelector(".dm-card-menu-popover");
   if (popover) {
@@ -278,24 +278,19 @@ function resetCardMenuPosition(menu) {
 }
 
 function closeCardMenus(except = null) {
-  document.querySelectorAll(".dm-card-menu.open").forEach((menu) => {
+  document.querySelectorAll(".dm-card-menu.open, .dm-card-menu.measuring").forEach((menu) => {
     if (menu === except) return;
-    menu.classList.remove("open");
-    resetCardMenuPosition(menu);
-    menu.querySelector(".dm-card-menu-trigger")?.setAttribute("aria-expanded", "false");
+    closeCardMenu(menu, menu.querySelector(".dm-card-menu-trigger"));
   });
 }
 
 function positionCardMenu(menu) {
   const trigger = menu?.querySelector(".dm-card-menu-trigger");
   const popover = menu?.querySelector(".dm-card-menu-popover");
-  if (!trigger || !popover) return;
+  if (!trigger || !popover) return false;
 
   const edgeGap = 12;
   const menuGap = 6;
-  popover.style.left = "";
-  popover.style.top = "";
-  popover.style.maxHeight = "";
 
   const triggerRect = trigger.getBoundingClientRect();
   const popoverRect = popover.getBoundingClientRect();
@@ -317,10 +312,28 @@ function positionCardMenu(menu) {
   popover.style.left = `${placement.left}px`;
   popover.style.top = `${placement.top}px`;
   popover.style.maxHeight = placement.maxHeight ? `${placement.maxHeight}px` : "";
+  return true;
 }
 
 function positionOpenCardMenus() {
   document.querySelectorAll(".dm-card-menu.open").forEach((menu) => positionCardMenu(menu));
+}
+
+function openCardMenu(menu, trigger) {
+  if (!menu) return;
+  menu.closest?.(".dm-card")?.classList.add("menu-open");
+  menu.classList.add("measuring");
+  positionCardMenu(menu);
+  menu.classList.remove("measuring");
+  menu.classList.add("open");
+  trigger?.setAttribute("aria-expanded", "true");
+}
+
+function closeCardMenu(menu, trigger) {
+  if (!menu) return;
+  menu.classList.remove("open", "measuring");
+  resetCardMenuPosition(menu);
+  trigger?.setAttribute("aria-expanded", "false");
 }
 
 function bindCardMenuDismissal() {
@@ -377,13 +390,10 @@ function createCardMenu(items) {
     event.stopPropagation();
     const open = !menu.classList.contains("open");
     closeCardMenus(menu);
-    menu.classList.toggle("open", open);
-    trigger.setAttribute("aria-expanded", String(open));
     if (open) {
-      menu.closest?.(".dm-card")?.classList.add("menu-open");
-      positionCardMenu(menu);
+      openCardMenu(menu, trigger);
     } else {
-      resetCardMenuPosition(menu);
+      closeCardMenu(menu, trigger);
     }
   });
 
@@ -1244,7 +1254,7 @@ function render(state) {
   }
 }
 
-export { computeCardMenuPlacement, instanceVisualBadge };
+export { computeCardMenuPlacement, instanceVisualBadge, openCardMenu };
 
 window.addEventListener("dm:state", (e) => render(e.detail || {}));
 bindActions();

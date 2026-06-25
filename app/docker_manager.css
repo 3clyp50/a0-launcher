@@ -667,9 +667,15 @@ body {
   transform-origin: bottom right;
 }
 
+.dm-card-menu.measuring .dm-card-menu-popover,
 .dm-card-menu.open .dm-card-menu-popover {
   display: grid;
   gap: 0.1rem;
+}
+
+.dm-card-menu.measuring .dm-card-menu-popover {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .dm-card-menu-item {

@@ -3078,6 +3078,7 @@ function sanitizeDockerManagerProgress(progress) {
   if (typeof progress.opId === 'string') out.opId = progress.opId;
   if (typeof progress.type === 'string') out.type = progress.type;
   if (typeof progress.status === 'string') out.status = progress.status;
+  if (progress.presentation === 'toast') out.presentation = 'toast';
   if (typeof progress.startedAt === 'string') out.startedAt = progress.startedAt;
   if (typeof progress.finishedAt === 'string') out.finishedAt = progress.finishedAt;
   if (typeof progress.targetTag === 'string') out.targetTag = progress.targetTag;
@@ -3170,7 +3171,10 @@ ipcMain.handle('docker-manager:install', async (_event, body) => {
   try {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     const tag = typeof body.tag === 'string' ? body.tag : '';
-    const accepted = await dockerManager.installOrSync(tag);
+    const accepted = await dockerManager.installOrSync(tag, {
+      operationType: body.operationType === 'update' ? 'update' : '',
+      presentation: body.presentation === 'toast' ? 'toast' : ''
+    });
     if (!accepted || typeof accepted.opId !== 'string') {
       return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Install did not return an opId' });
     }

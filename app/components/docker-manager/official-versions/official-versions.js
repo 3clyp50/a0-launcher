@@ -307,36 +307,46 @@ function statusForEntry(entry) {
 }
 
 function actionForEntry(entry, state) {
-  if (entry.availability === "installing") return null;
+  return actionsForEntry(entry, state)[0] || null;
+}
+
+function actionsForEntry(entry, state) {
+  if (entry.availability === "installing") return [];
 
   if (entry.availability === "installed" || entry.availability === "update_available" || entry.differsFromPublished) {
-    return {
-      label: entry.availability === "update_available" || entry.differsFromPublished ? "Update" : "Run",
-      className: "button confirm",
-      handler: () => {
-        if (entry.availability === "update_available" || entry.differsFromPublished) {
-          window.dockerManagerActions?.installOrSync?.(entry.tag);
-          return;
-        }
-        openActivateDialog(entry, state);
+    const actions = [
+      {
+        label: "Run",
+        className: "button confirm",
+        handler: () => openActivateDialog(entry, state)
       }
-    };
+    ];
+
+    if (entry.availability === "update_available" || entry.differsFromPublished) {
+      actions.push({
+        label: "Update",
+        className: "button",
+        handler: () => window.dockerManagerActions?.updateInstall?.(entry.tag)
+      });
+    }
+
+    return actions;
   }
 
   if (entry.installability === "not_yet_available") {
-    return {
+    return [{
       label: "Not ready",
       className: "button",
       disabled: true,
       handler: () => {}
-    };
+    }];
   }
 
-  return {
+  return [{
     label: "Install",
     className: "button confirm",
     handler: () => window.dockerManagerActions?.installOrSync?.(entry.tag)
-  };
+  }];
 }
 
 function canRemoveEntry(entry) {
@@ -571,8 +581,8 @@ function renderEntryCard(entry, state, entries) {
   const actions = document.createElement("div");
   actions.className = "dm-card-actions";
 
-  const action = actionForEntry(entry, state);
-  if (action) {
+  const cardActions = actionsForEntry(entry, state) || [];
+  for (const action of cardActions) {
     const actionBtn = document.createElement("button");
     actionBtn.className = action.className;
     actionBtn.type = "button";
@@ -696,6 +706,7 @@ function render(state) {
 
 export {
   actionForEntry,
+  actionsForEntry,
   buildInstallCatalogModel,
   canRemoveEntry,
   defaultInstanceName,

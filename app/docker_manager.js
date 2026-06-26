@@ -5,6 +5,7 @@ import {
   normalizeInstanceDefaults
 } from "./components/docker-manager/instance-defaults.js";
 import { renderOperationDialog } from "./components/docker-manager/operation-modal/operation-modal.js";
+import { progressMetaText } from "./components/docker-manager/progress-eta.js";
 import { renderRuntimeGate } from "./components/docker-manager/runtime-gate/runtime-gate.js";
 
 function isErrorResponse(obj) {
@@ -92,11 +93,25 @@ window.toastFrontendWarning = (message, title = "Agent Zero", displayTime = 5, g
 
 const shownWorkspacePersistedOps = new Set();
 const shownBackgroundOperationFailures = new Set();
+const dismissedBackgroundProgressOps = new Set();
+const BACKGROUND_PROGRESS_TOAST_ID = "dmBackgroundProgressToast";
 let workspacePersistedDialogKeyHandler = null;
+let backgroundProgressToastTimer = 0;
 
 function cleanDialogText(value, fallback = "") {
   const text = typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
   return (text || fallback).slice(0, 160);
+}
+
+function progressPercentValue(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function progressPresentation(value) {
+  return typeof value === "string" && value.trim() === "toast" ? "toast" : "";
 }
 
 function migrationDisplayName(name, containerName, fallback) {
@@ -246,11 +261,169 @@ function notifyBackgroundOperationFailures(state = {}) {
   }
 }
 
+function backgroundProgressToastTone(progress = {}) {
+  const status = typeof progress?.status === "string" ? progress.status : "";
+  if (status === "failed") return "error";
+  if (status === "completed") return "success";
+  if (status === "canceled") return "warning";
+  return "info";
+}
+
+function backgroundProgressToastTitle(progress = {}) {
+  const status = typeof progress?.status === "string" ? progress.status : "";
+  const tag = cleanDialogText(progress?.targetTag);
+  const suffix = tag ? ` ${tag}` : "";
+  if (status === "failed") return "Update failed";
+  if (status === "completed") return "Update complete";
+  if (status === "canceled") return "Update canceled";
+  return `Updating${suffix}`;
+}
+
+function backgroundProgressPhase(progress = {}) {
+  const status = typeof progress?.status === "string" ? progress.status : "";
+  if (status === "failed") return cleanDialogText(progress?.error, "Update failed");
+  if (status === "completed") return "Updated";
+  if (status === "canceled") return cleanDialogText(progress?.error, "Canceled");
+  return cleanDialogText(progress?.phase || progress?.message || progress?.detail, "Working...");
+}
+
+function removeBackgroundProgressToast() {
+  window.clearTimeout(backgroundProgressToastTimer);
+  backgroundProgressToastTimer = 0;
+  document.getElementById(BACKGROUND_PROGRESS_TOAST_ID)?.remove();
+}
+
+function createBackgroundProgressToast(opId) {
+  removeBackgroundProgressToast();
+  const stack = getToastStack();
+  const toast = document.createElement("div");
+  toast.id = BACKGROUND_PROGRESS_TOAST_ID;
+  toast.dataset.opId = opId;
+  toast.className = "dm-toast info dm-background-progress-toast";
+
+  const icon = document.createElement("span");
+  icon.className = "material-symbols-outlined dm-toast-icon";
+  icon.setAttribute("aria-hidden", "true");
+
+  const content = document.createElement("div");
+  content.className = "dm-toast-content";
+
+  const title = document.createElement("div");
+  title.className = "dm-toast-title";
+
+  const message = document.createElement("div");
+  message.className = "dm-toast-message";
+
+  const progressBlock = document.createElement("div");
+  progressBlock.className = "sv-progress-block dm-toast-progress";
+
+  const progressHead = document.createElement("div");
+  progressHead.className = "sv-progress-head";
+
+  const phase = document.createElement("span");
+  phase.className = "dm-toast-progress-phase";
+
+  const meta = document.createElement("span");
+  meta.className = "dm-progress-meta dm-toast-progress-meta";
+
+  const track = document.createElement("div");
+  track.className = "sv-progress-track";
+
+  const fill = document.createElement("div");
+  fill.className = "sv-progress-fill dm-toast-progress-fill";
+
+  progressHead.appendChild(phase);
+  progressHead.appendChild(meta);
+  track.appendChild(fill);
+  progressBlock.appendChild(progressHead);
+  progressBlock.appendChild(track);
+
+  content.appendChild(title);
+  content.appendChild(message);
+  content.appendChild(progressBlock);
+
+  const dismiss = document.createElement("button");
+  dismiss.className = "dm-toast-dismiss dm-close-button";
+  dismiss.type = "button";
+  dismiss.title = "Dismiss";
+  dismiss.setAttribute("aria-label", "Dismiss");
+  dismiss.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">close</span>';
+  dismiss.addEventListener("click", () => {
+    dismissedBackgroundProgressOps.add(opId);
+    removeBackgroundProgressToast();
+  });
+
+  toast.appendChild(icon);
+  toast.appendChild(content);
+  toast.appendChild(dismiss);
+  stack.appendChild(toast);
+  return toast;
+}
+
+function renderBackgroundProgressToast(progress = null) {
+  const opId = cleanDialogText(progress?.opId);
+  if (!progress || progressPresentation(progress?.presentation) !== "toast" || !opId) {
+    removeBackgroundProgressToast();
+    return;
+  }
+
+  if (dismissedBackgroundProgressOps.has(opId)) return;
+
+  const toast = document.getElementById(BACKGROUND_PROGRESS_TOAST_ID)?.dataset?.opId === opId
+    ? document.getElementById(BACKGROUND_PROGRESS_TOAST_ID)
+    : createBackgroundProgressToast(opId);
+  if (!toast) return;
+
+  const status = typeof progress?.status === "string" ? progress.status : "";
+  const tone = backgroundProgressToastTone(progress);
+  toast.className = `dm-toast ${tone} dm-background-progress-toast`;
+  toast.querySelector(".dm-toast-icon").textContent = toastIcon(tone);
+  toast.querySelector(".dm-toast-title").textContent = backgroundProgressToastTitle(progress);
+  toast.querySelector(".dm-toast-message").textContent = backgroundProgressPhase(progress);
+
+  const numericProgress = progressPercentValue(status === "completed" ? 100 : progress?.progress);
+  const indeterminate = progress?.indeterminate === true || (status === "running" && numericProgress === null);
+  const meta = progressMetaText({
+    progress: numericProgress,
+    indeterminate,
+    startedAt: progress?.startedAt,
+    status,
+    fallbackProgress: progressPercentValue(progress?.downloadProgress)
+  });
+  const metaEl = toast.querySelector(".dm-toast-progress-meta");
+  if (metaEl) metaEl.textContent = meta;
+  const phaseEl = toast.querySelector(".dm-toast-progress-phase");
+  if (phaseEl) phaseEl.textContent = backgroundProgressPhase(progress);
+  const fill = toast.querySelector(".dm-toast-progress-fill");
+  if (fill) {
+    fill.className = `sv-progress-fill dm-toast-progress-fill${indeterminate ? " indeterminate" : ""}`;
+    fill.style.width = indeterminate ? "" : `${numericProgress === null ? 0 : numericProgress}%`;
+  }
+
+  if (status === "completed" || status === "failed" || status === "canceled") {
+    const finishKey = `${opId}:${status}:${progress?.finishedAt || ""}`;
+    if (toast.dataset.finishKey !== finishKey) {
+      window.clearTimeout(backgroundProgressToastTimer);
+      toast.dataset.finishKey = finishKey;
+      backgroundProgressToastTimer = window.setTimeout(() => {
+        if (document.getElementById(BACKGROUND_PROGRESS_TOAST_ID)?.dataset?.finishKey === finishKey) {
+          removeBackgroundProgressToast();
+        }
+      }, status === "failed" ? 9000 : 5500);
+    }
+  } else {
+    window.clearTimeout(backgroundProgressToastTimer);
+    backgroundProgressToastTimer = 0;
+    delete toast.dataset.finishKey;
+  }
+}
+
 function emitState() {
   const next = snapshot();
   window.__dmLastState = next;
   window.dispatchEvent(new CustomEvent("dm:state", { detail: next }));
   notifyBackgroundOperationFailures(next);
+  renderBackgroundProgressToast(next.progress);
   renderRuntimeGate(next, window.dockerManagerActions || {});
   renderOperationDialog(next, window.dockerManagerActions || {});
 }
@@ -617,14 +790,19 @@ async function selectRuntimeEndpoint(id) {
   }
 }
 
-async function installOrSync(tag) {
+async function installOrSync(tag, options = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.installOrSync !== "function") return;
+  const payload = options && typeof options === "object" ? options : {};
   return runDockerOperation(
-    "Install",
-    () => api.installOrSync(tag),
-    "Install requested."
+    payload.operationType === "update" ? "Update" : "Install",
+    () => api.installOrSync(tag, payload),
+    payload.operationType === "update" ? "" : "Install requested."
   );
+}
+
+async function updateInstall(tag) {
+  return installOrSync(tag, { operationType: "update", presentation: "toast" });
 }
 
 async function removeInstalledImage(tag) {
@@ -1343,6 +1521,7 @@ window.dockerManagerActions = {
   provisionRuntime,
   selectRuntimeEndpoint,
   installOrSync,
+  updateInstall,
   removeInstalledImage,
   startActive,
   startLocalInstance,

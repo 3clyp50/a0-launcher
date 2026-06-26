@@ -99,7 +99,14 @@ contextBridge.exposeInMainWorld('launcherUpdater', launcherUpdaterDebugAPI);
 contextBridge.exposeInMainWorld('dockerManagerAPI', {
   getState: () => ipcRenderer.invoke('docker-manager:getState'),
   refresh: () => ipcRenderer.invoke('docker-manager:refresh'),
-  installOrSync: (tag) => ipcRenderer.invoke('docker-manager:install', { tag }),
+  installOrSync: (tag, options) => {
+    const opts = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:install', {
+      tag,
+      operationType: typeof opts.operationType === 'string' ? opts.operationType : '',
+      presentation: typeof opts.presentation === 'string' ? opts.presentation : ''
+    });
+  },
   removeInstalledImage: (tag) => ipcRenderer.invoke('docker-manager:removeInstalledImage', { tag }),
   startActive: () => ipcRenderer.invoke('docker-manager:startActive'),
   startLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:startLocalInstance', { containerId }),

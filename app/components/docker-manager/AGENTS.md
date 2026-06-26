@@ -98,9 +98,10 @@ This scope owns:
   completion, the same modal may show a compact `Run Agent Zero with` selector.
   Hide that selector for zero or one usable endpoint, and do not add a runtime
   picker to Settings or the global chrome.
-- Post-runtime image, activation, update, rollback, start, stop, and delete
+- Post-runtime image installs, activation, rollback, start, stop, and delete
   progress should use the centered operation modal rather than a top-page
-  status strip.
+  status strip. Updating an already-installed image from Installs should keep
+  progress in a background toast so the existing install can still be used.
 - Local instance card `Start`, `Stop`, and `Delete` are the exception: they are
   accepted as background queued per-container actions so a slow or hanging
   container mutation does not block the rest of the launcher. Show only the
@@ -158,9 +159,10 @@ This scope owns:
   and avoid inset divider lines inside the colored artwork area.
 - Running an installed tag from Installs creates another managed local instance
   and must not stop existing instances or require a data-loss acknowledgement.
-  After the run operation reports completed with the UI-ready marker, the
-  renderer should switch to the Instances tab so the new managed Instance is
-  visible.
+  Stale installed tags should keep `Run` visible and expose `Update` as a
+  separate action. After the run operation reports completed with the UI-ready
+  marker, the renderer should switch to the Instances tab so the new managed
+  Instance is visible.
   Removing an installed tag must go through Docker Manager image removal and
   must be non-forced so Docker refuses images still used by an Instance.
   Destructive switch, update, and retained-instance activation flows must keep

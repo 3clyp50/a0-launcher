@@ -498,6 +498,25 @@ test('running operation without cancel support shows no cancel action', () => {
   assert.equal(model.secondary, null);
 });
 
+test('toast-presented update progress does not show the blocking operation modal', () => {
+  const document = installDom();
+  const state = {
+    progress: {
+      opId: 'op-update-toast',
+      type: 'update',
+      status: 'running',
+      presentation: 'toast',
+      targetTag: 'ready',
+      message: 'Downloading',
+      progress: 40
+    }
+  };
+
+  assert.equal(shouldShowOperationDialog(state), false);
+  assert.equal(renderOperationDialog(state, {}), false);
+  assert.equal(document.getElementById('operationProgressDialog'), null);
+});
+
 test('running clone operation shows source-specific headline', () => {
   installDom();
   const state = {

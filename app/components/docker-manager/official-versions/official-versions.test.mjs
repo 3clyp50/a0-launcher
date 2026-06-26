@@ -13,6 +13,7 @@ globalThis.window = {
 
 const {
   actionForEntry,
+  actionsForEntry,
   buildInstallCatalogModel,
   canRemoveEntry,
   defaultInstanceName,
@@ -33,6 +34,32 @@ test('installed active entries still expose Run for additional instances', () =>
 
   assert.equal(action?.label, 'Run');
   assert.equal(action?.disabled, undefined);
+});
+
+test('update-ready install entries keep Run and expose Update separately', () => {
+  const actions = actionsForEntry({
+    tag: 'ready',
+    availability: 'update_available'
+  }, {});
+
+  assert.deepEqual(actions.map((action) => action.label), ['Run', 'Update']);
+  assert.equal(actions[0].className, 'button confirm');
+  assert.equal(actions[1].className, 'button');
+});
+
+test('update action uses background install update flow', () => {
+  let updatedTag = '';
+  globalThis.window.dockerManagerActions = {
+    updateInstall: (tag) => { updatedTag = tag; }
+  };
+
+  const actions = actionsForEntry({
+    tag: 'latest',
+    availability: 'update_available'
+  }, {});
+  actions.find((action) => action.label === 'Update')?.handler();
+
+  assert.equal(updatedTag, 'latest');
 });
 
 test('running operations still suppress install card actions', () => {

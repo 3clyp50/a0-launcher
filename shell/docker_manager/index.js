@@ -1692,12 +1692,14 @@ function requireNoRunningOperation() {
   }
 }
 
-function beginOperation(type, targetTag) {
+function beginOperation(type, targetTag, options = {}) {
   requireNoRunningOperation();
+  const presentation = options?.presentation === 'toast' ? 'toast' : 'modal';
   const opId = `op_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
   _currentOperation = {
     opId,
     type,
+    presentation,
     status: 'running',
     startedAt: nowIso(),
     finishedAt: null,
@@ -4040,17 +4042,22 @@ async function enforceRetention(docker, imageRepo, policy) {
   }
 }
 
-async function installOrSync(tag) {
+async function installOrSync(tag, options = {}) {
   const imageRepo = getBackendImageRepo();
   const t = assertTagAllowedForInstall(tag);
+  const operationType = options?.operationType === 'update' ? 'update' : 'install';
+  const presentation = options?.presentation === 'toast' ? 'toast' : 'modal';
 
   requireNoRunningOperation();
-  const opId = beginOperation('install', t);
+  const opId = beginOperation(operationType, t, { presentation });
 
   (async () => {
     let docker;
     try {
-      updateOperationProgress({ message: 'Checking availability', progress: null });
+      updateOperationProgress({
+        message: operationType === 'update' ? 'Checking for updates' : 'Checking availability',
+        progress: null
+      });
 
       docker = await getManagedDocker(imageRepo);
       const cache = await stateStore.readInstallabilityCache();
@@ -4132,7 +4139,7 @@ async function installOrSync(tag) {
         (error && typeof error === 'object' && error.code === 'NOT_YET_AVAILABLE'
           ? 'This version is not available yet. Please try again later.'
           : '') ||
-        'Install failed';
+        (operationType === 'update' ? 'Update failed' : 'Install failed');
       finishOperation('failed', message, error?.code || null);
     } finally {
       _abortControllers.delete(opId);

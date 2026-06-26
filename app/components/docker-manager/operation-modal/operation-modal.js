@@ -124,6 +124,7 @@ function shouldShowOperationDialog(state = {}) {
   const progress = state?.progress || null;
   const status = asText(progress?.status);
   if (!progress || progress.type === "runtime_setup") return false;
+  if (asText(progress?.presentation) === "toast") return false;
   if (shouldShowFirstInstanceSetup(state)) return true;
   if (status === "running") return true;
   if ((status === "failed" || status === "canceled") && dismissedOperationKey !== operationKey(progress)) return true;

@@ -5,6 +5,7 @@ import {
   buildInstanceEnvText,
   defaultInstanceName,
   normalizeInstanceDefaults,
+  providerApiKeyPlaceholder,
   readInstanceDefaultsFromForm
 } from "../instance-defaults.js";
 import { shouldShowSetupShowcase } from "../setup-showcase/setup-showcase.js";
@@ -83,7 +84,7 @@ function createModelRows(slots, defaults) {
     apiKey.type = "password";
     apiKey.autocomplete = "off";
     apiKey.value = entry.apiKey || "";
-    apiKey.placeholder = slot.keyPlaceholder || "";
+    apiKey.placeholder = providerApiKeyPlaceholder(slot, entry.provider || slot.defaultProvider);
     apiKey.setAttribute("aria-label", `${slot.label} API key`);
     controls.appendChild(apiKey);
 

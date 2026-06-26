@@ -1,6 +1,7 @@
 import {
   ADVANCED_INSTANCE_MODEL_SLOTS,
   PRIMARY_INSTANCE_MODEL_SLOTS,
+  bindInstanceDefaultProviderPlaceholderSync,
   buildInstanceEnvTextFromForm,
   defaultInstanceName,
   instanceModelRowsHtml,
@@ -277,7 +278,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
         <h2 id="activateInstanceTitle" class="dm-dialog-title">${escapeHtml(title)}</h2>
         <button class="button dm-dialog-close" type="button" data-dialog-close aria-label="Close">×</button>
       </div>
-      <div class="dm-dialog-body">
+      <div class="dm-dialog-body dm-run-instance-body">
         ${versionField}
         <div class="dm-field">
           <label for="activateInstanceName">Instance name</label>
@@ -293,7 +294,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
           <div class="dm-field-hint">Optional. Leave blank to use Agent Zero defaults or finish login setup in the Web UI.</div>
           <label class="dm-checkbox-line">
             <input id="activateRememberCredentials" type="checkbox">
-            <span>Save in Launcher for A0 CLI</span>
+            <span>Save credentials for A0 CLI</span>
           </label>
         </div>
         <div class="dm-field dm-model-defaults">
@@ -359,6 +360,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   const envInput = dialog.querySelector("#activateEnvVars");
   let nameDirty = false;
 
+  bindInstanceDefaultProviderPlaceholderSync(dialog, "activate");
   if (nameInput) nameInput.value = defaultInstanceName(initialTag, state);
   if (portInput) portInput.value = "0:80";
   if (storageHostRootInput) storageHostRootInput.value = state?.storagePreferences?.hostRoot || "~/agent-zero";
@@ -391,7 +393,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
     const password = cleanEnvValue(dialog.querySelector("#activateAuthPassword")?.value || "", 4096);
     const rememberCredentials = dialog.querySelector("#activateRememberCredentials")?.checked === true;
     if (rememberCredentials && (!username || !password)) {
-      window.toastFrontendError?.("Enter both username and password to save launcher credentials.", "Agent Zero");
+      window.toastFrontendError?.("Enter both username and password to save credentials for A0 CLI.", "Agent Zero");
       return;
     }
     const envText = mergeGeneratedEnvText(authEnvLinesFromValues({ username, password }), envResult.value || "");

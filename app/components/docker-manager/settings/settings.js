@@ -3,6 +3,7 @@ import {
   PRIMARY_INSTANCE_MODEL_SLOTS,
   applyInstanceDefaultsToForm,
   bindInstanceDefaultDirtyTracking,
+  bindInstanceDefaultProviderPlaceholderSync,
   buildInstanceEnvText,
   clearInstanceDefaultDirty,
   instanceModelRowsHtml,
@@ -30,6 +31,7 @@ function renderModelFields() {
     advanced.innerHTML = instanceModelRowsHtml(ADVANCED_INSTANCE_MODEL_SLOTS, null, "settings");
     advanced.dataset.rendered = "1";
   }
+  bindInstanceDefaultProviderPlaceholderSync(document, "settings");
 }
 
 function populateFromState(state) {

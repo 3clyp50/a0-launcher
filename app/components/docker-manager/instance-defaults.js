@@ -162,6 +162,27 @@ function slotFieldId(prefix, slotId, field) {
   return `${prefix}${slotId}${field}`;
 }
 
+function humanizeProviderId(provider) {
+  return String(provider || "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b[a-z]/g, (match) => match.toUpperCase());
+}
+
+function providerLabel(slot, provider) {
+  const normalized = cleanText(provider, 96);
+  const match = (slot.providerOptions || []).find(([value]) => value === normalized);
+  return String(match?.[1] || humanizeProviderId(normalized)).trim();
+}
+
+function providerApiKeyPlaceholder(slot, provider) {
+  const label = providerLabel(slot, provider || slot.defaultProvider);
+  if (!label || label.toLowerCase() === "other") return "Provider API key";
+  if (/\bAPI$/i.test(label)) return `${label} key`;
+  return `${label} API key`;
+}
+
 function instanceModelRowsHtml(slots, defaults = null, prefix = "activate") {
   const normalized = normalizeInstanceDefaults(defaults);
   return slots.map((slot) => {
@@ -172,6 +193,7 @@ function instanceModelRowsHtml(slots, defaults = null, prefix = "activate") {
     const provider = entry.provider || slot.defaultProvider;
     const model = entry.model || "";
     const apiKey = entry.apiKey || "";
+    const apiKeyPlaceholder = providerApiKeyPlaceholder(slot, provider);
     return `
       <div class="dm-model-section">
         <div class="dm-model-label">${slot.label}</div>
@@ -182,7 +204,7 @@ function instanceModelRowsHtml(slots, defaults = null, prefix = "activate") {
             </select>
             <input id="${modelId}" class="dm-text-input" type="text" autocomplete="off" aria-label="${slot.label} model" placeholder="${slot.modelPlaceholder}" value="${escapeAttribute(model)}">
           </div>
-          <input id="${apiKeyId}" class="dm-text-input dm-model-api-key" type="password" autocomplete="off" aria-label="${slot.label} API key" placeholder="${slot.keyPlaceholder}" value="${escapeAttribute(apiKey)}">
+          <input id="${apiKeyId}" class="dm-text-input dm-model-api-key" type="password" autocomplete="off" aria-label="${slot.label} API key" placeholder="${escapeAttribute(apiKeyPlaceholder)}" value="${escapeAttribute(apiKey)}">
         </div>
       </div>
     `;
@@ -214,6 +236,7 @@ function applyInstanceDefaultsToForm(root, prefix, defaults, options = {}) {
     if (model && (!respectDirty || !model.dataset.dirty)) model.value = entry.model || "";
     if (apiKey && (!respectDirty || !apiKey.dataset.dirty)) apiKey.value = entry.apiKey || "";
   }
+  syncInstanceDefaultApiKeyPlaceholders(root, prefix);
 }
 
 function readInstanceDefaultsFromForm(root, prefix) {
@@ -228,6 +251,31 @@ function readInstanceDefaultsFromForm(root, prefix) {
   return normalizeInstanceDefaults({ models });
 }
 
+function syncInstanceDefaultApiKeyPlaceholder(root, prefix, slot) {
+  const provider = root?.querySelector?.(`#${slotFieldId(prefix, slot.id, "Provider")}`);
+  const apiKey = root?.querySelector?.(`#${slotFieldId(prefix, slot.id, "ApiKey")}`);
+  if (!apiKey) return;
+  apiKey.placeholder = providerApiKeyPlaceholder(slot, provider?.value || slot.defaultProvider);
+}
+
+function syncInstanceDefaultApiKeyPlaceholders(root, prefix) {
+  for (const slot of INSTANCE_MODEL_SLOTS) {
+    syncInstanceDefaultApiKeyPlaceholder(root, prefix, slot);
+  }
+}
+
+function bindInstanceDefaultProviderPlaceholderSync(root, prefix) {
+  for (const slot of INSTANCE_MODEL_SLOTS) {
+    const provider = root?.querySelector?.(`#${slotFieldId(prefix, slot.id, "Provider")}`);
+    if (!provider) continue;
+    if (!provider.dataset.boundApiKeyPlaceholder) {
+      provider.dataset.boundApiKeyPlaceholder = "1";
+      provider.addEventListener("change", () => syncInstanceDefaultApiKeyPlaceholder(root, prefix, slot));
+    }
+    syncInstanceDefaultApiKeyPlaceholder(root, prefix, slot);
+  }
+}
+
 function bindInstanceDefaultDirtyTracking(root, prefix) {
   for (const slot of INSTANCE_MODEL_SLOTS) {
     for (const field of ["Provider", "Model", "ApiKey"]) {
@@ -238,6 +286,7 @@ function bindInstanceDefaultDirtyTracking(root, prefix) {
       el.addEventListener(eventName, () => { el.dataset.dirty = "1"; });
     }
   }
+  bindInstanceDefaultProviderPlaceholderSync(root, prefix);
 }
 
 function clearInstanceDefaultDirty(root, prefix) {
@@ -319,6 +368,7 @@ export {
   PRIMARY_INSTANCE_MODEL_SLOTS,
   applyInstanceDefaultsToForm,
   bindInstanceDefaultDirtyTracking,
+  bindInstanceDefaultProviderPlaceholderSync,
   buildInstanceEnvText,
   buildInstanceEnvTextFromForm,
   clearInstanceDefaultDirty,
@@ -326,5 +376,6 @@ export {
   defaultInstanceName,
   instanceModelRowsHtml,
   normalizeInstanceDefaults,
+  providerApiKeyPlaceholder,
   readInstanceDefaultsFromForm
 };

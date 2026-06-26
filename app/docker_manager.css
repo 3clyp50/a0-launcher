@@ -1622,6 +1622,10 @@ body {
   overflow-y: auto;
 }
 
+.dm-run-instance-body {
+  gap: 1.15rem;
+}
+
 .dm-color-dialog {
   width: min(24rem, calc(100vw - 2rem));
 }

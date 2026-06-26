@@ -66,6 +66,118 @@ test('listContainers formats UI URLs from selected public host port', async () =
   ]);
 });
 
+test('listContainers recovers containers whose original repo tag became dangling', async () => {
+  const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
+  const imageId = 'sha256:34a8092dabba63747b4c472a7af3e615315ab34e0ab115fddd85e4f613e50e7d';
+  docker.docker = {
+    listContainers: async () => [
+      {
+        Id: 'dangling-container-id',
+        Image: '34a8092dabba',
+        ImageID: imageId,
+        Names: ['/agent-zero-ready'],
+        Labels: {},
+        State: 'running',
+        Status: 'Up 2 minutes',
+        Created: 1781760000,
+        Ports: [
+          { PrivatePort: 80, PublicPort: 32080, Type: 'tcp', IP: '127.0.0.1' }
+        ]
+      }
+    ],
+    getContainer: (containerId) => {
+      assert.equal(containerId, 'dangling-container-id');
+      return {
+        inspect: async () => ({
+          Image: imageId,
+          Config: {
+            Image: 'agent0ai/agent-zero:ready',
+            Labels: {}
+          }
+        })
+      };
+    }
+  };
+
+  const [container] = await docker.listContainers('agent0ai/agent-zero');
+
+  assert.equal(container.imageRef, 'agent0ai/agent-zero:ready');
+  assert.equal(container.imageSummaryRef, '34a8092dabba');
+  assert.equal(container.imageId, imageId);
+  assert.equal(container.tag, 'ready');
+  assert.equal(container.versionTag, 'ready');
+  assert.equal(container.uiUrl, 'http://127.0.0.1:32080/');
+});
+
+test('listContainers ignores unrelated dangling containers after inspect', async () => {
+  const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
+  docker.docker = {
+    listContainers: async () => [
+      {
+        Id: 'other-container-id',
+        Image: '34a8092dabba',
+        Names: ['/postgres-old'],
+        Labels: {},
+        State: 'running',
+        Status: 'Up 2 minutes',
+        Created: 1781760000,
+        Ports: []
+      }
+    ],
+    getContainer: (containerId) => {
+      assert.equal(containerId, 'other-container-id');
+      return {
+        inspect: async () => ({
+          Image: 'sha256:34a8092dabba63747b4c472a7af3e615315ab34e0ab115fddd85e4f613e50e7d',
+          Config: {
+            Image: 'postgres:16',
+            Labels: {}
+          }
+        })
+      };
+    }
+  };
+
+  const containers = await docker.listContainers('agent0ai/agent-zero');
+
+  assert.deepEqual(containers, []);
+});
+
+test('listContainers includes legacy Agent Zero install-script containers by label', async () => {
+  const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
+  docker.docker = {
+    listContainers: async () => [
+      {
+        Id: 'legacy-container-id',
+        Image: '34a8092dabba',
+        Names: ['/agent-zero'],
+        Labels: { 'ai.agent0.managed': 'true' },
+        State: 'running',
+        Status: 'Up 2 minutes',
+        Created: 1781760000,
+        Ports: []
+      }
+    ],
+    getContainer: (containerId) => {
+      assert.equal(containerId, 'legacy-container-id');
+      return {
+        inspect: async () => ({
+          Image: 'sha256:34a8092dabba63747b4c472a7af3e615315ab34e0ab115fddd85e4f613e50e7d',
+          Config: {
+            Image: '34a8092dabba',
+            Labels: { 'ai.agent0.managed': 'true' }
+          }
+        })
+      };
+    }
+  };
+
+  const [container] = await docker.listContainers('agent0ai/agent-zero');
+
+  assert.equal(container.containerId, 'legacy-container-id');
+  assert.equal(container.labels['ai.agent0.managed'], 'true');
+});
+
 test('readContainerTextFile extracts text from a Docker archive', async () => {
   const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
   docker.docker = {

@@ -135,9 +135,14 @@ This scope owns:
   shell-owned `docker login`.
 - `impl/DockerodeDocker.mjs` may surface launcher-managed container labels as
   structured metadata and may include containers labeled
-  `a0.launcher.managed=true` in `listContainers()` even when their image repo
-  differs from the default Agent Zero repo. Keep UI language and product
+  `a0.launcher.managed=true` or legacy Agent Zero install-script containers
+  labeled `ai.agent0.managed=true` in `listContainers()` even when their image
+  repo differs from the default Agent Zero repo. Keep UI language and product
   decisions in `shell/docker_manager` or the renderer.
+- Docker may report a container's summary image as an image id or `<none>` after
+  the original tag is replaced. `listContainers()` should recover
+  `Config.Image` from container inspect for those unresolved summaries before
+  deciding whether the container belongs to the requested image repo.
 - Runtime diagnostics may expose sanitized Docker Engine `version()` and
   `info()` fields through `getRuntimeDiagnostics()`. Keep the payload bounded
   and generic; product grouping and visible copy belong above this layer.

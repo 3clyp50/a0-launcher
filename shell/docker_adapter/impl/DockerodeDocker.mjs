@@ -35,6 +35,31 @@ function tagFromRef(imageRef) {
   return '';
 }
 
+function imageRefMatchesRepo(imageRef, repo) {
+  const ref = (imageRef || '').trim();
+  return !!ref && imageRepoFromRef(ref) === repo;
+}
+
+function looksLikeDockerImageId(imageRef) {
+  const ref = (imageRef || '').trim();
+  return /^(?:sha256:)?[a-f0-9]{12,64}$/i.test(ref);
+}
+
+function hasNoneImageTag(imageRef) {
+  const ref = (imageRef || '').trim();
+  if (!ref) return false;
+  if (ref === '<none>' || ref === '<none>:<none>') return true;
+  return tagFromRef(ref) === '<none>';
+}
+
+function shouldInspectContainerImageRef(imageRef) {
+  return looksLikeDockerImageId(imageRef) || hasNoneImageTag(imageRef);
+}
+
+function managedContainerFromLabels(labels) {
+  return labels?.['a0.launcher.managed'] === 'true' || labels?.['ai.agent0.managed'] === 'true';
+}
+
 function splitTaggedImageRef(imageRef) {
   const ref = (imageRef || '').trim();
   const lastSlash = ref.lastIndexOf('/');
@@ -360,6 +385,26 @@ function dockerodeOptionsFromEnv(env) {
   }
 
   return base;
+}
+
+async function inspectContainerImageMetadata(dockerode, containerId) {
+  const id = (containerId || '').trim();
+  if (!id) return null;
+
+  try {
+    const container = dockerode.getContainer(id);
+    const inspect = await Promise.resolve(container.inspect());
+    const labels = inspect?.Config?.Labels && typeof inspect.Config.Labels === 'object'
+      ? inspect.Config.Labels
+      : null;
+    return {
+      configImage: typeof inspect?.Config?.Image === 'string' ? inspect.Config.Image : '',
+      imageId: typeof inspect?.Image === 'string' ? inspect.Image : '',
+      labels
+    };
+  } catch {
+    return null;
+  }
 }
 
 export class DockerodeDocker extends DockerInterface {
@@ -929,24 +974,41 @@ export class DockerodeDocker extends DockerInterface {
       const results = [];
 
       for (const c of containers || []) {
-        const image = typeof c?.Image === 'string' ? c.Image : '';
+        const summaryImage = typeof c?.Image === 'string' ? c.Image : '';
+        let image = summaryImage;
         const names = Array.isArray(c?.Names) ? c.Names : [];
         const name = typeof names[0] === 'string' ? names[0].replace(/^\//, '') : null;
-        const labels = c?.Labels && typeof c.Labels === 'object' ? c.Labels : {};
+        let labels = c?.Labels && typeof c.Labels === 'object' ? c.Labels : {};
         const ports = Array.isArray(c?.Ports) ? c.Ports : [];
-        const isRepoImage = image.startsWith(`${repo}:`);
-        const isManagedContainer = labels['a0.launcher.managed'] === 'true';
+        let imageId = typeof c?.ImageID === 'string' && c.ImageID ? c.ImageID : null;
+        let isRepoImage = imageRefMatchesRepo(image, repo);
+        let isManagedContainer = managedContainerFromLabels(labels);
+
+        if (shouldInspectContainerImageRef(image)) {
+          const inspected = await inspectContainerImageMetadata(this.docker, c?.Id || '');
+          if (inspected?.labels) labels = { ...inspected.labels, ...labels };
+          if (!imageId && inspected?.imageId) imageId = inspected.imageId;
+          const configImage = inspected?.configImage || '';
+          if (imageRefMatchesRepo(configImage, repo) || (hasNoneImageTag(image) && configImage)) {
+            image = configImage;
+          }
+          isRepoImage = imageRefMatchesRepo(image, repo);
+          isManagedContainer = managedContainerFromLabels(labels);
+        }
+
         if (!isRepoImage && !isManagedContainer) continue;
 
         const uiPort = bestUiPortFromList(ports);
         const tag = isRepoImage
-          ? image.slice(repo.length + 1)
+          ? tagFromRef(image) || image
           : labels['a0.launcher.versionTag'] || tagFromRef(image) || image;
         results.push({
           containerId: c?.Id || null,
           containerName: name,
           instanceName: typeof labels['a0.launcher.instanceName'] === 'string' ? labels['a0.launcher.instanceName'] : null,
           imageRef: image,
+          imageSummaryRef: summaryImage,
+          imageId,
           tag,
           versionTag: tag,
           state: c?.State || null,

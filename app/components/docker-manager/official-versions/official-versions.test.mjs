@@ -21,7 +21,8 @@ const {
   filterInstallEntries,
   isInstalledEntry,
   metaPartsForEntry,
-  releaseMatchBadgeLabel
+  releaseMatchBadgeLabel,
+  statusForEntry
 } = await import('./official-versions.js');
 
 test('installed active entries still expose Run for additional instances', () => {
@@ -45,6 +46,21 @@ test('update-ready install entries keep Run and expose Update separately', () =>
   assert.deepEqual(actions.map((action) => action.label), ['Run', 'Update']);
   assert.equal(actions[0].className, 'button confirm');
   assert.equal(actions[1].className, 'button');
+});
+
+test('update-ready install entries do not render a duplicate status chip', () => {
+  assert.equal(statusForEntry({
+    tag: 'ready',
+    availability: 'update_available'
+  }), null);
+
+  assert.deepEqual(statusForEntry({
+    tag: 'latest',
+    availability: 'installed'
+  }), {
+    className: 'status-installed',
+    label: 'Installed'
+  });
 });
 
 test('update action uses background install update flow', () => {

@@ -755,6 +755,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
+  margin-left: auto;
 }
 
 .dm-card-menu {
@@ -1545,6 +1546,18 @@ body {
 
 .dm-toast-progress-meta {
   max-width: 42%;
+}
+
+.dm-toast-progress-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.55rem;
+}
+
+.dm-toast-progress-cancel {
+  min-height: 1.65rem;
+  padding: 0.18rem 0.6rem;
+  font-size: 0.74rem;
 }
 
 .dm-toast-dismiss {

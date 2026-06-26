@@ -290,6 +290,17 @@ function backgroundProgressPhase(progress = {}) {
   return cleanDialogText(progress?.phase || progress?.message || progress?.detail, "Working...");
 }
 
+function backgroundProgressCanCancel(progress = {}) {
+  return cleanDialogText(progress?.status) === "running" &&
+    !!cleanDialogText(progress?.opId) &&
+    progress?.canCancel === true;
+}
+
+function backgroundProgressCancelLabel(progress = {}) {
+  const type = cleanDialogText(progress?.type);
+  return type === "install" || type === "update" || type === "developer_run" ? "Cancel download" : "Cancel";
+}
+
 function removeBackgroundProgressToast() {
   window.clearTimeout(backgroundProgressToastTimer);
   backgroundProgressToastTimer = 0;
@@ -341,8 +352,26 @@ function createBackgroundProgressToast(opId) {
   progressBlock.appendChild(progressHead);
   progressBlock.appendChild(track);
 
+  const progressActions = document.createElement("div");
+  progressActions.className = "dm-toast-progress-actions";
+  progressActions.hidden = true;
+  const cancel = document.createElement("button");
+  cancel.className = "button cancel dm-toast-progress-cancel";
+  cancel.type = "button";
+  cancel.hidden = true;
+  cancel.disabled = true;
+  cancel.textContent = "Cancel download";
+  cancel.addEventListener("click", () => {
+    const targetOpId = cleanDialogText(toast.dataset.opId || opId);
+    if (!targetOpId) return;
+    cancel.disabled = true;
+    window.dockerManagerActions?.cancelOperation?.(targetOpId);
+  });
+  progressActions.appendChild(cancel);
+
   content.appendChild(title);
   content.appendChild(progressBlock);
+  content.appendChild(progressActions);
 
   const dismiss = document.createElement("button");
   dismiss.className = "dm-toast-dismiss dm-close-button";
@@ -408,6 +437,15 @@ function renderBackgroundProgressToast(progress = null) {
   if (fill) {
     fill.className = `sv-progress-fill dm-toast-progress-fill${indeterminate ? " indeterminate" : ""}`;
     fill.style.width = indeterminate ? "" : `${numericProgress === null ? 0 : numericProgress}%`;
+  }
+  const cancel = toast.querySelector(".dm-toast-progress-cancel");
+  const cancelActions = toast.querySelector(".dm-toast-progress-actions");
+  if (cancel) {
+    const canCancel = !!backgroundProgressCanCancel(progress);
+    if (cancelActions) cancelActions.hidden = !canCancel;
+    cancel.hidden = !canCancel;
+    cancel.disabled = !canCancel;
+    cancel.textContent = backgroundProgressCancelLabel(progress);
   }
 
   if (status === "completed" || status === "failed" || status === "canceled") {

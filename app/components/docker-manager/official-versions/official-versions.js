@@ -286,7 +286,7 @@ function statusForEntry(entry) {
   }
 
   if (entry.availability === "update_available" || entry.differsFromPublished) {
-    return { className: "status-update", label: "Update available" };
+    return null;
   }
 
   if (entry.availability === "installed") {
@@ -430,12 +430,14 @@ function renderEntryCard(entry, state, entries) {
   const footer = document.createElement("div");
   footer.className = "dm-card-footer";
 
-  const statusEl = document.createElement("span");
-  statusEl.className = "status";
   const status = statusForEntry(entry);
-  statusEl.classList.add(status.className);
-  statusEl.textContent = status.label;
-  footer.appendChild(statusEl);
+  if (status) {
+    const statusEl = document.createElement("span");
+    statusEl.className = "status";
+    statusEl.classList.add(status.className);
+    statusEl.textContent = status.label;
+    footer.appendChild(statusEl);
+  }
 
   const actions = document.createElement("div");
   actions.className = "dm-card-actions";
@@ -573,7 +575,8 @@ export {
   filterInstallEntries,
   isInstalledEntry,
   metaPartsForEntry,
-  releaseMatchBadgeLabel
+  releaseMatchBadgeLabel,
+  statusForEntry
 };
 
 window.addEventListener("dm:state", (e) => render(e.detail || {}));

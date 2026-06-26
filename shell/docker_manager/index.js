@@ -1462,6 +1462,31 @@ async function waitForUiReachable(docker, containerId, options = {}) {
   }
 }
 
+async function waitForStartedLocalInstanceUi(docker, containerId, options = {}) {
+  const onStatus = typeof options.onStatus === 'function' ? options.onStatus : null;
+  if (onStatus) onStatus({ message: 'Waiting for UI', uiReady: false });
+  const waitRes = await waitForUiReachable(docker, containerId, {
+    timeoutMs: Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : UI_READY_TIMEOUT_MS,
+    intervalMs: Number.isFinite(Number(options.intervalMs)) ? Number(options.intervalMs) : 450,
+    attemptTimeoutMs: Number.isFinite(Number(options.attemptTimeoutMs))
+      ? Number(options.attemptTimeoutMs)
+      : UI_READY_ATTEMPT_TIMEOUT_MS
+  });
+  if (!waitRes.ok) {
+    const err = new Error('Agent Zero started, but the UI is not reachable yet.');
+    err.code = 'UI_NOT_READY';
+    throw err;
+  }
+  if (onStatus) {
+    onStatus({
+      message: 'UI ready',
+      uiReady: true,
+      uiUrl: waitRes.uiUrl || ''
+    });
+  }
+  return waitRes;
+}
+
 function computeImageBytesStats(localImages) {
   const byId = new Map();
   let maxImageBytes = 0;
@@ -1624,13 +1649,20 @@ function enqueueContainerOperation({ type, containerId, message, run }) {
         startedAt: nowIso(),
         message: message || ''
       });
+      let failure = null;
       try {
-        await run(id);
-        finishBackgroundOperation(opId, 'completed');
+        await run(id, opId);
       } catch (error) {
-        finishBackgroundOperation(opId, 'failed', error);
+        failure = error;
+      }
+
+      try {
+        await refreshDockerManager({ forceRefresh: false });
+      } catch {
+        // Keep background action completion independent from inventory refresh.
       } finally {
-        refreshDockerManager({ forceRefresh: false }).catch(() => {});
+        if (failure) finishBackgroundOperation(opId, 'failed', failure);
+        else finishBackgroundOperation(opId, 'completed');
         setTimeout(() => {
           pruneBackgroundOperation(opId);
         }, 2000);
@@ -4282,7 +4314,7 @@ async function startLocalInstance(containerId) {
     type: 'start',
     containerId: id,
     message: 'Starting',
-    run: async (targetId) => {
+    run: async (targetId, opId) => {
       const docker = await getManagedDocker(imageRepo);
       const containers = await docker.listContainers(imageRepo);
       const target = (containers || []).find((c) => c && c.containerId === targetId) || null;
@@ -4297,6 +4329,10 @@ async function startLocalInstance(containerId) {
       if (state !== 'running') {
         await docker.startContainer(target.containerId);
       }
+
+      await waitForStartedLocalInstanceUi(docker, target.containerId, {
+        onStatus: (patch) => updateBackgroundOperation(opId, patch)
+      });
     }
   });
 }
@@ -5610,6 +5646,7 @@ module.exports = {
     workspaceStorageFromInspect,
     workspaceHostPathFromInspect,
     waitForUiReachable,
+    waitForStartedLocalInstanceUi,
     remoteHealthUrl,
     requestRemoteHealth,
     parsePortMappings,

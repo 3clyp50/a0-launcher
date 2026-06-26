@@ -18,6 +18,7 @@ const {
   workspaceStorageFromInspect,
   workspaceHostPathFromInspect,
   waitForUiReachable,
+  waitForStartedLocalInstanceUi,
   remoteHealthUrl,
   requestRemoteHealth,
   parsePortMappings,
@@ -176,6 +177,53 @@ test('UI readiness wait retries while a published port is still warming up', asy
     assert.equal(result.ok, true);
     assert.equal(result.uiUrl, `http://127.0.0.1:${address.port}/`);
     assert.ok(hits >= 2);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('local instance start readiness reports waiting until the UI responds', async () => {
+  let hits = 0;
+  const server = http.createServer((_req, res) => {
+    hits += 1;
+    if (hits < 3) {
+      res.destroy();
+      return;
+    }
+    res.statusCode = 200;
+    res.end('ok');
+  });
+  const address = await listenLocalServer(server);
+  const statusPatches = [];
+
+  try {
+    const fakeDocker = {
+      async inspectContainer(containerId) {
+        assert.equal(containerId, 'container-1');
+        return {
+          NetworkSettings: {
+            Ports: {
+              '80/tcp': [{ HostPort: String(address.port) }]
+            }
+          }
+        };
+      }
+    };
+
+    const result = await waitForStartedLocalInstanceUi(fakeDocker, 'container-1', {
+      timeoutMs: 1500,
+      intervalMs: 30,
+      attemptTimeoutMs: 90,
+      onStatus: (patch) => statusPatches.push(patch)
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.uiUrl, `http://127.0.0.1:${address.port}/`);
+    assert.deepEqual(statusPatches, [
+      { message: 'Waiting for UI', uiReady: false },
+      { message: 'UI ready', uiReady: true, uiUrl: `http://127.0.0.1:${address.port}/` }
+    ]);
+    assert.ok(hits >= 3);
   } finally {
     await closeServer(server);
   }

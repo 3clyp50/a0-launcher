@@ -123,6 +123,8 @@ function backgroundOperationForContainer(state, containerId) {
 function backgroundOperationLabel(operation) {
   if (!operation) return "";
   const queued = operation.status === "queued";
+  const message = !queued && typeof operation.message === "string" ? operation.message.trim() : "";
+  if (message) return message;
   if (operation.type === "start") return queued ? "Queued start" : "Starting";
   if (operation.type === "stop") return queued ? "Queued stop" : "Stopping";
   if (operation.type === "delete_instance") return queued ? "Queued delete" : "Deleting";
@@ -1530,6 +1532,7 @@ function render(state) {
 
 export {
   bindOpenableCardHeader,
+  backgroundOperationLabel,
   computeCardMenuPlacement,
   emptyInstancesStateModel,
   instancePowerMenuConfig,

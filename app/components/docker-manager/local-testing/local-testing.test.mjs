@@ -15,6 +15,7 @@ globalThis.window = {
 
 const {
   bindOpenableCardHeader,
+  backgroundOperationLabel,
   computeCardMenuPlacement,
   emptyInstancesStateModel,
   instancePowerMenuConfig,
@@ -99,6 +100,21 @@ test('instance power menu switches between stop and start', () => {
       disabled: false,
       title: 'Start this instance'
     }
+  );
+});
+
+test('background operation labels use running progress messages', () => {
+  assert.equal(
+    backgroundOperationLabel({ type: 'start', status: 'running', message: 'Waiting for UI' }),
+    'Waiting for UI'
+  );
+  assert.equal(
+    backgroundOperationLabel({ type: 'start', status: 'queued', message: 'Waiting for UI' }),
+    'Queued start'
+  );
+  assert.equal(
+    backgroundOperationLabel({ type: 'start', status: 'running', message: '' }),
+    'Starting'
   );
 });
 

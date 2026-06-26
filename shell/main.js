@@ -2976,6 +2976,7 @@ function sanitizeDockerManagerState(state) {
     if (typeof op.message === 'string') out.message = op.message;
     if (typeof op.error === 'string' || op.error === null) out.error = op.error || null;
     if (typeof op.errorCode === 'string' || op.errorCode === null) out.errorCode = op.errorCode || null;
+    if (typeof op.uiReady === 'boolean') out.uiReady = op.uiReady;
     if (typeof op.queuedAt === 'string') out.queuedAt = op.queuedAt;
     if (typeof op.startedAt === 'string' || op.startedAt === null) out.startedAt = op.startedAt || null;
     if (typeof op.finishedAt === 'string' || op.finishedAt === null) out.finishedAt = op.finishedAt || null;

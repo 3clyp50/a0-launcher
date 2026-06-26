@@ -102,6 +102,8 @@ This scope owns:
   progress should use the centered operation modal rather than a top-page
   status strip. Updating an already-installed image from Installs should keep
   progress in a background toast so the existing install can still be used.
+  Non-onboarding image installs may offer `Download in background`, which moves
+  that operation into the same progress toast without stopping the download.
 - Local instance card `Start`, `Stop`, and `Delete` are the exception: they are
   accepted as background queued per-container actions so a slow or hanging
   container mutation does not block the rest of the launcher. Show only the
@@ -124,7 +126,9 @@ This scope owns:
   first-Instance run choice.
   If the image download finishes before the user completes those first-run
   choices, keep the same modal open and do not start the requested first
-  Instance until the setup panel is finished.
+  Instance until the setup panel is finished. Do not offer a background/hide
+  action during this onboarding image download; the setup choices must remain
+  visible until skipped or completed.
   Persist provider/model defaults to Settings, but keep the "start my first
   Instance" checkbox and storage choice as a one-shot install-scoped intent,
   not a reusable preference. That intent may survive renderer reloads or a

@@ -52,7 +52,9 @@ This scope owns:
   must include a visible Skip affordance.
 - Long-running non-runtime Docker operations should use the same centered modal
   affordance rather than a top-of-page status strip. Keep the header quiet once
-  the modal flow exists.
+  the modal flow exists. Post-onboarding image downloads may be moved into a
+  background progress toast by explicit user action; first-run onboarding image
+  downloads must keep the setup procedure visible.
 - Local instance card `Start`, `Stop`, and `Delete` are background queued
   actions. They must not open the global operation modal or make the page inert;
   show queue/running state on the affected card and surface failures with toast

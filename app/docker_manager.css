@@ -1528,10 +1528,6 @@ body {
   min-width: 0;
 }
 
-.dm-background-progress-toast .dm-toast-message {
-  color: var(--color-text);
-}
-
 .dm-toast-progress {
   margin: 0.55rem 0 0;
 }

@@ -94,6 +94,7 @@ window.toastFrontendWarning = (message, title = "Agent Zero", displayTime = 5, g
 const shownWorkspacePersistedOps = new Set();
 const shownBackgroundOperationFailures = new Set();
 const dismissedBackgroundProgressOps = new Set();
+const backgroundedProgressOps = new Set();
 const BACKGROUND_PROGRESS_TOAST_ID = "dmBackgroundProgressToast";
 let workspacePersistedDialogKeyHandler = null;
 let backgroundProgressToastTimer = 0;
@@ -273,16 +274,18 @@ function backgroundProgressToastTitle(progress = {}) {
   const status = typeof progress?.status === "string" ? progress.status : "";
   const tag = cleanDialogText(progress?.targetTag);
   const suffix = tag ? ` ${tag}` : "";
-  if (status === "failed") return "Update failed";
-  if (status === "completed") return "Update complete";
-  if (status === "canceled") return "Update canceled";
-  return `Updating${suffix}`;
+  const isUpdate = cleanDialogText(progress?.type) === "update";
+  if (status === "failed") return isUpdate ? "Update failed" : "Install failed";
+  if (status === "completed") return isUpdate ? "Update complete" : "Install complete";
+  if (status === "canceled") return isUpdate ? "Update canceled" : "Install canceled";
+  return `${isUpdate ? "Updating" : "Installing"}${suffix}`;
 }
 
 function backgroundProgressPhase(progress = {}) {
   const status = typeof progress?.status === "string" ? progress.status : "";
-  if (status === "failed") return cleanDialogText(progress?.error, "Update failed");
-  if (status === "completed") return "Updated";
+  const isUpdate = cleanDialogText(progress?.type) === "update";
+  if (status === "failed") return cleanDialogText(progress?.error, isUpdate ? "Update failed" : "Install failed");
+  if (status === "completed") return isUpdate ? "Updated" : "Installed";
   if (status === "canceled") return cleanDialogText(progress?.error, "Canceled");
   return cleanDialogText(progress?.phase || progress?.message || progress?.detail, "Working...");
 }
@@ -290,7 +293,10 @@ function backgroundProgressPhase(progress = {}) {
 function removeBackgroundProgressToast() {
   window.clearTimeout(backgroundProgressToastTimer);
   backgroundProgressToastTimer = 0;
-  document.getElementById(BACKGROUND_PROGRESS_TOAST_ID)?.remove();
+  const toast = document.getElementById(BACKGROUND_PROGRESS_TOAST_ID);
+  const opId = cleanDialogText(toast?.dataset?.opId);
+  if (opId) backgroundedProgressOps.delete(opId);
+  toast?.remove();
 }
 
 function createBackgroundProgressToast(opId) {
@@ -310,9 +316,6 @@ function createBackgroundProgressToast(opId) {
 
   const title = document.createElement("div");
   title.className = "dm-toast-title";
-
-  const message = document.createElement("div");
-  message.className = "dm-toast-message";
 
   const progressBlock = document.createElement("div");
   progressBlock.className = "sv-progress-block dm-toast-progress";
@@ -339,7 +342,6 @@ function createBackgroundProgressToast(opId) {
   progressBlock.appendChild(track);
 
   content.appendChild(title);
-  content.appendChild(message);
   content.appendChild(progressBlock);
 
   const dismiss = document.createElement("button");
@@ -360,9 +362,16 @@ function createBackgroundProgressToast(opId) {
   return toast;
 }
 
+function shouldRenderBackgroundProgressToast(progress = null, opId = "") {
+  if (!progress || !opId) return false;
+  if (progressPresentation(progress?.presentation) === "toast") return true;
+  if (!backgroundedProgressOps.has(opId)) return false;
+  return cleanDialogText(progress?.status) !== "failed";
+}
+
 function renderBackgroundProgressToast(progress = null) {
   const opId = cleanDialogText(progress?.opId);
-  if (!progress || progressPresentation(progress?.presentation) !== "toast" || !opId) {
+  if (!shouldRenderBackgroundProgressToast(progress, opId)) {
     removeBackgroundProgressToast();
     return;
   }
@@ -379,7 +388,8 @@ function renderBackgroundProgressToast(progress = null) {
   toast.className = `dm-toast ${tone} dm-background-progress-toast`;
   toast.querySelector(".dm-toast-icon").textContent = toastIcon(tone);
   toast.querySelector(".dm-toast-title").textContent = backgroundProgressToastTitle(progress);
-  toast.querySelector(".dm-toast-message").textContent = backgroundProgressPhase(progress);
+  const message = toast.querySelector(".dm-toast-message");
+  if (message) message.textContent = backgroundProgressPhase(progress);
 
   const numericProgress = progressPercentValue(status === "completed" ? 100 : progress?.progress);
   const indeterminate = progress?.indeterminate === true || (status === "running" && numericProgress === null);
@@ -803,6 +813,14 @@ async function installOrSync(tag, options = {}) {
 
 async function updateInstall(tag) {
   return installOrSync(tag, { operationType: "update", presentation: "toast" });
+}
+
+function backgroundOperation(opId = "") {
+  const id = cleanDialogText(opId);
+  if (!id) return false;
+  backgroundedProgressOps.add(id);
+  emitState();
+  return true;
 }
 
 async function removeInstalledImage(tag) {
@@ -1566,6 +1584,7 @@ window.dockerManagerActions = {
   selectRuntimeEndpoint,
   installOrSync,
   updateInstall,
+  backgroundOperation,
   removeInstalledImage,
   startActive,
   startLocalInstance,

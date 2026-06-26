@@ -79,14 +79,27 @@ function operationPhase(progress = null) {
   return asText(progress?.phase) || asText(progress?.message) || detail;
 }
 
-function runningAction(progress = null) {
+function isBackgroundableImageDownload(state = {}) {
+  const progress = state?.progress || null;
+  if (!asText(progress?.opId)) return false;
+  if (asText(progress?.type) !== "install" || asText(progress?.status) !== "running") return false;
+  if (!shouldShowSetupShowcase(progress)) return false;
+  return !shouldShowFirstInstanceSetup(state);
+}
+
+function runningAction(state = {}) {
+  const progress = state?.progress || null;
+  const primary = isBackgroundableImageDownload(state)
+    ? { kind: "background", label: "Download in background", disabled: false }
+    : { kind: "wait", label: operationHeadline(progress), disabled: true };
+
   if (!asText(progress?.opId) || progress?.canCancel !== true) {
-    return { primary: { kind: "wait", label: operationHeadline(progress), disabled: true }, secondary: null };
+    return { primary, secondary: null };
   }
   const type = asText(progress?.type);
   const cancelLabel = type === "install" || type === "update" || type === "developer_run" ? "Cancel download" : "Cancel";
   return {
-    primary: { kind: "wait", label: operationHeadline(progress), disabled: true },
+    primary,
     secondary: { kind: "cancel", label: cancelLabel, disabled: false }
   };
 }
@@ -109,7 +122,7 @@ function completedActions(state = {}) {
 function operationActions(state = {}) {
   const progress = state?.progress || null;
   const status = asText(progress?.status);
-  if (status === "running") return runningAction(progress);
+  if (status === "running") return runningAction(state);
   if (status === "failed" || status === "canceled") return completedActions(state);
   return { primary: null, secondary: null };
 }
@@ -126,6 +139,7 @@ function shouldShowOperationDialog(state = {}) {
   if (!progress || progress.type === "runtime_setup") return false;
   if (asText(progress?.presentation) === "toast") return false;
   if (shouldShowFirstInstanceSetup(state)) return true;
+  if (status === "running" && dismissedOperationKey === operationKey(progress)) return false;
   if (status === "running") return true;
   if ((status === "failed" || status === "canceled") && dismissedOperationKey !== operationKey(progress)) return true;
   return false;
@@ -416,6 +430,11 @@ function runAction(kind, state, actions) {
   if (!kind) return;
   if (kind === "cancel") {
     actions?.cancelOperation?.(state?.progress?.opId || "");
+    return;
+  }
+  if (kind === "background") {
+    actions?.backgroundOperation?.(state?.progress?.opId || "");
+    dismissOperation(state);
     return;
   }
   if (kind === "docker-login") {

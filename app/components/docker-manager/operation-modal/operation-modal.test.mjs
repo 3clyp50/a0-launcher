@@ -217,13 +217,15 @@ function buttonByText(document, text) {
   return buttons(document).find((button) => button.textContent === text) || null;
 }
 
-test('running install shows centered operation modal with cancel action', () => {
+test('running post-onboarding install can download in the background', () => {
   const document = installDom();
   const state = {
+    containers: [{ containerId: 'existing-instance' }],
     progress: {
       opId: 'op-install',
       type: 'install',
       status: 'running',
+      targetTag: 'latest',
       message: 'Downloading',
       canCancel: true
     }
@@ -231,12 +233,18 @@ test('running install shows centered operation modal with cancel action', () => 
 
   const model = normalizedOperationDialog(state);
   assert.equal(model.headline, 'Installing Agent Zero');
-  assert.equal(model.primary?.disabled, true);
+  assert.equal(model.primary?.label, 'Download in background');
+  assert.equal(model.primary?.disabled, false);
   assert.equal(model.secondary?.label, 'Cancel download');
   assert.equal(shouldShowOperationDialog(state), true);
 
   let canceled = '';
-  renderOperationDialog(state, { cancelOperation: (opId) => { canceled = opId; } });
+  let backgrounded = '';
+  const actions = {
+    cancelOperation: (opId) => { canceled = opId; },
+    backgroundOperation: (opId) => { backgrounded = opId; }
+  };
+  renderOperationDialog(state, actions);
   assert.ok(document.getElementById('operationProgressDialog'));
   assert.equal(document.querySelector('.dm-page').inert, true);
   assert.ok(document.querySelector('.dm-setup-showcase'));
@@ -246,18 +254,26 @@ test('running install shows centered operation modal with cancel action', () => 
   assert.equal(document.querySelector('.dm-operation-phase')?.textContent, 'Downloading');
   assert.equal(document.querySelector('.dm-operation-close')?.hidden, true);
   const cancelButton = buttonByText(document, 'Cancel download');
+  const backgroundButton = buttonByText(document, 'Download in background');
 
   renderOperationDialog({
+    containers: state.containers,
     progress: {
       ...state.progress,
       progress: 42,
       downloadProgress: 42
     }
-  }, { cancelOperation: (opId) => { canceled = opId; } });
+  }, actions);
 
   assert.equal(buttonByText(document, 'Cancel download'), cancelButton);
+  assert.equal(buttonByText(document, 'Download in background'), backgroundButton);
   cancelButton.dispatchEvent(new MiniEvent('click'));
   assert.equal(canceled, 'op-install');
+  backgroundButton.dispatchEvent(new MiniEvent('click'));
+  assert.equal(backgrounded, 'op-install');
+  assert.equal(document.getElementById('operationProgressDialog'), null);
+  assert.equal(document.querySelector('.dm-page').inert, false);
+  assert.equal(renderOperationDialog(state, actions), false);
 });
 
 test('running image pull shows a minute-level ETA near the percentage', () => {
@@ -306,6 +322,7 @@ test('install availability check stays compact before image pull starts', () => 
   assert.ok(document.getElementById('operationProgressDialog'));
   assert.equal(document.querySelector('.dm-setup-showcase'), null);
   assert.equal(document.querySelector('.dm-operation-dialog').classList.contains('has-setup-showcase'), false);
+  assert.equal(buttonByText(document, 'Download in background'), null);
 });
 
 test('first image pull asks for models, first Instance details, then optional A0 CLI install', async () => {
@@ -342,6 +359,7 @@ test('first image pull asks for models, first Instance details, then optional A0
   assert.ok(document.querySelector('.dm-operation-dialog').classList.contains('has-first-instance-setup'));
   assert.equal(document.querySelector('.dm-first-instance-title')?.textContent, 'Choose Instance defaults');
   assert.equal(document.querySelector('.dm-first-instance-step-run')?.classList.contains('hidden'), true);
+  assert.equal(buttonByText(document, 'Download in background'), null);
   assert.ok(buttonByText(document, 'Skip'));
 
   buttonByText(document, 'Continue').dispatchEvent(new MiniEvent('click'));

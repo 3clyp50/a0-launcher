@@ -187,6 +187,9 @@ This scope owns:
 - Advanced should keep developer controls and their related Compose editing
   together in the Developer sub-tab. Diagnostics and Storage volumes remain
   separate sub-tabs so the page avoids multiple boxed panels at once.
+- Advanced sub-tabs should keep the Advanced page header and tab strip fixed in
+  the launcher shell. Put overflow inside the active Advanced panel instead of
+  relying on document-level scrolling.
 - Advanced diagnostics should render structured Docker runtime facts from
   Docker Manager state as report-style rows, not metric-card grids or
   renderer-inferred runtime guesses.

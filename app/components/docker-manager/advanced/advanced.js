@@ -276,8 +276,8 @@ async function copyCompose() {
   }
 }
 
-function scrollPageBy(deltaY) {
-  const scroller = document.scrollingElement || document.documentElement;
+function scrollPanelBy(input, deltaY) {
+  const scroller = input?.closest?.(".dm-advanced-tab-panel");
   if (!scroller) return false;
   const before = scroller.scrollTop;
   scroller.scrollTop += deltaY;
@@ -290,14 +290,14 @@ function bindWheelPassthrough(input) {
   input.addEventListener("wheel", (event) => {
     const maxScrollTop = input.scrollHeight - input.clientHeight;
     if (maxScrollTop <= 1) {
-      if (scrollPageBy(event.deltaY)) event.preventDefault();
+      if (scrollPanelBy(input, event.deltaY)) event.preventDefault();
       return;
     }
 
     const atTop = input.scrollTop <= 0;
     const atBottom = input.scrollTop >= maxScrollTop - 1;
     if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
-      if (scrollPageBy(event.deltaY)) event.preventDefault();
+      if (scrollPanelBy(input, event.deltaY)) event.preventDefault();
     }
   }, { passive: false });
 }

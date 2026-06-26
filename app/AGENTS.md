@@ -102,6 +102,9 @@ This scope owns:
 - Keep the launcher workspace responsive across large displays. Do not
   reintroduce fixed-width page or tab wrappers around the main renderer shell;
   prefer viewport-aware gutters, grids, and scroll regions.
+- Keep the outer document and `.dm-page` fixed-height and non-scrolling. Views
+  that can exceed the viewport must own an internal tab, panel, or list scroll
+  region so the launcher header and sidebar stay in place.
 - Do not use circular launcher buttons. The maximum launcher control radius is
   the shared 6px Refresh-button radius.
 - Prefer local Material Symbols icons through the bundled font instead of remote

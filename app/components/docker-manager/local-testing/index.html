@@ -5,10 +5,16 @@
         <h2 class="section-title sv-section-heading">Instances</h2>
         <div id="sessionsSubtitle" class="sv-subtitle">Detected from Docker daemon</div>
       </div>
-      <button id="addRemoteInstanceBtn" class="button confirm" type="button">
-        <span class="material-symbols-outlined" aria-hidden="true">add_link</span>
-        <span>Add remote Instance</span>
-      </button>
+      <div class="dm-instances-actions">
+        <button id="createLocalInstanceBtn" class="button confirm" type="button" disabled title="Install a version before creating a local Instance">
+          <span class="material-symbols-outlined" aria-hidden="true">add</span>
+          <span>Create local Instance</span>
+        </button>
+        <button id="addRemoteInstanceBtn" class="button" type="button">
+          <span class="material-symbols-outlined" aria-hidden="true">add_link</span>
+          <span>Add remote Instance</span>
+        </button>
+      </div>
     </div>
     <div id="localList" class="dm-cards-grid"></div>
   </section>

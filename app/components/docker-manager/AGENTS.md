@@ -170,7 +170,10 @@ This scope owns:
 - Activation may offer optional model provider/model/API-key helpers. Keep Main
   and Utility in the primary dialog body, keep Embedding under Advanced, compile
   helpers to Agent Zero environment defaults, and preserve Advanced environment
-  variables as the explicit escape hatch.
+  variables as the explicit escape hatch. Activation may also offer optional
+  web login username/password helpers that compile to Agent Zero auth
+  environment defaults; blank values must preserve Agent Zero's normal
+  onboarding/default behavior.
 - Port mappings and environment text stay advanced activation inputs. They
   should not become a required path for normal users.
 - Advanced activation may expose a storage override, but the default path should
@@ -193,6 +196,10 @@ This scope owns:
   Instances, show a centered `Install latest version` action that calls the
   existing latest-image install flow so the first-Instance setup modal still
   owns model/provider/name choices.
+  The Instances header may expose `Create local Instance` beside `Add remote
+  Instance`. Creating a local Instance should list installed versions only, then
+  use the same activation defaults dialog as Installs so local instance name,
+  login, model, storage, port, and environment handling stays consistent.
 - Local instance cards keep `Open UI` or `Start` as the visible primary action.
   Secondary management and inspection actions such as `Rename`, `See logs`,
   `Open storage folder`, `Clone`, `Open A0 CLI`, dynamic `Start`/`Stop`, and

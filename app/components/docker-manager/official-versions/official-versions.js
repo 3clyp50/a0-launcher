@@ -1,12 +1,6 @@
 import { createVersionVisual } from "../card-visuals.js";
-import {
-  ADVANCED_INSTANCE_MODEL_SLOTS,
-  PRIMARY_INSTANCE_MODEL_SLOTS,
-  buildInstanceEnvTextFromForm,
-  defaultInstanceName,
-  instanceModelRowsHtml,
-  normalizeInstanceDefaults
-} from "../instance-defaults.js";
+import { defaultInstanceName } from "../instance-defaults.js";
+import { openRunInstanceDialog } from "../run-instance-dialog.js";
 
 function byId(id) { return document.getElementById(id); }
 
@@ -318,7 +312,7 @@ function actionsForEntry(entry, state) {
       {
         label: "Run",
         className: "button confirm",
-        handler: () => openActivateDialog(entry, state)
+        handler: () => openRunInstanceDialog({ entry, state })
       }
     ];
 
@@ -363,141 +357,6 @@ function confirmRemoveInstall(entry) {
 
 function isAwaitingFirstInventory(state, entries) {
   return !state?.stateLoaded || (!!state?.loading && !entries.length);
-}
-
-function closeDialog(dialog) {
-  if (dialog && dialog.parentNode) dialog.parentNode.removeChild(dialog);
-}
-
-function openActivateDialog(entry, state) {
-  const existing = document.getElementById("activateInstanceDialog");
-  if (existing) existing.remove();
-
-  const tag = entry?.tag || "";
-  const requiresAck = false;
-  const instanceDefaults = normalizeInstanceDefaults(state?.instanceDefaults);
-  const dialog = document.createElement("div");
-  dialog.id = "activateInstanceDialog";
-  dialog.className = "dm-dialog-backdrop";
-  dialog.setAttribute("role", "presentation");
-
-  dialog.innerHTML = `
-    <form class="dm-dialog" role="dialog" aria-modal="true" aria-labelledby="activateInstanceTitle">
-      <div class="dm-dialog-header">
-        <h2 id="activateInstanceTitle" class="dm-dialog-title">Run instance</h2>
-        <button class="button dm-dialog-close" type="button" data-dialog-close aria-label="Close">×</button>
-      </div>
-      <div class="dm-dialog-body">
-        <div class="dm-field">
-          <label for="activateInstanceName">Instance name</label>
-          <input id="activateInstanceName" class="dm-text-input" type="text" maxlength="64" autocomplete="off">
-          <div class="dm-field-hint">A friendly name shown in the launcher. The managed Docker name stays stable so rollback keeps working.</div>
-        </div>
-        <div class="dm-field dm-model-defaults">
-          <div class="dm-field-label">Choose your models</div>
-          <div class="dm-model-grid">
-            ${instanceModelRowsHtml(PRIMARY_INSTANCE_MODEL_SLOTS, instanceDefaults, "activate")}
-          </div>
-          <div class="dm-field-hint">Using a subscription-based provider? Leave the defaults and connect the subscription during onboarding in the Agent Zero Web UI.</div>
-        </div>
-        <details class="dm-advanced">
-          <summary>Advanced</summary>
-          <div class="dm-advanced-body">
-            <div class="dm-field dm-model-defaults">
-              <div class="dm-field-label">Embedding model</div>
-              <div class="dm-model-grid">
-                ${instanceModelRowsHtml(ADVANCED_INSTANCE_MODEL_SLOTS, instanceDefaults, "activate")}
-              </div>
-            </div>
-            <div class="dm-field">
-              <label for="activatePortMappings">Port mapping</label>
-              <textarea id="activatePortMappings" class="dm-textarea" spellcheck="false"></textarea>
-              <div class="dm-field-hint">Use Docker-style host:container mappings. <strong>0:80</strong> lets Docker choose an open local host port for the Agent Zero UI.</div>
-            </div>
-            <div class="dm-field">
-              <label for="activateStorageMode">Workspace storage</label>
-              <select id="activateStorageMode" class="dm-text-input">
-                <option value="">Use storage preferences</option>
-                <option value="host_directory">Host directory</option>
-                <option value="named_volume">Named Docker volume</option>
-              </select>
-              <div class="dm-field-hint">Every instance mounts a separate workspace at <strong>/a0/usr</strong>.</div>
-            </div>
-            <div class="dm-field">
-              <label for="activateStorageHostRoot">Host root</label>
-              <input id="activateStorageHostRoot" class="dm-text-input" type="text" autocomplete="off" placeholder="~/agent-zero">
-            </div>
-            <div class="dm-field">
-              <label for="activateStorageVolumeName">Volume name</label>
-              <input id="activateStorageVolumeName" class="dm-text-input" type="text" autocomplete="off" placeholder="optional exact Docker volume name">
-            </div>
-            <div class="dm-field">
-              <label for="activateEnvVars">Environment variables</label>
-              <textarea id="activateEnvVars" class="dm-textarea" spellcheck="false" placeholder="A0_SET__model_config__chat_model__provider=openrouter&#10;A0_SET__model_config__chat_model__name=anthropic/claude-sonnet-4.6&#10;API_KEY_OPENROUTER=sk-..."></textarea>
-              <div class="dm-field-hint">Agent Zero supports <strong>A0_SET_&lt;setting_name&gt;=&lt;value&gt;</strong> for initial defaults. Saved settings still take precedence, and restart is required for changes.</div>
-            </div>
-          </div>
-        </details>
-        <div id="activateAckField" class="dm-field ${requiresAck ? "" : "hidden"}">
-          <div class="dm-field-label">Current instance</div>
-          <label class="dm-radio-line"><input type="radio" name="dataLossAck" value="has_backup"> I have a backup</label>
-          <label class="dm-radio-line"><input type="radio" name="dataLossAck" value="proceed_without_backup"> Proceed without backup</label>
-          <div class="dm-field-hint">The current active instance will be stopped and retained as a rollback target when possible.</div>
-        </div>
-      </div>
-      <div class="dm-dialog-footer">
-        <button class="button" type="button" data-dialog-close>Cancel</button>
-        <button class="button confirm" type="submit">Run</button>
-      </div>
-    </form>
-  `;
-
-  const form = dialog.querySelector("form");
-  const nameInput = dialog.querySelector("#activateInstanceName");
-  const portInput = dialog.querySelector("#activatePortMappings");
-  const storageModeInput = dialog.querySelector("#activateStorageMode");
-  const storageHostRootInput = dialog.querySelector("#activateStorageHostRoot");
-  const storageVolumeNameInput = dialog.querySelector("#activateStorageVolumeName");
-  const envInput = dialog.querySelector("#activateEnvVars");
-  if (nameInput) nameInput.value = defaultInstanceName(tag, state);
-  if (portInput) portInput.value = "0:80";
-  if (storageHostRootInput) storageHostRootInput.value = state?.storagePreferences?.hostRoot || "~/agent-zero";
-
-  dialog.querySelectorAll("[data-dialog-close]").forEach((btn) => {
-    btn.addEventListener("click", () => closeDialog(dialog));
-  });
-  dialog.addEventListener("mousedown", (event) => {
-    if (event.target === dialog) closeDialog(dialog);
-  });
-  form?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const selectedAck = dialog.querySelector('input[name="dataLossAck"]:checked')?.value || "";
-    if (requiresAck && !selectedAck) {
-      window.toastFrontendError?.("Choose how to proceed with the current active instance.", "Agent Zero");
-      return;
-    }
-    const envResult = buildInstanceEnvTextFromForm(dialog, "activate", envInput?.value || "");
-    if (!envResult.ok) {
-      window.toastFrontendError?.(envResult.message, "Agent Zero");
-      return;
-    }
-    const options = {
-      instanceName: nameInput?.value || "",
-      portMappings: portInput?.value || "0:80",
-      envText: envResult.value || "",
-      dataLossAck: selectedAck || "proceed_without_backup"
-    };
-    if (storageModeInput?.value) {
-      options.storageMode = storageModeInput.value;
-      options.hostRoot = storageHostRootInput?.value || "";
-      options.volumeName = storageVolumeNameInput?.value || "";
-    }
-    closeDialog(dialog);
-    await window.dockerManagerActions?.activateTag?.(tag, options);
-  });
-
-  document.body.appendChild(dialog);
-  window.setTimeout(() => nameInput?.focus(), 0);
 }
 
 const versionGroupOpenState = new Map();

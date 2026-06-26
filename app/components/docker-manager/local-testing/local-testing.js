@@ -4,6 +4,10 @@ import {
   normalizedInstanceColorId
 } from "../card-visuals.js";
 import { openAddRemoteInstanceDialog } from "../remote-instance-dialog.js";
+import {
+  createLocalInstanceButtonModel,
+  openCreateLocalInstanceDialog
+} from "../run-instance-dialog.js";
 
 function byId(id) { return document.getElementById(id); }
 
@@ -1032,6 +1036,13 @@ async function openLogsPanel(c) {
 
 function bindActions() {
   bindCardMenuDismissal();
+  const createBtn = byId("createLocalInstanceBtn");
+  if (createBtn && !createBtn.dataset.bound) {
+    createBtn.dataset.bound = "1";
+    createBtn.addEventListener("click", () => {
+      openCreateLocalInstanceDialog(window.__dmLastState || {});
+    });
+  }
   const addBtn = byId("addRemoteInstanceBtn");
   if (addBtn && !addBtn.dataset.bound) {
     addBtn.dataset.bound = "1";
@@ -1363,6 +1374,12 @@ function render(state) {
   const list = byId("localList");
   const subtitle = byId("sessionsSubtitle");
   if (!list) return;
+  const createBtn = byId("createLocalInstanceBtn");
+  if (createBtn) {
+    const buttonModel = createLocalInstanceButtonModel(state);
+    createBtn.disabled = !!buttonModel.disabled;
+    createBtn.title = buttonModel.title || "";
+  }
   const containers = Array.isArray(state?.containers) ? state.containers : [];
   const remoteInstances = Array.isArray(state?.remoteInstances) ? state.remoteInstances : [];
 

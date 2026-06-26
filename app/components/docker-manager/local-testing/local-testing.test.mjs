@@ -258,3 +258,80 @@ test('card menu is positioned while hidden before it opens', () => {
   assert.match(popover.style.top, /^\d+px$/);
   assert.match(popover.style.maxHeight, /^\d+px$/);
 });
+
+test('card menu stays hidden until fixed coordinates settle', () => {
+  window.innerWidth = 720;
+  window.innerHeight = 520;
+
+  const scheduledFrames = [];
+  window.requestAnimationFrame = (callback) => {
+    scheduledFrames.push(callback);
+    return scheduledFrames.length;
+  };
+
+  try {
+    const menuClasses = fakeClassList(['dm-card-menu']);
+    const cardClasses = fakeClassList(['dm-card']);
+    const triggerAttributes = {};
+    const trigger = {
+      setAttribute: (name, value) => { triggerAttributes[name] = String(value); },
+      getBoundingClientRect: () => ({ top: 360, right: 620, bottom: 392 })
+    };
+    let settlingReads = 0;
+    const popover = {
+      style: {},
+      scrollWidth: 184,
+      scrollHeight: 260,
+      getBoundingClientRect: () => {
+        const left = Number.parseFloat(popover.style.left) || 0;
+        const top = Number.parseFloat(popover.style.top) || 0;
+        if (menuClasses.contains('settling')) {
+          settlingReads += 1;
+          if (settlingReads <= 2) return { left: left + 17, top: top - 211, width: 184, height: 260 };
+          return { left, top, width: 184, height: 260 };
+        }
+        return { width: 184, height: 260 };
+      }
+    };
+    const card = { classList: cardClasses };
+    const menu = {
+      classList: menuClasses,
+      closest: (selector) => selector === '.dm-card' ? card : null,
+      querySelector: (selector) => {
+        if (selector === '.dm-card-menu-trigger') return trigger;
+        if (selector === '.dm-card-menu-popover') return popover;
+        return null;
+      }
+    };
+
+    openCardMenu(menu, trigger);
+
+    assert.equal(menuClasses.contains('measuring'), false);
+    assert.equal(menuClasses.contains('settling'), true);
+    assert.equal(menuClasses.contains('open'), true);
+    assert.equal(cardClasses.contains('menu-open'), true);
+    assert.equal(triggerAttributes['aria-expanded'], 'true');
+    assert.equal(scheduledFrames.length, 1);
+
+    scheduledFrames.shift()();
+
+    assert.equal(menuClasses.contains('settling'), true);
+    assert.equal(menuClasses.contains('open'), true);
+    assert.equal(scheduledFrames.length, 1);
+
+    scheduledFrames.shift()();
+
+    assert.equal(menuClasses.contains('settling'), true);
+    assert.equal(menuClasses.contains('open'), true);
+    assert.equal(scheduledFrames.length, 1);
+
+    scheduledFrames.shift()();
+
+    assert.equal(menuClasses.contains('settling'), false);
+    assert.equal(menuClasses.contains('measuring'), false);
+    assert.equal(menuClasses.contains('open'), true);
+    assert.equal(triggerAttributes['aria-expanded'], 'true');
+  } finally {
+    delete window.requestAnimationFrame;
+  }
+});

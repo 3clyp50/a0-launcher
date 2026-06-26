@@ -390,7 +390,7 @@ function computeCardMenuPlacement({
 
 function resetCardMenuPosition(menu) {
   if (!menu) return;
-  menu.classList.remove("open-up", "open-down", "measuring");
+  menu.classList.remove("open-up", "open-down", "measuring", "settling");
   menu.closest?.(".dm-card")?.classList.remove("menu-open");
   const popover = menu.querySelector(".dm-card-menu-popover");
   if (popover) {
@@ -401,7 +401,7 @@ function resetCardMenuPosition(menu) {
 }
 
 function closeCardMenus(except = null) {
-  document.querySelectorAll(".dm-card-menu.open, .dm-card-menu.measuring").forEach((menu) => {
+  document.querySelectorAll(".dm-card-menu.open, .dm-card-menu.measuring, .dm-card-menu.settling").forEach((menu) => {
     if (menu === except) return;
     closeCardMenu(menu, menu.querySelector(".dm-card-menu-trigger"));
   });
@@ -442,14 +442,49 @@ function positionOpenCardMenus() {
   document.querySelectorAll(".dm-card-menu.open").forEach((menu) => positionCardMenu(menu));
 }
 
-function openCardMenu(menu, trigger) {
-  if (!menu) return;
-  menu.closest?.(".dm-card")?.classList.add("menu-open");
-  menu.classList.add("measuring");
+function cssPixelValue(value) {
+  const number = Number.parseFloat(String(value || ""));
+  return Number.isFinite(number) ? number : 0;
+}
+
+// A hovered card transform can briefly remap fixed descendants to the card.
+function revealSettledCardMenu(menu, attempt = 0) {
+  if (!menu?.classList?.contains("settling")) return;
+  positionCardMenu(menu);
+  const popover = menu.querySelector?.(".dm-card-menu-popover");
+  const rect = popover?.getBoundingClientRect?.();
+  const settled = rect && Math.abs(rect.left - cssPixelValue(popover.style.left)) < 1 &&
+    Math.abs(rect.top - cssPixelValue(popover.style.top)) < 1;
+  if (!settled && attempt < 8) {
+    window.requestAnimationFrame(() => revealSettledCardMenu(menu, attempt + 1));
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    if (!menu?.classList?.contains("settling")) return;
+    positionCardMenu(menu);
+    menu.classList.remove("settling");
+  });
+}
+
+function finishOpenCardMenu(menu, trigger, settleBeforeReveal = false) {
+  if (!menu?.classList?.contains("measuring")) return;
   positionCardMenu(menu);
   menu.classList.remove("measuring");
+  if (settleBeforeReveal) menu.classList.add("settling");
   menu.classList.add("open");
   trigger?.setAttribute("aria-expanded", "true");
+  if (settleBeforeReveal) {
+    window.requestAnimationFrame(() => revealSettledCardMenu(menu));
+  }
+}
+
+function openCardMenu(menu, trigger) {
+  if (!menu) return;
+  const card = menu.closest?.(".dm-card");
+  card?.classList.add("menu-open");
+  menu.classList.add("measuring");
+  positionCardMenu(menu);
+  finishOpenCardMenu(menu, trigger, typeof window.requestAnimationFrame === "function");
 }
 
 function closeCardMenu(menu, trigger) {
@@ -511,7 +546,7 @@ function createCardMenu(items) {
   trigger.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">more_horiz</span>';
   trigger.addEventListener("click", (event) => {
     event.stopPropagation();
-    const open = !menu.classList.contains("open");
+    const open = !menu.classList.contains("open") && !menu.classList.contains("measuring");
     closeCardMenus(menu);
     if (open) {
       openCardMenu(menu, trigger);

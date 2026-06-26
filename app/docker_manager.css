@@ -546,6 +546,7 @@ body {
 
 .dm-card.menu-open {
   transform: none;
+  transition: border-color 0.18s ease, background 0.18s ease;
 }
 
 .dm-card-open-header {
@@ -751,12 +752,14 @@ body {
 }
 
 .dm-card-menu.measuring .dm-card-menu-popover,
+.dm-card-menu.settling .dm-card-menu-popover,
 .dm-card-menu.open .dm-card-menu-popover {
   display: grid;
   gap: 0.1rem;
 }
 
-.dm-card-menu.measuring .dm-card-menu-popover {
+.dm-card-menu.measuring .dm-card-menu-popover,
+.dm-card-menu.settling .dm-card-menu-popover {
   visibility: hidden;
   pointer-events: none;
 }

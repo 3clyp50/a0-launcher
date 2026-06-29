@@ -46,7 +46,8 @@ This scope owns:
   practical before opening.
 - Containers may be enriched with bounded runtime source metadata from the
   Agent Zero checkout inside the container. Keep the Docker image tag as
-  provenance, and expose runtime branch/commit as separate structured state.
+  provenance, and expose runtime Git release tag, branch, and commit as
+  separate structured state.
 - Channel-tagged images and containers may expose `matchedReleaseTag` when the
   local tag can be tied to a concrete semver release through digest matching or
   local evidence for the current `latest` release tag. Channel install entries

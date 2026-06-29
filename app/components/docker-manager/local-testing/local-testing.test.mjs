@@ -17,6 +17,7 @@ const {
   bindOpenableCardHeader,
   backgroundOperationLabel,
   computeCardMenuPlacement,
+  dockerInstanceRuntimeSummary,
   emptyInstancesStateModel,
   instancePowerMenuConfig,
   isBlockingOperationRunning,
@@ -41,14 +42,34 @@ function fakeClassList(initial = []) {
   };
 }
 
-test('channel instance chips include the matched concrete release', () => {
+test('instance chips prefer Git release tags over channel labels', () => {
+  assert.equal(
+    instanceVisualBadge({
+      versionTag: 'ready',
+      runtimeTag: 'v2.0',
+      runtimeBranch: 'ready',
+      matchedReleaseTag: 'v1.20'
+    }),
+    '2.0'
+  );
+
+  assert.equal(
+    dockerInstanceRuntimeSummary({
+      runtimeSource: { tag: 'v2.0', branch: 'ready' },
+      runtimeShortCommit: '5c914bc49ebd'
+    }),
+    '2.0 @ 5c914bc49ebd'
+  );
+});
+
+test('channel instance chips show matched concrete release without channel text', () => {
   assert.equal(
     instanceVisualBadge({
       versionTag: 'ready',
       runtimeBranch: 'ready',
       matchedReleaseTag: 'v1.20'
     }),
-    'ready · 1.20'
+    '1.20'
   );
 
   assert.equal(
@@ -57,14 +78,33 @@ test('channel instance chips include the matched concrete release', () => {
       runtimeBranch: 'ready',
       matchedReleaseTag: 'v1.20'
     }),
-    'latest · 1.20'
+    '1.20'
   );
 });
 
-test('instance chips still prefer runtime branch without a channel release match', () => {
+test('instance chips prefer concrete image tags over runtime branch names', () => {
   assert.equal(
     instanceVisualBadge({
-      versionTag: 'v1.19',
+      imageRef: 'agent0ai/agent-zero:v2.0',
+      runtimeBranch: 'ready'
+    }),
+    '2.0'
+  );
+
+  assert.equal(
+    dockerInstanceRuntimeSummary({
+      imageRef: 'agent0ai/agent-zero:v2.0',
+      runtimeBranch: 'ready',
+      runtimeShortCommit: '5c914bc49ebd'
+    }),
+    '2.0 @ 5c914bc49ebd'
+  );
+});
+
+test('instance chips fall back to runtime branch without a concrete release', () => {
+  assert.equal(
+    instanceVisualBadge({
+      versionTag: 'latest',
       runtimeBranch: 'ready'
     }),
     'ready'

@@ -5,9 +5,11 @@ const dockerManager = require('./index');
 
 const {
   applyContainerMatchedReleaseTags,
+  inspectContainerRuntimeSource,
   imageTagForContainer,
   matchedReleaseTagForLocalTag,
   matchedSemverReleaseTagForDigest,
+  parsePackedRefsTagsForCommit,
   releaseTagLabel
 } = dockerManager._test;
 
@@ -53,4 +55,31 @@ test('matched release tags are applied to matching channel containers', () => {
   const [enriched] = applyContainerMatchedReleaseTags(containers, new Map([['ready', 'v1.20']]));
   assert.equal(enriched.matchedReleaseTag, 'v1.20');
   assert.equal(containers[0].matchedReleaseTag, undefined);
+});
+
+test('runtime source resolves release tags pointing at the current Git commit', async () => {
+  const commit = '5c914bc49ebd5c914bc49ebd5c914bc49ebd5c914bc';
+  const packedRefs = [
+    '# pack-refs with: peeled fully-peeled sorted',
+    `${commit} refs/heads/ready`,
+    `${commit} refs/tags/v1.20`,
+    '1111111111111111111111111111111111111111 refs/tags/v2.0',
+    `^${commit}`
+  ].join('\n');
+  const reads = new Map([
+    ['/a0/.git/HEAD', 'ref: refs/heads/ready\n'],
+    ['/a0/.git/refs/heads/ready', commit],
+    ['/a0/.git/packed-refs', packedRefs]
+  ]);
+  const docker = {
+    readContainerTextFile: async (_containerId, filePath) => reads.get(filePath) ?? null,
+    listContainerDirectory: async () => []
+  };
+
+  assert.deepEqual(parsePackedRefsTagsForCommit(packedRefs, commit), ['v2.0', 'v1.20']);
+
+  const source = await inspectContainerRuntimeSource(docker, { containerId: 'abc123' });
+  assert.equal(source.tag, 'v2.0');
+  assert.equal(source.branch, 'ready');
+  assert.equal(source.shortCommit, commit.slice(0, 12));
 });

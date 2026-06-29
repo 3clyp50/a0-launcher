@@ -232,15 +232,13 @@ This scope owns:
   paused and resumed, and that running AI work stops and must be resumed
   manually.
 - Local instance cards should use the launcher-visible instance name and saved
-  card color as visual identity. For channel-launched local instances, the
-  visual version chip should show the original channel plus matched concrete
-  release when Docker Manager provides `matchedReleaseTag`, such as
-  `latest · 1.20` or `ready · 1.20`. Otherwise, prefer the runtime branch
-  reported from inside the container over the original Docker image tag, because
-  self-updated containers can run `ready` code from a `latest` image.
-  Keep the metadata compact: show runtime branch/commit first, put the URL on
-  its own line, and avoid listing routine `image latest` or persistent
-  workspace fragments in the primary card text.
+  card color as visual identity. Prefer the runtime Git release tag reported
+  from inside the container, then Docker Manager's matched concrete release,
+  then a concrete semver Docker image tag, then runtime branch, then the original
+  Docker image tag. Keep the metadata compact: show runtime
+  release-or-branch/commit first, put the URL on its own line, and avoid listing
+  routine `image latest` or persistent workspace fragments in the primary card
+  text.
 - Local instance cards should keep workspace state quiet. Persistent host
   directories, named volumes, custom mounts, and legacy ephemeral workspaces
   should be distinguishable through relevant controls and storage affordances

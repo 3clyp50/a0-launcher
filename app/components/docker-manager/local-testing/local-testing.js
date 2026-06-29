@@ -65,6 +65,10 @@ function runtimeBranch(c) {
   return c?.runtimeBranch || c?.runtimeSource?.branch || "";
 }
 
+function runtimeTag(c) {
+  return c?.runtimeTag || c?.runtimeSource?.tag || "";
+}
+
 function runtimeShortCommit(c) {
   const shortCommit = c?.runtimeShortCommit || c?.runtimeSource?.shortCommit || "";
   if (shortCommit) return shortCommit;
@@ -84,17 +88,26 @@ function releaseTagLabel(tag) {
   return String(tag || "").trim().replace(/^v(?=\d)/i, "");
 }
 
+function isReleaseTag(tag) {
+  return /^v\d+\.\d+(?:\.\d+)?$/i.test(String(tag || "").trim());
+}
+
 function instanceVisualBadge(c) {
+  const sourceTag = releaseTagLabel(runtimeTag(c));
+  if (sourceTag) return sourceTag;
+
   const imageTag = imageTagForContainer(c);
   const matchedReleaseTag = releaseTagLabel(c?.matchedReleaseTag);
   if ((imageTag === "latest" || imageTag === "ready") && matchedReleaseTag) {
-    return `${imageTag} · ${matchedReleaseTag}`;
+    return matchedReleaseTag;
   }
+  if (isReleaseTag(imageTag)) return releaseTagLabel(imageTag);
   return runtimeBranch(c) || imageTag;
 }
 
 function dockerInstanceRuntimeSummary(c) {
-  const branch = runtimeBranch(c);
+  const imageTag = imageTagForContainer(c);
+  const branch = releaseTagLabel(runtimeTag(c)) || (isReleaseTag(imageTag) ? releaseTagLabel(imageTag) : runtimeBranch(c));
   const shortCommit = runtimeShortCommit(c);
   if (branch && shortCommit) return `${branch} @ ${shortCommit}`;
   return branch || shortCommit || "";
@@ -1565,6 +1578,7 @@ export {
   emptyInstancesStateModel,
   instancePowerMenuConfig,
   remoteInstanceStatusModel,
+  dockerInstanceRuntimeSummary,
   instanceVisualBadge,
   isBlockingOperationRunning,
   localCardsRenderKey,

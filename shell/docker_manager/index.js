@@ -18,7 +18,7 @@ const releasesClient = require('./releases_client');
 const stateStore = require('./state_store');
 const retention = require('./retention');
 const { toErrorResponse, mapDockerInterfaceErrorToUiMessage } = require('./errors');
-const { isSemverReleaseTag } = require('./release_tags');
+const { isSemverReleaseTag, compareReleaseTagsDescending } = require('./release_tags');
 const { runtimeSetupProgressPatch } = require('./progress');
 
 const DEFAULT_IMAGE_REPO = 'agent0ai/agent-zero';
@@ -382,6 +382,38 @@ function parsePackedRefs(text, refPath) {
   return '';
 }
 
+function sortedReleaseTags(tags) {
+  return [...new Set((Array.isArray(tags) ? tags : []).filter(isSemverReleaseTag))]
+    .sort(compareReleaseTagsDescending);
+}
+
+function parsePackedRefsTagsForCommit(text, commit) {
+  const target = sanitizeGitCommit(commit);
+  if (!target) return [];
+
+  const tags = [];
+  let peeledTag = '';
+  for (const line of String(text || '').split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (trimmed.startsWith('^')) {
+      if (peeledTag && sanitizeGitCommit(trimmed.slice(1)) === target) tags.push(peeledTag);
+      peeledTag = '';
+      continue;
+    }
+
+    peeledTag = '';
+    const parts = trimmed.split(/\s+/u);
+    if (parts.length < 2 || !parts[1].startsWith('refs/tags/')) continue;
+    const tag = parts[1].slice('refs/tags/'.length);
+    if (!isSemverReleaseTag(tag)) continue;
+    if (sanitizeGitCommit(parts[0]) === target) tags.push(tag);
+    peeledTag = tag;
+  }
+
+  return sortedReleaseTags(tags);
+}
+
 function parseGitDirFile(text, workdir) {
   const line = String(text || '').split(/\r?\n/u).map((item) => item.trim()).find(Boolean) || '';
   const match = /^gitdir:\s*(.+)$/i.exec(line);
@@ -402,6 +434,37 @@ async function readContainerGitText(docker, containerId, filePath, maxBytes = CO
   } catch {
     return null;
   }
+}
+
+async function looseGitTagsForCommit(docker, containerId, gitDir, commit) {
+  const target = sanitizeGitCommit(commit);
+  if (!target || !docker || typeof docker.listContainerDirectory !== 'function') return [];
+
+  let entries = [];
+  try {
+    entries = await docker.listContainerDirectory(containerId, `${gitDir}/refs/tags`, { maxBytes: 64 * 1024 });
+  } catch {
+    return [];
+  }
+
+  const tags = [];
+  for (const entry of entries) {
+    const tag = String(entry?.name || '').trim();
+    if (entry?.type !== 'file' || !isSemverReleaseTag(tag)) continue;
+    const ref = sanitizeGitCommit(await readContainerGitText(docker, containerId, `${gitDir}/refs/tags/${tag}`, 8192));
+    if (ref === target) tags.push(tag);
+  }
+  return sortedReleaseTags(tags);
+}
+
+async function gitReleaseTagForCommit(docker, containerId, gitDir, commit, packedRefsText = null) {
+  const target = sanitizeGitCommit(commit);
+  if (!target) return '';
+  const packed = packedRefsText ?? await readContainerGitText(docker, containerId, `${gitDir}/packed-refs`, CONTAINER_SOURCE_MAX_BYTES);
+  return sortedReleaseTags([
+    ...parsePackedRefsTagsForCommit(packed, target),
+    ...await looseGitTagsForCommit(docker, containerId, gitDir, target)
+  ])[0] || '';
 }
 
 async function inspectContainerRuntimeSource(docker, container) {
@@ -425,20 +488,24 @@ async function inspectContainerRuntimeSource(docker, container) {
     if (!head) continue;
 
     let commit = head.commit;
+    let packedRefsText = null;
     const refPath = safeGitRefPath(head.refPath);
     if (!commit && refPath) {
       commit = sanitizeGitCommit(await readContainerGitText(docker, containerId, `${gitDir}/${refPath}`, 8192));
       if (!commit) {
-        commit = parsePackedRefs(await readContainerGitText(docker, containerId, `${gitDir}/packed-refs`, CONTAINER_SOURCE_MAX_BYTES), refPath);
+        packedRefsText = await readContainerGitText(docker, containerId, `${gitDir}/packed-refs`, CONTAINER_SOURCE_MAX_BYTES);
+        commit = parsePackedRefs(packedRefsText, refPath);
       }
     }
 
     const branch = sanitizeGitBranchName(head.branch);
     if (!branch && !commit) continue;
+    const tag = await gitReleaseTagForCommit(docker, containerId, gitDir, commit, packedRefsText);
 
     return {
       type: 'git',
       workdir,
+      tag: tag || null,
       branch: branch || null,
       commit: commit || null,
       shortCommit: commit ? commit.slice(0, 12) : null
@@ -459,6 +526,7 @@ async function enrichContainersWithRuntimeSource(docker, containers) {
     return {
       ...container,
       runtimeSource: source,
+      runtimeTag: source.tag || null,
       runtimeBranch: source.branch || null,
       runtimeCommit: source.commit || null,
       runtimeShortCommit: source.shortCommit || null
@@ -5667,6 +5735,8 @@ module.exports = {
     releaseTagLabel,
     matchedSemverReleaseTagForDigest,
     matchedReleaseTagForLocalTag,
+    parsePackedRefsTagsForCommit,
+    inspectContainerRuntimeSource,
     imageTagForContainer,
     applyContainerMatchedReleaseTags
   },

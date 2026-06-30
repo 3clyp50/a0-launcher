@@ -283,6 +283,8 @@ This scope owns:
   provider/model defaults plus workspace storage defaults. Do not scatter those
   persistent controls into install or instance cards except for the first-pull
   defaults prompt.
+  Its single visible save action should persist every Settings sub-tab, including
+  edited fields in inactive panels.
 - `Open UI` opens local and remote instances in a launcher tab by default.
   Reopening the same target focuses the existing tab. Detach moves the target
   into a standalone secure Electron window without stopping the instance.

@@ -744,7 +744,7 @@ async function removeVolume(volumeName) {
   }
 }
 
-async function setStoragePreferences(preferences = {}) {
+async function setStoragePreferences(preferences = {}, options = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.setStoragePreferences !== "function") return null;
   const payload = preferences && typeof preferences === "object" ? preferences : {};
@@ -754,7 +754,7 @@ async function setStoragePreferences(preferences = {}) {
     return null;
   }
   store.storagePreferences = result || store.storagePreferences;
-  setBanner("success", "Workspace storage preferences saved.");
+  if (!options?.quiet) setBanner("success", "Workspace storage preferences saved.");
   emitState();
   return result;
 }
@@ -1663,13 +1663,13 @@ window.dockerManagerActions = {
   detachInstanceTab,
   syncInstanceTabBounds,
   setInstanceDefaults,
-  async setPortPreferences(prefs) {
+  async setPortPreferences(prefs, options = {}) {
     const api = window.dockerManagerAPI;
     if (!api || typeof api.setPortPreferences !== "function") return false;
     try {
       const res = await api.setPortPreferences(prefs);
       if (isErrorResponse(res)) { setBanner("error", res.message); return false; }
-      setBanner("info", "Port preferences saved.");
+      if (!options?.quiet) setBanner("info", "Port preferences saved.");
       await refresh();
       return true;
     } catch (e) {

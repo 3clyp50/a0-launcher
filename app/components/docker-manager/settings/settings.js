@@ -13,6 +13,7 @@ import {
 
 const SETTINGS_TAB_KEY = "dm-settings-active-tab";
 const SETTINGS_TABS = ["ports", "workspace", "defaults"];
+let settingsSaveInProgress = false;
 
 function byId(id) { return document.getElementById(id); }
 
@@ -123,6 +124,76 @@ function renderModelFields() {
   bindInstanceDefaultProviderPlaceholderSync(document, "settings");
 }
 
+function storageInputs() {
+  return [
+    byId("workspaceStorageMode"),
+    byId("workspaceHostRoot"),
+    byId("workspaceHostPathMode"),
+    byId("workspaceVolumePrefix")
+  ].filter(Boolean);
+}
+
+function readPortPreferences() {
+  return {
+    ui: parseOptionalInt(byId("uiPortInput")?.value),
+    ssh: parseOptionalInt(byId("sshPortInput")?.value)
+  };
+}
+
+function readStoragePreferences() {
+  return {
+    mode: byId("workspaceStorageMode")?.value || "host_directory",
+    hostRoot: byId("workspaceHostRoot")?.value || "~/agent-zero",
+    hostPathMode: byId("workspaceHostPathMode")?.value || "per_instance",
+    volumePrefix: byId("workspaceVolumePrefix")?.value || "a0-launcher"
+  };
+}
+
+function clearPortDirty() {
+  delete byId("uiPortInput")?.dataset.dirty;
+  delete byId("sshPortInput")?.dataset.dirty;
+}
+
+function setSaveSettingsDisabled(disabled) {
+  const saveBtn = byId("saveSettingsBtn");
+  if (saveBtn) saveBtn.disabled = !!disabled;
+}
+
+async function saveAllSettings() {
+  if (settingsSaveInProgress) return;
+  const actions = window.dockerManagerActions || {};
+  const storageFields = storageInputs();
+  const instanceDefaults = readInstanceDefaultsFromForm(document, "settings");
+  const envResult = buildInstanceEnvText(instanceDefaults);
+
+  settingsSaveInProgress = true;
+  setSaveSettingsDisabled(true);
+  try {
+    const portsOk = (await actions.setPortPreferences?.(readPortPreferences(), { quiet: true })) === true;
+    const storageOk = Boolean(await actions.setStoragePreferences?.(readStoragePreferences(), { quiet: true }));
+    let defaultsOk = false;
+
+    if (envResult.ok) {
+      defaultsOk = await actions.setInstanceDefaults?.(instanceDefaults, { quiet: true }) === true;
+    } else {
+      window.toastFrontendError?.(envResult.message, "Agent Zero");
+    }
+
+    if (portsOk) clearPortDirty();
+    if (storageOk) storageFields.forEach((input) => { delete input.dataset.dirty; });
+    if (defaultsOk) clearInstanceDefaultDirty(document, "settings");
+
+    if (portsOk && storageOk && defaultsOk) {
+      window.toastFrontendSuccess?.("Settings saved.", "Agent Zero");
+    } else {
+      window.toastFrontendWarning?.("Some settings could not be saved.", "Agent Zero");
+    }
+  } finally {
+    settingsSaveInProgress = false;
+    setSaveSettingsDisabled(false);
+  }
+}
+
 function populateFromState(state) {
   renderModelFields();
   const prefs = state?.portPreferences;
@@ -135,7 +206,7 @@ function populateFromState(state) {
   const hostRoot = byId("workspaceHostRoot");
   const hostPathMode = byId("workspaceHostPathMode");
   const volumePrefix = byId("workspaceVolumePrefix");
-  const saveWorkspaceStorageBtn = byId("saveWorkspaceStorageBtn");
+  const saveSettingsBtn = byId("saveSettingsBtn");
 
   if (uiInput && prefs?.ui != null && !uiInput.dataset.dirty) {
     uiInput.value = prefs.ui;
@@ -147,7 +218,7 @@ function populateFromState(state) {
   if (hostRoot && !hostRoot.dataset.dirty) hostRoot.value = storagePrefs.hostRoot;
   if (hostPathMode && !hostPathMode.dataset.dirty) hostPathMode.value = storagePrefs.hostPathMode;
   if (volumePrefix && !volumePrefix.dataset.dirty) volumePrefix.value = storagePrefs.volumePrefix;
-  if (saveWorkspaceStorageBtn) saveWorkspaceStorageBtn.disabled = state?.progress?.status === "running";
+  if (saveSettingsBtn) saveSettingsBtn.disabled = settingsSaveInProgress || state?.progress?.status === "running";
   syncStoragePreferenceFields();
   applyInstanceDefaultsToForm(document, "settings", instanceDefaults, { respectDirty: true });
 }
@@ -155,17 +226,10 @@ function populateFromState(state) {
 function bindActions() {
   bindSettingsTabs();
   renderModelFields();
-  const savePortsBtn = byId("savePortsBtn");
-  const saveWorkspaceStorageBtn = byId("saveWorkspaceStorageBtn");
-  const saveInstanceDefaultsBtn = byId("saveInstanceDefaultsBtn");
+  const saveSettingsBtn = byId("saveSettingsBtn");
   const uiInput = byId("uiPortInput");
   const sshInput = byId("sshPortInput");
-  const storageInputs = [
-    byId("workspaceStorageMode"),
-    byId("workspaceHostRoot"),
-    byId("workspaceHostPathMode"),
-    byId("workspaceVolumePrefix")
-  ].filter(Boolean);
+  const storageFields = storageInputs();
 
   if (uiInput && !uiInput.dataset.bound) {
     uiInput.dataset.bound = "1";
@@ -177,7 +241,7 @@ function bindActions() {
   }
   bindInstanceDefaultDirtyTracking(document, "settings");
 
-  storageInputs.forEach((input) => {
+  storageFields.forEach((input) => {
     if (input.dataset.bound) return;
     input.dataset.bound = "1";
     input.addEventListener("input", () => { input.dataset.dirty = "1"; });
@@ -187,46 +251,15 @@ function bindActions() {
     });
   });
 
-  if (savePortsBtn && !savePortsBtn.dataset.bound) {
-    savePortsBtn.dataset.bound = "1";
-    savePortsBtn.addEventListener("click", async () => {
-      const ui = parseOptionalInt(uiInput?.value);
-      const ssh = parseOptionalInt(sshInput?.value);
-      const ok = await window.dockerManagerActions?.setPortPreferences?.({ ui, ssh });
-      if (ok) {
-        if (uiInput) delete uiInput.dataset.dirty;
-        if (sshInput) delete sshInput.dataset.dirty;
-      }
-    });
-  }
-
-  if (saveWorkspaceStorageBtn && !saveWorkspaceStorageBtn.dataset.bound) {
-    saveWorkspaceStorageBtn.dataset.bound = "1";
-    saveWorkspaceStorageBtn.addEventListener("click", async () => {
-      const saved = await window.dockerManagerActions?.setStoragePreferences?.({
-        mode: byId("workspaceStorageMode")?.value || "host_directory",
-        hostRoot: byId("workspaceHostRoot")?.value || "~/agent-zero",
-        hostPathMode: byId("workspaceHostPathMode")?.value || "per_instance",
-        volumePrefix: byId("workspaceVolumePrefix")?.value || "a0-launcher"
-      });
-      if (saved) storageInputs.forEach((input) => { delete input.dataset.dirty; });
-    });
-  }
-
-  if (saveInstanceDefaultsBtn && !saveInstanceDefaultsBtn.dataset.bound) {
-    saveInstanceDefaultsBtn.dataset.bound = "1";
-    saveInstanceDefaultsBtn.addEventListener("click", async () => {
-      const instanceDefaults = readInstanceDefaultsFromForm(document, "settings");
-      const envResult = buildInstanceEnvText(instanceDefaults);
-      if (!envResult.ok) {
-        window.toastFrontendError?.(envResult.message, "Agent Zero");
-        return;
-      }
-      const ok = await window.dockerManagerActions?.setInstanceDefaults?.(instanceDefaults);
-      if (ok) clearInstanceDefaultDirty(document, "settings");
-    });
+  if (saveSettingsBtn && !saveSettingsBtn.dataset.bound) {
+    saveSettingsBtn.dataset.bound = "1";
+    saveSettingsBtn.addEventListener("click", saveAllSettings);
   }
 }
+
+export {
+  saveAllSettings
+};
 
 window.addEventListener("dm:state", (e) => {
   populateFromState(e.detail);

@@ -23,6 +23,7 @@ const {
   isInstalledEntry,
   metaPartsForEntry,
   releaseMatchBadgeLabel,
+  updateActionLabel,
   statusForEntry
 } = await import('./official-versions.js');
 
@@ -47,6 +48,24 @@ test('update-ready install entries keep Run and expose Update separately', () =>
   assert.deepEqual(actions.map((action) => action.label), ['Run', 'Update']);
   assert.equal(actions[0].className, 'button confirm');
   assert.equal(actions[1].className, 'button');
+});
+
+test('update action labels concrete upstream target when known', () => {
+  assert.equal(updateActionLabel({
+    tag: 'ready',
+    availability: 'update_available',
+    publishedReleaseTag: 'v2.1'
+  }), 'Update to 2.1');
+
+  assert.equal(updateActionLabel({
+    tag: 'latest',
+    availability: 'update_available'
+  }, [{ tag: 'v2.1', badges: ['latest'] }]), 'Update to 2.1');
+
+  assert.equal(updateActionLabel({
+    tag: 'ready',
+    availability: 'update_available'
+  }), 'Update');
 });
 
 test('update-ready install entries do not render a duplicate status chip', () => {

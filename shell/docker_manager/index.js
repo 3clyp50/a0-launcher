@@ -2188,6 +2188,9 @@ async function buildDerivedState(options = {}) {
     let matchHint = differsFromPublished ? `Differs from published ${tag === 'testing' ? 'preview' : tag}` : null;
     const digestHint = differsFromPublished ? buildDigestHint(publishedDigest, localDigest) : null;
     const matchedReleaseTag = matchedReleaseTagByTag.get(tag) || '';
+    const publishedReleaseTag = publishedDigest
+      ? matchedSemverReleaseTagForDigest(publishedDigest, knownRemoteDigests) || (tag === 'latest' ? latestReleaseTag || '' : '')
+      : '';
 
     if (!matchHint && localDigest && matchedReleaseTag) {
       matchHint = tag === 'latest'
@@ -2207,6 +2210,7 @@ async function buildDerivedState(options = {}) {
       installability: cacheEntry?.status === 'installable' ? 'installable' : cacheEntry?.status === 'not_yet_available' ? 'not_yet_available' : 'unknown',
       matchHint,
       matchedReleaseTag,
+      publishedReleaseTag,
       digestHint,
       differsFromPublished,
       isActive,

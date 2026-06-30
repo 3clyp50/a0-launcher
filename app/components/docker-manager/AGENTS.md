@@ -164,7 +164,8 @@ This scope owns:
 - Running an installed tag from Installs creates another managed local instance
   and must not stop existing instances or require a data-loss acknowledgement.
   Stale installed tags should keep `Run` visible and expose `Update` as a
-  separate action. After the run operation reports completed with the UI-ready
+  separate action, naming the concrete upstream release when Docker Manager
+  provides one. After the run operation reports completed with the UI-ready
   marker, the renderer should switch to the Instances tab so the new managed
   Instance is visible.
   Removing an installed tag must go through Docker Manager image removal and

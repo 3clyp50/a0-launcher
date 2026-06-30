@@ -143,6 +143,14 @@ function latestReleaseEntry(entries) {
   return releases.find((entry) => Array.isArray(entry.badges) && entry.badges.includes("latest")) || releases[0] || null;
 }
 
+function updateActionLabel(entry, entries = []) {
+  const targetTag = entry?.publishedReleaseTag ||
+    (isLatestEntry(entry) ? latestReleaseEntry(entries)?.tag : "") ||
+    (isReleaseTag(entry) ? entry.tag : "");
+  const target = releaseMatchBadgeLabel(targetTag);
+  return target ? `Update to ${target}` : "Update";
+}
+
 function displayDateForEntry(entry, entries = []) {
   if (!entry) return null;
   if (isPinnedChannelEntry(entry)) {
@@ -233,6 +241,7 @@ function normalizeVersionEntries(state) {
       sizeBytes: v?.sizeBytes || null,
       matchHint: v?.matchHint || "",
       matchedReleaseTag: v?.matchedReleaseTag || "",
+      publishedReleaseTag: v?.publishedReleaseTag || "",
       digestHint: v?.digestHint || "",
       differsFromPublished: !!v?.differsFromPublished,
       updatedAt: v?.updatedAt || null
@@ -304,7 +313,7 @@ function actionForEntry(entry, state) {
   return actionsForEntry(entry, state)[0] || null;
 }
 
-function actionsForEntry(entry, state) {
+function actionsForEntry(entry, state, entries = []) {
   if (entry.availability === "installing") return [];
 
   if (entry.availability === "installed" || entry.availability === "update_available" || entry.differsFromPublished) {
@@ -318,7 +327,7 @@ function actionsForEntry(entry, state) {
 
     if (entry.availability === "update_available" || entry.differsFromPublished) {
       actions.push({
-        label: "Update",
+        label: updateActionLabel(entry, entries),
         className: "button",
         handler: () => window.dockerManagerActions?.updateInstall?.(entry.tag)
       });
@@ -453,7 +462,7 @@ function renderEntryCard(entry, state, entries) {
   const actions = document.createElement("div");
   actions.className = "dm-card-actions";
 
-  const cardActions = actionsForEntry(entry, state) || [];
+  const cardActions = actionsForEntry(entry, state, entries) || [];
   for (const action of cardActions) {
     const actionBtn = document.createElement("button");
     actionBtn.className = action.className;
@@ -591,6 +600,7 @@ export {
   isInstalledEntry,
   metaPartsForEntry,
   releaseMatchBadgeLabel,
+  updateActionLabel,
   statusForEntry
 };
 

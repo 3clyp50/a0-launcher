@@ -2851,6 +2851,11 @@ function sanitizeDockerManagerState(state) {
       if (matchedReleaseTag) out.matchedReleaseTag = matchedReleaseTag;
     }
 
+    {
+      const publishedReleaseTag = cleanMatchedReleaseTag(v.publishedReleaseTag);
+      if (publishedReleaseTag) out.publishedReleaseTag = publishedReleaseTag;
+    }
+
     if (typeof v.differsFromPublished === 'boolean') {
       out.differsFromPublished = v.differsFromPublished;
     }

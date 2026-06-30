@@ -39,8 +39,9 @@ npm install --prefix packaging
 - Packaging scripts must not publish directly. GitHub Release upload is owned
   by `.github/workflows/build.yml`.
 - Use `A0_LAUNCHER_APP_VERSION` and `A0_LAUNCHER_RELEASE_TAG` for CI-provided
-  release versions. Two-segment tags such as `v0.5` should build as semver
-  `0.5.0` but stage public assets with release version `0.5`.
+  release versions. Two-segment tags such as `v1.1` are the public release
+  shape; build them as semver `1.1.0` where tooling requires it, but stage
+  public assets with release version `1.1`.
 - Canonical public/updater asset names are:
 
 ```text

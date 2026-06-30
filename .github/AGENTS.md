@@ -21,14 +21,16 @@ This scope owns:
 
 - Release executable builds are driven by `v*` tag pushes or manual workflow
   input.
-- Tags without a patch segment, such as `v0.1`, are normalized to full semver
-  build versions such as `0.1.0`, while public release asset names may keep the
-  shorter `0.1` display version.
+- Tags without a patch segment, such as `v1.1`, are the public release shape.
+  They are normalized to full semver build versions such as `1.1.0` only where
+  Electron tooling or updater comparisons require it; public release asset names
+  keep the shorter `1.1` version.
 - Build jobs pass `A0_LAUNCHER_APP_VERSION` and `A0_LAUNCHER_RELEASE_TAG` into
   the packaging scripts so generated Electron packages use the selected release
   version without mutating the checked-out tag.
-- Keep the checked-in `package.json` version aligned with the current release
-  line because local runs and fallback paths use it directly.
+- Keep the checked-in `package.json` version aligned with the current
+  two-segment release line because local runs and fallback paths use it
+  directly.
 - Build every release from the tagged source. Do not relabel or reuse executable
   assets from older releases.
 - Executable artifact names should remain predictable:

@@ -79,7 +79,8 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   version and remains available through renderer metadata for diagnostics and
   update decisions.
 - Keep `package.json` and the root entries in `package-lock.json` aligned with
-  the current release line so local `npm start` runs do not show stale metadata.
+  the current two-segment release line, such as `1.1`, so local `npm start`
+  runs do not show stale metadata.
 - Packaged or non-local runs fetch `content.json` from the latest GitHub Release
   for the configured launcher repo and unpack it under Electron `userData`.
 - Packaged startup uses `electron-updater` GitHub metadata to compare Electron
@@ -103,7 +104,10 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   host directory under `~/agent-zero`; named Docker volumes are an advanced
   alternative, and explicit no-volume runs are ephemeral.
 - `v*` tags are release inputs for executable builds.
-- Two-segment tags such as `v0.1` become semver `0.1.0` in the workflow.
+- Public release tags and launcher metadata use two-segment versions such as
+  `v1.1` / `1.1` when the patch is zero. Packaging normalizes them to full
+  semver such as `1.1.0` only where Electron tooling or updater comparisons
+  require it.
 - Release executable artifacts are macOS x64/arm64 DMG plus updater ZIP,
   Windows x64/arm64 NSIS setup EXE, Linux x64/arm64 AppImage, and
   `electron-updater` metadata files. Release content remains `content.json`.

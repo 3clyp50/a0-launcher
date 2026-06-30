@@ -63,6 +63,10 @@ function isAllowedRemoteInstanceUrl(value) {
   return Boolean(parseHttpUrl(value));
 }
 
+function isAllowedInstanceTabNavigationUrl(value) {
+  return isAllowedRemoteInstanceUrl(value);
+}
+
 function makeTabKey(target) {
   const safeTarget = target && typeof target === 'object' ? target : {};
   const kind = typeof safeTarget.kind === 'string' ? safeTarget.kind : '';
@@ -140,6 +144,7 @@ module.exports = {
   normalizeHttpUrl,
   isAllowedLocalInstanceUrl,
   isAllowedRemoteInstanceUrl,
+  isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
   makeTabsSnapshot,

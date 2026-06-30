@@ -13,6 +13,7 @@ const {
   normalizeHttpUrl,
   isAllowedLocalInstanceUrl,
   isAllowedRemoteInstanceUrl,
+  isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
   makeTabsSnapshot,
@@ -1561,31 +1562,9 @@ function cleanupInstanceTabs() {
   instanceTabBounds = null;
 }
 
-function urlsShareOrigin(left, right) {
-  try {
-    const a = new URL(String(left || ''));
-    const b = new URL(String(right || ''));
-    return a.origin === b.origin;
-  } catch {
-    return false;
-  }
-}
-
 function isNavigationAllowedForTab(tab, url) {
   if (!tab || typeof url !== 'string') return false;
-  const normalized = normalizeHttpUrl(url);
-  if (!normalized) return false;
-  const validator = tab.kind === 'remote' ? isAllowedRemoteInstanceUrl : isAllowedLocalInstanceUrl;
-  return validator(normalized) && urlsShareOrigin(tab.url, normalized);
-}
-
-async function openExternalIfSafe(url) {
-  const normalized = normalizeHttpUrl(url);
-  if (!normalized || !isAllowedRemoteInstanceUrl(normalized) || isAllowedLocalInstanceUrl(normalized)) {
-    return { opened: false };
-  }
-  await shell.openExternal(normalized);
-  return { opened: true };
+  return isAllowedInstanceTabNavigationUrl(url);
 }
 
 function createTabTargetError(code, message) {
@@ -1714,12 +1693,11 @@ function attachInstanceTabEvents(tab) {
   const blockNavigation = (event, url) => {
     if (isNavigationAllowedForTab(tab, url)) return;
     if (event && typeof event.preventDefault === 'function') event.preventDefault();
-    void openExternalIfSafe(url);
   };
 
   wc.setWindowOpenHandler(({ url }) => {
-    if (!isNavigationAllowedForTab(tab, url)) {
-      void openExternalIfSafe(url);
+    if (isNavigationAllowedForTab(tab, url)) {
+      void wc.loadURL(normalizeHttpUrl(url));
     }
     return { action: 'deny' };
   });

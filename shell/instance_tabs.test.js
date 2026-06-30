@@ -5,6 +5,7 @@ const {
   normalizeHttpUrl,
   isAllowedLocalInstanceUrl,
   isAllowedRemoteInstanceUrl,
+  isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
   makeTabsSnapshot,
@@ -34,6 +35,15 @@ test('normalizeHttpUrl canonicalizes valid HTTP URLs and rejects invalid values'
   assert.equal(normalizeHttpUrl(' http://127.0.0.1:32080 '), 'http://127.0.0.1:32080/');
   assert.equal(normalizeHttpUrl('not a url'), '');
   assert.equal(normalizeHttpUrl('file:///tmp/nope'), '');
+});
+
+test('instance tab navigation allows credential-free HTTP URLs', () => {
+  assert.equal(isAllowedInstanceTabNavigationUrl('https://github.com/login/oauth/authorize?client_id=abc'), true);
+  assert.equal(isAllowedInstanceTabNavigationUrl('https://agent-zero.trycloudflare.com/'), true);
+  assert.equal(isAllowedInstanceTabNavigationUrl('http://127.0.0.1:32080/oauth/callback'), true);
+  assert.equal(isAllowedInstanceTabNavigationUrl('https://token@example.com/'), false);
+  assert.equal(isAllowedInstanceTabNavigationUrl('file:///tmp/nope'), false);
+  assert.equal(isAllowedInstanceTabNavigationUrl('vscode://file/tmp/nope'), false);
 });
 
 test('makeTabKey uses stable identity before URL fallback', () => {

@@ -306,12 +306,16 @@ function createBuildConfig(platformSpec, options) {
   buildConfig.asar = false;
   buildConfig.buildVersion = buildVersion;
   buildConfig.electronVersion = ELECTRON_PACKAGE.version;
-  if (process.platform === platformSpec.preferredHost) {
+  if (process.platform === platformSpec.preferredHost && fs.existsSync(ELECTRON_DIST_PATH)) {
     buildConfig.electronDist = ELECTRON_DIST_PATH;
   } else {
     delete buildConfig.electronDist;
+    const reason =
+      process.platform === platformSpec.preferredHost
+        ? `local Electron dist does not exist at ${path.relative(PROJECT_ROOT, ELECTRON_DIST_PATH)}`
+        : `packaging ${platformSpec.label} from ${process.platform}`;
     warnings.push(
-      `Skipping local Electron dist override while packaging ${platformSpec.label} from ${process.platform}; electron-builder will resolve the target runtime instead.`
+      `Skipping local Electron dist override because ${reason}; electron-builder will resolve the target runtime instead.`
     );
   }
   buildConfig.extraMetadata = {

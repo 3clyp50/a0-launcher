@@ -581,12 +581,18 @@ function assertCustomImageSpec(options = {}) {
   const raw = options && typeof options === 'object' ? options : {};
   const split = splitImageAndTag(raw.image, raw.tag);
   const imageRepo = assertCustomImageRepo(split.image);
-  const tag = assertCustomImageTag(split.tag);
+  const tag = normalizeCustomImageTag(imageRepo, assertCustomImageTag(split.tag));
   return {
     imageRepo,
     tag,
     imageRef: imageRefForTag(imageRepo, tag)
   };
+}
+
+function normalizeCustomImageTag(imageRepo, tag) {
+  const t = String(tag || '').trim();
+  if ((imageRepo === DEFAULT_IMAGE_REPO || imageRepo === getBackendImageRepo()) && /^\d+\.\d+(?:\.\d+)?$/.test(t)) return `v${t}`;
+  return t;
 }
 
 function nowIso() {
@@ -4127,9 +4133,7 @@ function preferredUiMapping(mappings) {
 }
 
 function developerContainerName(instanceName) {
-  const suffix = Date.now().toString(36);
-  const base = sanitizeInstanceName(`a0-dev-${instanceName || 'image'}`, 'a0-dev-image').slice(0, 48);
-  return sanitizeInstanceName(`${base}-${suffix}`, `a0-dev-${suffix}`);
+  return sanitizeInstanceName(instanceName, 'agent-zero-dev');
 }
 
 function managedInstanceContainerName(tag, instanceName) {
@@ -5847,6 +5851,8 @@ module.exports = {
     buildAgentZeroBackupMetadata,
     createAgentZeroBackupZip,
     restoreAgentZeroBackupZip,
+    normalizeCustomImageOptions,
+    developerContainerName,
     releaseTagLabel,
     matchedSemverReleaseTagForDigest,
     matchedReleaseTagForLocalTag,

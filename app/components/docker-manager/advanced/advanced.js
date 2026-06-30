@@ -41,8 +41,14 @@ function splitImageTag(imageValue, tagValue) {
   }
   return {
     image: image || DEFAULT_IMAGE,
-    tag: tag || embeddedTag || DEFAULT_TAG
+    tag: normalizeTagForImage(image || DEFAULT_IMAGE, tag || embeddedTag || DEFAULT_TAG)
   };
+}
+
+function normalizeTagForImage(image, tag) {
+  const text = compactText(tag, DEFAULT_TAG);
+  if (compactText(image, DEFAULT_IMAGE).toLowerCase() === DEFAULT_IMAGE && /^\d+\.\d+(?:\.\d+)?$/.test(text)) return `v${text}`;
+  return text;
 }
 
 function embeddedImageTag(value) {
@@ -158,10 +164,16 @@ function bindAdvancedTabs() {
   applyAdvancedTab(getAdvancedTab(), { persist: false });
 }
 
-function readForm() {
+function readImagePair() {
   const imageInput = byId("advancedImageInput");
   const tagInput = byId("advancedTagInput");
-  const pair = splitImageTag(imageInput?.value || DEFAULT_IMAGE, tagInput?.value || "");
+  const imageValue = imageInput?.value || DEFAULT_IMAGE;
+  const tagValue = embeddedImageTag(imageValue)?.tag && tagInput?.dataset.dirty !== "1" ? "" : tagInput?.value || "";
+  return splitImageTag(imageValue, tagValue);
+}
+
+function readForm() {
+  const pair = readImagePair();
   const name = sanitizeName(byId("advancedInstanceNameInput")?.value || defaultInstanceName(pair.image, pair.tag));
   return {
     image: pair.image,
@@ -225,7 +237,7 @@ function updateComposePreview() {
 function syncDefaultName() {
   const nameInput = byId("advancedInstanceNameInput");
   if (!nameInput || nameInput.dataset.dirty) return;
-  const pair = splitImageTag(byId("advancedImageInput")?.value || DEFAULT_IMAGE, byId("advancedTagInput")?.value || "");
+  const pair = readImagePair();
   nameInput.value = defaultInstanceName(pair.image, pair.tag);
 }
 
@@ -235,7 +247,7 @@ function syncEmbeddedTagFromImage() {
   const split = embeddedImageTag(imageInput?.value || "");
   if (!split?.image || !split?.tag || !imageInput || !tagInput || tagInput.dataset.dirty) return;
   imageInput.value = split.image;
-  tagInput.value = split.tag;
+  tagInput.value = normalizeTagForImage(split.image, split.tag);
 }
 
 function setInitialFormValues() {
@@ -251,12 +263,9 @@ function setInitialFormValues() {
 }
 
 function updateActionState() {
-  const enabled = byId("developerModeToggle")?.checked === true;
-  const stateEl = byId("developerModeState");
   const runBtn = byId("runCustomImageBtn");
   const operationRunning = lastState?.progress?.status === "running";
-  if (stateEl) stateEl.textContent = enabled ? "On" : "Off";
-  if (runBtn) runBtn.disabled = !enabled || operationRunning;
+  if (runBtn) runBtn.disabled = operationRunning;
 }
 
 async function copyCompose() {
@@ -303,10 +312,6 @@ function bindWheelPassthrough(input) {
 }
 
 async function runCustomImage() {
-  if (byId("developerModeToggle")?.checked !== true) {
-    window.toastFrontendWarning?.("Turn on Developer mode before running a custom image.", "Agent Zero");
-    return;
-  }
   const form = readForm();
   const ok = await window.dockerManagerActions?.runCustomImage?.({
     image: form.image,
@@ -565,6 +570,8 @@ function bind() {
   });
   tagInput?.addEventListener("input", () => {
     tagInput.dataset.dirty = "1";
+    const pair = readImagePair();
+    if (tagInput.value.trim() && tagInput.value !== pair.tag) tagInput.value = pair.tag;
     syncDefaultName();
     updateComposePreview();
   });
@@ -577,8 +584,7 @@ function bind() {
     byId("advancedPortsInput"),
     byId("advancedEnvInput"),
     byId("advancedMountsInput"),
-    byId("advancedPullToggle"),
-    byId("developerModeToggle")
+    byId("advancedPullToggle")
   ].forEach((input) => {
     input?.addEventListener("input", updateComposePreview);
     input?.addEventListener("change", updateComposePreview);

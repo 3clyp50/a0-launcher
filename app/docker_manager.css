@@ -1343,7 +1343,6 @@ body {
   font-weight: 600;
 }
 
-.dm-toggle-line,
 .dm-checkbox-line {
   display: inline-flex;
   align-items: center;
@@ -1353,7 +1352,6 @@ body {
   white-space: nowrap;
 }
 
-.dm-toggle-line input,
 .dm-checkbox-line input {
   accent-color: var(--color-highlight);
 }

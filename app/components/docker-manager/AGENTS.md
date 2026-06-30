@@ -187,9 +187,9 @@ This scope owns:
   Instance, choose a custom folder, or use a named Docker volume. The named
   Instance folder under the default workspace root should be first/default.
 - The Advanced tab may expose developer-mode custom image, tag, environment,
-  port, mount, and editable Compose-file controls. Keep it opt-in, validate
-  through Docker Manager IPC, and never expose a generic command runner or a
-  runtime-candidate browser.
+  port, mount, and editable Compose-file controls in the Developer sub-tab.
+  Validate through Docker Manager IPC, and never expose a generic command
+  runner or a runtime-candidate browser.
 - Advanced should keep developer controls and their related Compose editing
   together in the Developer sub-tab. Diagnostics and Storage volumes remain
   separate sub-tabs so the page avoids multiple boxed panels at once.

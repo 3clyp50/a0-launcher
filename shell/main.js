@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, net, ipcMain, shell, nativeImage, protocol, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, net, ipcMain, shell, nativeImage, protocol, dialog } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const os = require('node:os');
@@ -15,7 +15,8 @@ const {
   isAllowedRemoteInstanceUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
-  makeTabsSnapshot
+  makeTabsSnapshot,
+  instanceContextMenuActions
 } = require('./instance_tabs');
 const { formatLauncherVersion } = require('./launcher_update');
 const {
@@ -1424,9 +1425,49 @@ async function openAgentZeroUiWindow(url, title = 'Agent Zero', target = null) {
       sandbox: true
     }
   });
+  attachInstanceContextMenu(uiWindow.webContents);
   await loginInstanceWebUiSession(target, uiWindow.webContents);
   await uiWindow.loadURL(url);
   return uiWindow;
+}
+
+const INSTANCE_CONTEXT_MENU_ITEMS = Object.freeze({
+  undo: { label: 'Undo', method: 'undo' },
+  redo: { label: 'Redo', method: 'redo' },
+  cut: { label: 'Cut', method: 'cut' },
+  copy: { label: 'Copy', method: 'copy' },
+  paste: { label: 'Paste', method: 'paste' },
+  delete: { label: 'Delete', method: 'delete' },
+  selectAll: { label: 'Select All', method: 'selectAll' }
+});
+
+function attachInstanceContextMenu(webContents) {
+  if (!webContents || typeof webContents.on !== 'function') return;
+
+  webContents.on('context-menu', (_event, params) => {
+    const template = instanceContextMenuActions(params).map((action) => {
+      if (action === 'separator') return { type: 'separator' };
+      const item = INSTANCE_CONTEXT_MENU_ITEMS[action];
+      return {
+        label: item.label,
+        click: () => {
+          if (!webContents.isDestroyed?.() && typeof webContents[item.method] === 'function') {
+            webContents[item.method]();
+          }
+        }
+      };
+    });
+
+    if (template.length) {
+      const ownerWindow = BrowserWindow.fromWebContents(webContents);
+      const window = ownerWindow && !ownerWindow.isDestroyed()
+        ? ownerWindow
+        : mainWindow && !mainWindow.isDestroyed()
+          ? mainWindow
+          : undefined;
+      Menu.buildFromTemplate(template).popup({ window });
+    }
+  });
 }
 
 function getInstanceTabsSnapshot() {
@@ -1664,6 +1705,7 @@ function getInstanceTabIdFromRequest(body) {
 
 function attachInstanceTabEvents(tab) {
   const wc = tab.view.webContents;
+  attachInstanceContextMenu(wc);
 
   const update = () => {
     if (instanceTabs.has(tab.id)) sendInstanceTabsEvent();

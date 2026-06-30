@@ -71,7 +71,9 @@ This scope owns:
   unavailable error. If a local Instance has launcher-saved credentials, `Open
   UI` may POST them to the same-origin Agent Zero `/login` route in the
   shell-owned browser session before loading the tab; do not put credentials in
-  URLs or expose decrypted passwords to the renderer.
+  URLs or expose decrypted passwords to the renderer. Embedded and detached
+  Agent Zero UI web contents should attach the same shell-owned edit context
+  menu so selected text and editable fields keep normal copy/paste behavior.
 - Local development content is selected by `A0_LAUNCHER_LOCAL_REPO`,
   `A0_LAUNCHER_USE_LOCAL_CONTENT`, a repo-shaped default-app current working
   directory, a repo-shaped unpackaged-app current working directory, or the

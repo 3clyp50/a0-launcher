@@ -7,7 +7,8 @@ const {
   isAllowedRemoteInstanceUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
-  makeTabsSnapshot
+  makeTabsSnapshot,
+  instanceContextMenuActions
 } = require('./instance_tabs');
 
 test('local URLs allow only localhost-style HTTP URLs without credentials', () => {
@@ -137,4 +138,35 @@ test('makeTabsSnapshot supports launcher home with no active instance tab', () =
     }],
     activeTabId: ''
   });
+});
+
+test('instance context menu exposes copy for selected page text', () => {
+  assert.deepEqual(
+    instanceContextMenuActions({
+      selectionText: "Hello! I'm Agent Zero",
+      editFlags: { canCopy: true, canSelectAll: true }
+    }),
+    ['copy', 'separator', 'selectAll']
+  );
+});
+
+test('instance context menu exposes editable text actions from Electron flags', () => {
+  assert.deepEqual(
+    instanceContextMenuActions({
+      isEditable: true,
+      editFlags: {
+        canUndo: true,
+        canCut: true,
+        canCopy: true,
+        canPaste: true,
+        canDelete: true,
+        canSelectAll: true
+      }
+    }),
+    ['undo', 'separator', 'cut', 'copy', 'paste', 'delete', 'separator', 'selectAll']
+  );
+});
+
+test('instance context menu stays quiet when no edit action applies', () => {
+  assert.deepEqual(instanceContextMenuActions({ editFlags: {} }), []);
 });

@@ -113,11 +113,35 @@ function makeTabsSnapshot(tabs, activeTabId) {
   };
 }
 
+function instanceContextMenuActions(params) {
+  const safeParams = params && typeof params === 'object' ? params : {};
+  const editFlags = safeParams.editFlags && typeof safeParams.editFlags === 'object' ? safeParams.editFlags : {};
+  const hasSelection = typeof safeParams.selectionText === 'string' && safeParams.selectionText.length > 0;
+  const actions = [];
+
+  if (editFlags.canUndo) actions.push('undo');
+  if (editFlags.canRedo) actions.push('redo');
+  if (actions.length && (editFlags.canCut || editFlags.canCopy || hasSelection || editFlags.canPaste || editFlags.canDelete)) {
+    actions.push('separator');
+  }
+  if (editFlags.canCut) actions.push('cut');
+  if (editFlags.canCopy || hasSelection) actions.push('copy');
+  if (editFlags.canPaste) actions.push('paste');
+  if (editFlags.canDelete) actions.push('delete');
+  if (editFlags.canSelectAll && (safeParams.isEditable || hasSelection)) {
+    if (actions.length) actions.push('separator');
+    actions.push('selectAll');
+  }
+
+  return actions;
+}
+
 module.exports = {
   normalizeHttpUrl,
   isAllowedLocalInstanceUrl,
   isAllowedRemoteInstanceUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
-  makeTabsSnapshot
+  makeTabsSnapshot,
+  instanceContextMenuActions
 };

@@ -225,48 +225,17 @@ body {
 }
 
 .dm-tab-content[data-tab="installs"] > x-component > .section,
-.dm-tab-content[data-tab="advanced"] > x-component > .section {
+.dm-tab-content[data-tab="advanced"] > x-component > .section,
+.dm-tab-content[data-tab="settings"] > x-component > .section {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.dm-tab-content[data-tab="sessions"],
-.dm-tab-content[data-tab="settings"] {
+.dm-tab-content[data-tab="sessions"] {
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-padding-block: 0.25rem;
-}
-
-.dm-tab-content[data-tab="settings"] > x-component {
-  display: block;
-  width: 100%;
-}
-
-.dm-settings-layout {
-  display: grid;
-  grid-template-columns: minmax(20rem, 0.9fr) minmax(32rem, 1.35fr);
-  align-items: start;
-  gap: clamp(1.75rem, 3vw, 3rem);
-  width: 100%;
-  min-width: 0;
-}
-
-.dm-settings-layout > .section {
-  min-width: 0;
-}
-
-.dm-settings-layout .sv-card-head {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.2rem;
-}
-
-@media (max-width: 1180px) {
-  .dm-settings-layout {
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
-  }
 }
 
 .sv-page {
@@ -1254,7 +1223,8 @@ body {
   opacity: 0.8;
 }
 
-.dm-advanced-page {
+.dm-advanced-page,
+.dm-settings-page {
   display: flex;
   flex-direction: column;
   max-width: 100%;
@@ -1262,7 +1232,8 @@ body {
   overflow: hidden;
 }
 
-.dm-advanced-tabs {
+.dm-advanced-tabs,
+.dm-settings-tabs {
   display: flex;
   align-items: flex-end;
   flex: 0 0 auto;
@@ -1272,7 +1243,8 @@ body {
   overflow-x: auto;
 }
 
-.dm-advanced-tab {
+.dm-advanced-tab,
+.dm-settings-tab {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
@@ -1290,22 +1262,26 @@ body {
   white-space: nowrap;
 }
 
-.dm-advanced-tab:hover {
+.dm-advanced-tab:hover,
+.dm-settings-tab:hover {
   background: color-mix(in srgb, var(--color-message-bg) 54%, transparent);
   color: var(--color-text);
 }
 
-.dm-advanced-tab.is-active {
+.dm-advanced-tab.is-active,
+.dm-settings-tab.is-active {
   border-bottom-color: var(--color-highlight);
   background: color-mix(in srgb, var(--color-highlight) 12%, transparent);
   color: var(--color-text);
 }
 
-.dm-advanced-tab .material-symbols-outlined {
+.dm-advanced-tab .material-symbols-outlined,
+.dm-settings-tab .material-symbols-outlined {
   font-size: 1.05rem;
 }
 
-.dm-advanced-tab-panels {
+.dm-advanced-tab-panels,
+.dm-settings-tab-panels {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
@@ -1313,13 +1289,17 @@ body {
   padding-top: 1rem;
 }
 
-.dm-advanced-tab-panel {
+.dm-advanced-tab-panel,
+.dm-settings-tab-panel {
+  flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
   min-height: 0;
   display: none;
 }
 
-.dm-advanced-tab-panel.is-active {
+.dm-advanced-tab-panel.is-active,
+.dm-settings-tab-panel.is-active {
   display: grid;
   gap: 1rem;
   align-content: start;
@@ -1339,7 +1319,8 @@ body {
   max-width: none;
 }
 
-.dm-advanced-panel-head {
+.dm-advanced-panel-head,
+.dm-settings-panel-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1347,7 +1328,8 @@ body {
   min-width: 0;
 }
 
-.dm-advanced-title {
+.dm-advanced-title,
+.dm-settings-title {
   margin: 0 0 0.2rem;
   color: var(--color-text);
   font-family: "Rubik", Arial, Helvetica, sans-serif;
@@ -1383,7 +1365,8 @@ body {
   grid-column: 1 / -1;
 }
 
-.dm-advanced-actions {
+.dm-advanced-actions,
+.dm-settings-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1399,6 +1382,7 @@ body {
 }
 
 .dm-advanced-actions .material-symbols-outlined,
+.dm-settings-actions .material-symbols-outlined,
 #advancedPruneVolumesBtn .material-symbols-outlined,
 #advancedVolumesList .material-symbols-outlined {
   font-size: 1rem;
@@ -2939,11 +2923,6 @@ body.dm-instance-home-active .dm-page {
     grid-template-columns: 1fr;
   }
 
-  .dm-settings-layout .dm-model-section,
-  .dm-settings-layout .dm-model-row {
-    grid-template-columns: 1fr;
-  }
-
   .dm-advanced-form {
     grid-template-columns: 1fr;
   }
@@ -2952,7 +2931,8 @@ body.dm-instance-home-active .dm-page {
     grid-template-columns: 1fr;
   }
 
-  .dm-advanced-panel-head {
+  .dm-advanced-panel-head,
+  .dm-settings-panel-head {
     flex-direction: column;
     align-items: stretch;
   }
@@ -2968,6 +2948,7 @@ body.dm-instance-home-active .dm-page {
   }
 
   .dm-advanced-actions,
+  .dm-settings-actions,
   #copyComposeBtn,
   #advancedPruneVolumesBtn {
     width: 100%;

@@ -11,7 +11,69 @@ import {
   readInstanceDefaultsFromForm
 } from "../instance-defaults.js";
 
+const SETTINGS_TAB_KEY = "dm-settings-active-tab";
+const SETTINGS_TABS = ["ports", "workspace", "defaults"];
+
 function byId(id) { return document.getElementById(id); }
+
+function validSettingsTab(tab) {
+  return SETTINGS_TABS.includes(tab) ? tab : "ports";
+}
+
+function getSettingsTab() {
+  try {
+    return validSettingsTab(sessionStorage.getItem(SETTINGS_TAB_KEY));
+  } catch {
+    return "ports";
+  }
+}
+
+function setStoredSettingsTab(tab) {
+  try {
+    sessionStorage.setItem(SETTINGS_TAB_KEY, validSettingsTab(tab));
+  } catch {
+    // Session storage may be unavailable in constrained browser contexts.
+  }
+}
+
+function applySettingsTab(tab, { persist = true, focus = false } = {}) {
+  const activeTab = validSettingsTab(tab);
+  if (persist) setStoredSettingsTab(activeTab);
+
+  document.querySelectorAll(".dm-settings-tab").forEach((button) => {
+    const selected = button.dataset.settingsTab === activeTab;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+    button.tabIndex = selected ? 0 : -1;
+    if (selected && focus) button.focus();
+  });
+
+  document.querySelectorAll(".dm-settings-tab-panel").forEach((panel) => {
+    const selected = panel.dataset.settingsPanel === activeTab;
+    panel.classList.toggle("is-active", selected);
+    panel.hidden = !selected;
+  });
+}
+
+function bindSettingsTabs() {
+  const buttons = Array.from(document.querySelectorAll(".dm-settings-tab"));
+  if (!buttons.length) return;
+
+  buttons.forEach((button, index) => {
+    if (button.dataset.dmTabBound) return;
+    button.dataset.dmTabBound = "1";
+    button.addEventListener("click", () => applySettingsTab(button.dataset.settingsTab));
+    button.addEventListener("keydown", (event) => {
+      const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      const nextIndex = (index + step + buttons.length) % buttons.length;
+      applySettingsTab(buttons[nextIndex]?.dataset.settingsTab, { focus: true });
+    });
+  });
+
+  applySettingsTab(getSettingsTab(), { persist: false });
+}
 
 function parseOptionalInt(value) {
   const raw = String(value ?? "").trim();
@@ -91,6 +153,7 @@ function populateFromState(state) {
 }
 
 function bindActions() {
+  bindSettingsTabs();
   renderModelFields();
   const savePortsBtn = byId("savePortsBtn");
   const saveWorkspaceStorageBtn = byId("saveWorkspaceStorageBtn");

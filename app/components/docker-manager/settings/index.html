@@ -1,100 +1,139 @@
 <body>
-  <div class="dm-settings-layout">
-    <section class="section sv-card">
-      <div class="sv-card-head">
-        <h2 class="section-title sv-section-heading">Port Defaults</h2>
-        <div class="sv-subtitle">Starting host ports for new local Instances</div>
+  <section class="section sv-card dm-settings-page">
+    <div class="sv-card-head sv-card-head-row">
+      <div>
+        <h2 class="section-title sv-section-heading">Settings</h2>
+        <div class="sv-subtitle">Launcher defaults for new Instances</div>
       </div>
-      <div class="sv-settings-grid">
-        <div class="sv-settings-row">
-          <label class="sv-settings-label" for="uiPortInput">UI Port</label>
-          <div class="sv-settings-field">
-            <input id="uiPortInput" class="sv-input" type="number" min="1024" max="65535" placeholder="e.g. 8080">
-            <span class="sv-settings-hint">Preferred starting host port for the web UI. Existing Instances keep their assigned port.</span>
-          </div>
-        </div>
-        <div class="sv-settings-row">
-          <label class="sv-settings-label" for="sshPortInput">SSH Port</label>
-          <div class="sv-settings-field">
-            <input id="sshPortInput" class="sv-input" type="number" min="1024" max="65535" placeholder="e.g. 2222">
-            <span class="sv-settings-hint">Preferred starting host port when the image exposes SSH. Not every container does.</span>
-          </div>
-        </div>
-      </div>
-      <div class="sv-row-end" style="margin-top:0.75rem;">
-        <button id="savePortsBtn" class="button confirm" type="button">Save Port Defaults</button>
-      </div>
-    </section>
+    </div>
 
-    <section class="section sv-card">
-      <div class="sv-card-head">
-        <h2 class="section-title sv-section-heading">Workspace Storage</h2>
-        <div class="sv-subtitle">Default workspace location for new local Instances</div>
-      </div>
-      <div class="sv-settings-grid">
-        <div class="sv-settings-row">
-          <label class="sv-settings-label" for="workspaceStorageMode">Workspace mode</label>
-          <div class="sv-settings-field">
-            <select id="workspaceStorageMode" class="sv-select">
-              <option value="host_directory">Host directory</option>
-              <option value="named_volume">Named Docker volume</option>
-            </select>
-          </div>
-        </div>
-        <div id="workspaceHostRootRow" class="sv-settings-row">
-          <label class="sv-settings-label" for="workspaceHostRoot">Host folder</label>
-          <div class="sv-settings-field">
-            <input id="workspaceHostRoot" class="sv-input" type="text" autocomplete="off" placeholder="~/agent-zero">
-            <span class="sv-settings-hint">Parent folder for per-Instance workspaces.</span>
-          </div>
-        </div>
-        <div id="workspaceHostPathModeRow" class="sv-settings-row">
-          <label class="sv-settings-label" for="workspaceHostPathMode">Folder mapping</label>
-          <div class="sv-settings-field">
-            <select id="workspaceHostPathMode" class="sv-select">
-              <option value="per_instance">Separate folder per Instance</option>
-              <option value="exact">Use this folder directly</option>
-            </select>
-            <span class="sv-settings-hint">Direct mapping mounts the chosen folder itself at /a0/usr.</span>
-          </div>
-        </div>
-        <div id="workspaceVolumePrefixRow" class="sv-settings-row" hidden>
-          <label class="sv-settings-label" for="workspaceVolumePrefix">Volume prefix</label>
-          <div class="sv-settings-field">
-            <input id="workspaceVolumePrefix" class="sv-input" type="text" autocomplete="off" placeholder="a0-launcher">
-            <span class="sv-settings-hint">Prefix for new named Docker volumes.</span>
-          </div>
-        </div>
-      </div>
-      <div class="sv-row-end" style="margin-top:0.75rem;">
-        <button id="saveWorkspaceStorageBtn" class="button confirm" type="button">Save Workspace Storage</button>
-      </div>
-    </section>
+    <div class="dm-settings-tabs" role="tablist" aria-label="Settings">
+      <button id="settingsTabPorts" class="dm-settings-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="settingsPanelPorts" data-settings-tab="ports">
+        <span class="material-symbols-outlined" aria-hidden="true">lan</span>
+        <span>Ports</span>
+      </button>
+      <button id="settingsTabWorkspace" class="dm-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settingsPanelWorkspace" data-settings-tab="workspace">
+        <span class="material-symbols-outlined" aria-hidden="true">folder</span>
+        <span>Workspace</span>
+      </button>
+      <button id="settingsTabDefaults" class="dm-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settingsPanelDefaults" data-settings-tab="defaults">
+        <span class="material-symbols-outlined" aria-hidden="true">tune</span>
+        <span>Instance defaults</span>
+      </button>
+    </div>
 
-    <section class="section sv-card">
-      <div class="sv-card-head">
-        <h2 class="section-title sv-section-heading">Instance Defaults</h2>
-        <div class="sv-subtitle">Preferred providers and models for new Instances</div>
-      </div>
-      <div class="dm-field dm-model-defaults dm-settings-model-defaults">
-        <div class="dm-field-label">Main and Utility</div>
-        <div id="settingsPrimaryModels" class="dm-model-grid"></div>
-        <div class="dm-field-hint">Saved on this computer and applied when you run a new Agent Zero Instance.</div>
-      </div>
-      <details class="dm-advanced dm-settings-advanced">
-        <summary>Advanced</summary>
-        <div class="dm-advanced-body">
-          <div class="dm-field dm-model-defaults">
-            <div class="dm-field-label">Embedding model</div>
-            <div id="settingsAdvancedModels" class="dm-model-grid"></div>
+    <div class="dm-settings-tab-panels">
+      <section id="settingsPanelPorts" class="dm-settings-tab-panel is-active" role="tabpanel" aria-labelledby="settingsTabPorts" data-settings-panel="ports">
+        <div class="dm-settings-panel-head">
+          <div>
+            <h3 class="dm-settings-title">Port Defaults</h3>
+            <div class="sv-subtitle">Starting host ports for new local Instances</div>
           </div>
         </div>
-      </details>
-      <div class="sv-row-end" style="margin-top:0.75rem;">
-        <button id="saveInstanceDefaultsBtn" class="button confirm" type="button">Save Defaults</button>
-      </div>
-    </section>
-  </div>
+        <div class="sv-settings-grid">
+          <div class="sv-settings-row">
+            <label class="sv-settings-label" for="uiPortInput">UI Port</label>
+            <div class="sv-settings-field">
+              <input id="uiPortInput" class="sv-input" type="number" min="1024" max="65535" placeholder="e.g. 8080">
+              <span class="sv-settings-hint">Preferred starting host port for the web UI. Existing Instances keep their assigned port.</span>
+            </div>
+          </div>
+          <div class="sv-settings-row">
+            <label class="sv-settings-label" for="sshPortInput">SSH Port</label>
+            <div class="sv-settings-field">
+              <input id="sshPortInput" class="sv-input" type="number" min="1024" max="65535" placeholder="e.g. 2222">
+              <span class="sv-settings-hint">Preferred starting host port when the image exposes SSH. Not every container does.</span>
+            </div>
+          </div>
+        </div>
+        <div class="dm-settings-actions">
+          <button id="savePortsBtn" class="button confirm" type="button">
+            <span class="material-symbols-outlined" aria-hidden="true">save</span>
+            <span>Save Port Defaults</span>
+          </button>
+        </div>
+      </section>
+
+      <section id="settingsPanelWorkspace" class="dm-settings-tab-panel" role="tabpanel" aria-labelledby="settingsTabWorkspace" data-settings-panel="workspace" hidden>
+        <div class="dm-settings-panel-head">
+          <div>
+            <h3 class="dm-settings-title">Workspace Storage</h3>
+            <div class="sv-subtitle">Default workspace location for new local Instances</div>
+          </div>
+        </div>
+        <div class="sv-settings-grid">
+          <div class="sv-settings-row">
+            <label class="sv-settings-label" for="workspaceStorageMode">Workspace mode</label>
+            <div class="sv-settings-field">
+              <select id="workspaceStorageMode" class="sv-select">
+                <option value="host_directory">Host directory</option>
+                <option value="named_volume">Named Docker volume</option>
+              </select>
+            </div>
+          </div>
+          <div id="workspaceHostRootRow" class="sv-settings-row">
+            <label class="sv-settings-label" for="workspaceHostRoot">Host folder</label>
+            <div class="sv-settings-field">
+              <input id="workspaceHostRoot" class="sv-input" type="text" autocomplete="off" placeholder="~/agent-zero">
+              <span class="sv-settings-hint">Parent folder for per-Instance workspaces.</span>
+            </div>
+          </div>
+          <div id="workspaceHostPathModeRow" class="sv-settings-row">
+            <label class="sv-settings-label" for="workspaceHostPathMode">Folder mapping</label>
+            <div class="sv-settings-field">
+              <select id="workspaceHostPathMode" class="sv-select">
+                <option value="per_instance">Separate folder per Instance</option>
+                <option value="exact">Use this folder directly</option>
+              </select>
+              <span class="sv-settings-hint">Direct mapping mounts the chosen folder itself at /a0/usr.</span>
+            </div>
+          </div>
+          <div id="workspaceVolumePrefixRow" class="sv-settings-row" hidden>
+            <label class="sv-settings-label" for="workspaceVolumePrefix">Volume prefix</label>
+            <div class="sv-settings-field">
+              <input id="workspaceVolumePrefix" class="sv-input" type="text" autocomplete="off" placeholder="a0-launcher">
+              <span class="sv-settings-hint">Prefix for new named Docker volumes.</span>
+            </div>
+          </div>
+        </div>
+        <div class="dm-settings-actions">
+          <button id="saveWorkspaceStorageBtn" class="button confirm" type="button">
+            <span class="material-symbols-outlined" aria-hidden="true">save</span>
+            <span>Save Workspace Storage</span>
+          </button>
+        </div>
+      </section>
+
+      <section id="settingsPanelDefaults" class="dm-settings-tab-panel" role="tabpanel" aria-labelledby="settingsTabDefaults" data-settings-panel="defaults" hidden>
+        <div class="dm-settings-panel-head">
+          <div>
+            <h3 class="dm-settings-title">Instance Defaults</h3>
+            <div class="sv-subtitle">Preferred providers and models for new Instances</div>
+          </div>
+        </div>
+        <div class="dm-field dm-model-defaults dm-settings-model-defaults">
+          <div class="dm-field-label">Main and Utility</div>
+          <div id="settingsPrimaryModels" class="dm-model-grid"></div>
+          <div class="dm-field-hint">Saved on this computer and applied when you run a new Agent Zero Instance.</div>
+        </div>
+        <details class="dm-advanced dm-settings-advanced">
+          <summary>Advanced</summary>
+          <div class="dm-advanced-body">
+            <div class="dm-field dm-model-defaults">
+              <div class="dm-field-label">Embedding model</div>
+              <div id="settingsAdvancedModels" class="dm-model-grid"></div>
+            </div>
+          </div>
+        </details>
+        <div class="dm-settings-actions">
+          <button id="saveInstanceDefaultsBtn" class="button confirm" type="button">
+            <span class="material-symbols-outlined" aria-hidden="true">save</span>
+            <span>Save Defaults</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  </section>
 
   <script type="module" src="components/docker-manager/settings/settings.js"></script>
 </body>

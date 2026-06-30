@@ -2518,10 +2518,12 @@ function normalizeHostPort(value, fallback = 0) {
   return n;
 }
 
-function normalizeHostIp(value) {
+function normalizeHostIp(value, fallback = '127.0.0.1') {
   const text = String(value || '').trim();
+  if (text === '0.0.0.0') return '0.0.0.0';
+  if (text === '127.0.0.1' || text === 'localhost') return '127.0.0.1';
   if (text === '::1' || text === '[::1]') return '::1';
-  return '127.0.0.1';
+  return fallback === '0.0.0.0' || fallback === '::1' ? fallback : '127.0.0.1';
 }
 
 function portMappingsFromNetworkSettings(inspect) {
@@ -2616,6 +2618,7 @@ async function settlePortMappings(mappings, options = {}) {
   const source = Array.isArray(mappings) ? mappings : [];
   const allocate = typeof options?.allocateHostPort === 'function' ? options.allocateHostPort : allocateOpenHostPort;
   const reserved = new Set(Array.isArray(options?.reservedHostPorts) ? options.reservedHostPorts : []);
+  const hostIp = normalizeHostIp(options?.hostIp);
 
   for (const mapping of source) {
     const hostPort = normalizeHostPort(mapping?.hostPort, 0);
@@ -2639,7 +2642,7 @@ async function settlePortMappings(mappings, options = {}) {
       hostPort,
       containerPort,
       key: keyInfo.key,
-      hostIp: normalizeHostIp(mapping?.hostIp)
+      hostIp: normalizeHostIp(mapping?.hostIp, hostIp)
     });
   }
 
@@ -4049,7 +4052,7 @@ async function createAndStartActiveContainer(docker, imageRepo, tag, portPrefere
         { hostPort: hostPortUi, containerPort: 80, key: '80/tcp' },
         { hostPort: hostPortSsh, containerPort: 22, key: '22/tcp' }
       ];
-  const mappings = await settlePortMappings(requestedMappings);
+  const mappings = await settlePortMappings(requestedMappings, { hostIp: '0.0.0.0' });
 
   const { exposedPorts, portBindings } = buildPortExposure(mappings);
 
@@ -4141,7 +4144,7 @@ async function createAndStartManagedInstanceContainer(docker, imageRepo, tag, ac
   const requestedMappings = Array.isArray(activationOptions?.portMappings) && activationOptions.portMappings.length
     ? activationOptions.portMappings
     : parsePortMappings('0:80');
-  const mappings = await settlePortMappings(requestedMappings);
+  const mappings = await settlePortMappings(requestedMappings, { hostIp: '0.0.0.0' });
   const { exposedPorts, portBindings } = buildPortExposure(mappings);
   const uiMapping = preferredUiMapping(mappings);
   const sshMapping = mappings.find((mapping) => Number(mapping.containerPort) === 22) || null;

@@ -319,6 +319,22 @@ test('dynamic port mappings are settled before Docker container creation', async
   assert.deepEqual(allocatorReservations, [[55022]]);
 });
 
+test('dynamic port mappings can publish normal instances on all interfaces', async () => {
+  const mappings = await settlePortMappings(parsePortMappings('0:80'), {
+    hostIp: '0.0.0.0',
+    allocateHostPort: async () => 32100
+  });
+
+  assert.deepEqual(mappings.map((mapping) => ({
+    hostPort: mapping.hostPort,
+    containerPort: mapping.containerPort,
+    key: mapping.key,
+    hostIp: mapping.hostIp
+  })), [
+    { hostPort: 32100, containerPort: 80, key: '80/tcp', hostIp: '0.0.0.0' }
+  ]);
+});
+
 test('replacement port mappings prefer settled Docker network ports', () => {
   const runningDynamic = {
     HostConfig: {

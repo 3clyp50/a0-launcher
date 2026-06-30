@@ -88,11 +88,12 @@ This scope owns:
   process and be used only for explicit CLI launch, Web UI login, or save/clear
   operations.
 - Port preferences are stored as UI and SSH host-port preferences.
-- Host-port requests using `0` must be settled to explicit loopback host ports
-  before Docker container creation so a container's published port remains
-  stable across later starts, deletions of other containers, and new runs.
-  Replacement flows should preserve the source container's inspected settled
-  ports when Docker exposes them; clones still receive fresh explicit open
+- Host-port requests using `0` must be settled to explicit host ports before
+  Docker container creation so a container's published port remains stable
+  across later starts, deletions of other containers, and new runs. New normal
+  launcher-managed local Instances publish on `0.0.0.0` for LAN access.
+  Developer/custom-image runs and replacement flows should preserve their
+  explicit or inspected host bindings; clones still receive fresh explicit open
   ports so they can run beside the source.
 - Workspace storage preferences are stored as `mode`, `hostRoot`,
   `hostPathMode`, and `volumePrefix`. The default mode is `host_directory`,

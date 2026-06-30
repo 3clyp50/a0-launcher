@@ -536,47 +536,6 @@ function renderVolumes(state) {
   }
 }
 
-function currentStoragePreferences(state) {
-  const prefs = state?.storagePreferences && typeof state.storagePreferences === "object" ? state.storagePreferences : {};
-  return {
-    mode: prefs.mode === "named_volume" ? "named_volume" : "host_directory",
-    hostRoot: compactText(prefs.hostRoot, "~/agent-zero"),
-    hostPathMode: prefs.hostPathMode === "exact" ? "exact" : "per_instance",
-    volumePrefix: compactText(prefs.volumePrefix, "a0-launcher")
-  };
-}
-
-function renderStoragePreferences(state) {
-  const prefs = currentStoragePreferences(state);
-  const mode = byId("workspaceStorageMode");
-  const hostRoot = byId("workspaceHostRoot");
-  const hostPathMode = byId("workspaceHostPathMode");
-  const volumePrefix = byId("workspaceVolumePrefix");
-  const save = byId("saveWorkspaceStorageBtn");
-  const operationRunning = state?.progress?.status === "running";
-
-  if (mode && !mode.dataset.dirty) mode.value = prefs.mode;
-  if (hostRoot && !hostRoot.dataset.dirty) hostRoot.value = prefs.hostRoot;
-  if (hostPathMode && !hostPathMode.dataset.dirty) hostPathMode.value = prefs.hostPathMode;
-  if (volumePrefix && !volumePrefix.dataset.dirty) volumePrefix.value = prefs.volumePrefix;
-  if (save) save.disabled = operationRunning;
-}
-
-async function saveStoragePreferences() {
-  const payload = {
-    mode: byId("workspaceStorageMode")?.value || "host_directory",
-    hostRoot: byId("workspaceHostRoot")?.value || "~/agent-zero",
-    hostPathMode: byId("workspaceHostPathMode")?.value || "per_instance",
-    volumePrefix: byId("workspaceVolumePrefix")?.value || "a0-launcher"
-  };
-  const saved = await window.dockerManagerActions?.setStoragePreferences?.(payload);
-  if (!saved) return;
-  ["workspaceStorageMode", "workspaceHostRoot", "workspaceHostPathMode", "workspaceVolumePrefix"].forEach((id) => {
-    const input = byId(id);
-    if (input) delete input.dataset.dirty;
-  });
-}
-
 function render(state) {
   lastState = state || {};
   const subtitle = byId("advancedSubtitle");
@@ -584,7 +543,6 @@ function render(state) {
     const running = (lastState.containers || []).filter((item) => item?.state === "running").length;
     subtitle.textContent = `${running} running, ${(lastState.images || []).length} image${(lastState.images || []).length === 1 ? "" : "s"}`;
   }
-  renderStoragePreferences(lastState);
   renderDiagnostics(lastState);
   renderVolumes(lastState);
   updateActionState();
@@ -631,16 +589,6 @@ function bind() {
   byId("advancedPruneVolumesBtn")?.addEventListener("click", async () => {
     if (!window.confirm("Clear unused Docker volumes?")) return;
     await window.dockerManagerActions?.pruneVolumes?.();
-  });
-  byId("saveWorkspaceStorageBtn")?.addEventListener("click", saveStoragePreferences);
-  [
-    byId("workspaceStorageMode"),
-    byId("workspaceHostRoot"),
-    byId("workspaceHostPathMode"),
-    byId("workspaceVolumePrefix")
-  ].forEach((input) => {
-    input?.addEventListener("input", () => { input.dataset.dirty = "1"; });
-    input?.addEventListener("change", () => { input.dataset.dirty = "1"; });
   });
 
   const composePreview = byId("composePreview");

@@ -73,6 +73,14 @@ function storageOverrideFromChoice(value) {
   return null;
 }
 
+function storageFieldVisibility(value) {
+  const choice = String(value || "").trim();
+  return {
+    hostRoot: choice === "host_directory_exact",
+    volumeName: choice === "named_volume"
+  };
+}
+
 function cleanFolderSegment(value, fallback = "agent-zero") {
   return String(value || "")
     .trim()
@@ -399,11 +407,11 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   if (portInput) portInput.value = "0:80";
   if (storageHostRootInput) storageHostRootInput.value = directWorkspaceFolder(defaultHostRoot, nameInput?.value || "");
   const syncStorageFields = () => {
-    const choice = storageModeInput?.value || "";
+    const visibility = storageFieldVisibility(storageModeInput?.value);
     const hostField = dialog.querySelector("#activateStorageHostRootField");
     const volumeField = dialog.querySelector("#activateStorageVolumeNameField");
-    if (hostField) hostField.hidden = choice !== "host_directory_exact";
-    if (volumeField) volumeField.hidden = choice !== "named_volume";
+    if (hostField) hostField.hidden = !visibility.hostRoot;
+    if (volumeField) volumeField.hidden = !visibility.volumeName;
     if (!storageHostDirty && storageHostRootInput) {
       storageHostRootInput.value = directWorkspaceFolder(defaultHostRoot, nameInput?.value || "");
     }
@@ -497,5 +505,6 @@ export {
   mergeGeneratedEnvText,
   openCreateLocalInstanceDialog,
   openRunInstanceDialog,
+  storageFieldVisibility,
   storageOverrideFromChoice
 };

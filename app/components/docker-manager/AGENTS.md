@@ -273,13 +273,14 @@ This scope owns:
 - Retained instances are rollback candidates; storage-volume cleanup belongs in
   Advanced and must remain clearly separate from instance start/stop actions.
 - Storage UI must say `Storage volumes` when referring to Docker volumes.
-  Workspace storage preferences may live in the Advanced storage tab, but copy
-  should distinguish workspace directories from Docker named volumes. Host
-  directory mapping should make clear whether the selected folder is a parent
-  for per-Instance workspaces or the exact folder mounted at `/a0/usr`.
+  Workspace storage preferences belong in Settings, not the Advanced storage
+  tab. Copy should distinguish workspace directories from Docker named volumes.
+  Host directory mapping should make clear whether the selected folder is a
+  parent for per-Instance workspaces or the exact folder mounted at `/a0/usr`.
 - Settings owns persistence for preferred UI/SSH ports and Instance
-  provider/model defaults. Do not scatter those persistent controls into
-  install or instance cards except for the first-pull defaults prompt.
+  provider/model defaults plus workspace storage defaults. Do not scatter those
+  persistent controls into install or instance cards except for the first-pull
+  defaults prompt.
 - `Open UI` opens local and remote instances in a launcher tab by default.
   Reopening the same target focuses the existing tab. Detach moves the target
   into a standalone secure Electron window without stopping the instance.

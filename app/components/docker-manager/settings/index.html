@@ -28,6 +28,51 @@
 
     <section class="section sv-card">
       <div class="sv-card-head">
+        <h2 class="section-title sv-section-heading">Workspace Storage</h2>
+        <div class="sv-subtitle">Default workspace location for new local Instances</div>
+      </div>
+      <div class="sv-settings-grid">
+        <div class="sv-settings-row">
+          <label class="sv-settings-label" for="workspaceStorageMode">Workspace mode</label>
+          <div class="sv-settings-field">
+            <select id="workspaceStorageMode" class="sv-select">
+              <option value="host_directory">Host directory</option>
+              <option value="named_volume">Named Docker volume</option>
+            </select>
+          </div>
+        </div>
+        <div id="workspaceHostRootRow" class="sv-settings-row">
+          <label class="sv-settings-label" for="workspaceHostRoot">Host folder</label>
+          <div class="sv-settings-field">
+            <input id="workspaceHostRoot" class="sv-input" type="text" autocomplete="off" placeholder="~/agent-zero">
+            <span class="sv-settings-hint">Parent folder for per-Instance workspaces.</span>
+          </div>
+        </div>
+        <div id="workspaceHostPathModeRow" class="sv-settings-row">
+          <label class="sv-settings-label" for="workspaceHostPathMode">Folder mapping</label>
+          <div class="sv-settings-field">
+            <select id="workspaceHostPathMode" class="sv-select">
+              <option value="per_instance">Separate folder per Instance</option>
+              <option value="exact">Use this folder directly</option>
+            </select>
+            <span class="sv-settings-hint">Direct mapping mounts the chosen folder itself at /a0/usr.</span>
+          </div>
+        </div>
+        <div id="workspaceVolumePrefixRow" class="sv-settings-row" hidden>
+          <label class="sv-settings-label" for="workspaceVolumePrefix">Volume prefix</label>
+          <div class="sv-settings-field">
+            <input id="workspaceVolumePrefix" class="sv-input" type="text" autocomplete="off" placeholder="a0-launcher">
+            <span class="sv-settings-hint">Prefix for new named Docker volumes.</span>
+          </div>
+        </div>
+      </div>
+      <div class="sv-row-end" style="margin-top:0.75rem;">
+        <button id="saveWorkspaceStorageBtn" class="button confirm" type="button">Save Workspace Storage</button>
+      </div>
+    </section>
+
+    <section class="section sv-card">
+      <div class="sv-card-head">
         <h2 class="section-title sv-section-heading">Instance Defaults</h2>
         <div class="sv-subtitle">Preferred providers and models for new Instances</div>
       </div>

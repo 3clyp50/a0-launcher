@@ -20,6 +20,33 @@ function parseOptionalInt(value) {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
+function compactText(value, fallback = "") {
+  const text = String(value || "").trim();
+  return text || fallback;
+}
+
+function currentStoragePreferences(state) {
+  const prefs = state?.storagePreferences && typeof state.storagePreferences === "object" ? state.storagePreferences : {};
+  return {
+    mode: prefs.mode === "named_volume" ? "named_volume" : "host_directory",
+    hostRoot: compactText(prefs.hostRoot, "~/agent-zero"),
+    hostPathMode: prefs.hostPathMode === "exact" ? "exact" : "per_instance",
+    volumePrefix: compactText(prefs.volumePrefix, "a0-launcher")
+  };
+}
+
+function syncStoragePreferenceFields() {
+  const mode = byId("workspaceStorageMode")?.value || "host_directory";
+  const host = mode === "host_directory";
+  const hostRootRow = byId("workspaceHostRootRow");
+  const hostPathModeRow = byId("workspaceHostPathModeRow");
+  const volumePrefixRow = byId("workspaceVolumePrefixRow");
+
+  if (hostRootRow) hostRootRow.hidden = !host;
+  if (hostPathModeRow) hostPathModeRow.hidden = !host;
+  if (volumePrefixRow) volumePrefixRow.hidden = host;
+}
+
 function renderModelFields() {
   const primary = byId("settingsPrimaryModels");
   const advanced = byId("settingsAdvancedModels");
@@ -37,10 +64,16 @@ function renderModelFields() {
 function populateFromState(state) {
   renderModelFields();
   const prefs = state?.portPreferences;
+  const storagePrefs = currentStoragePreferences(state);
   const instanceDefaults = normalizeInstanceDefaults(state?.instanceDefaults);
 
   const uiInput = byId("uiPortInput");
   const sshInput = byId("sshPortInput");
+  const storageMode = byId("workspaceStorageMode");
+  const hostRoot = byId("workspaceHostRoot");
+  const hostPathMode = byId("workspaceHostPathMode");
+  const volumePrefix = byId("workspaceVolumePrefix");
+  const saveWorkspaceStorageBtn = byId("saveWorkspaceStorageBtn");
 
   if (uiInput && prefs?.ui != null && !uiInput.dataset.dirty) {
     uiInput.value = prefs.ui;
@@ -48,15 +81,28 @@ function populateFromState(state) {
   if (sshInput && prefs?.ssh != null && !sshInput.dataset.dirty) {
     sshInput.value = prefs.ssh;
   }
+  if (storageMode && !storageMode.dataset.dirty) storageMode.value = storagePrefs.mode;
+  if (hostRoot && !hostRoot.dataset.dirty) hostRoot.value = storagePrefs.hostRoot;
+  if (hostPathMode && !hostPathMode.dataset.dirty) hostPathMode.value = storagePrefs.hostPathMode;
+  if (volumePrefix && !volumePrefix.dataset.dirty) volumePrefix.value = storagePrefs.volumePrefix;
+  if (saveWorkspaceStorageBtn) saveWorkspaceStorageBtn.disabled = state?.progress?.status === "running";
+  syncStoragePreferenceFields();
   applyInstanceDefaultsToForm(document, "settings", instanceDefaults, { respectDirty: true });
 }
 
 function bindActions() {
   renderModelFields();
   const savePortsBtn = byId("savePortsBtn");
+  const saveWorkspaceStorageBtn = byId("saveWorkspaceStorageBtn");
   const saveInstanceDefaultsBtn = byId("saveInstanceDefaultsBtn");
   const uiInput = byId("uiPortInput");
   const sshInput = byId("sshPortInput");
+  const storageInputs = [
+    byId("workspaceStorageMode"),
+    byId("workspaceHostRoot"),
+    byId("workspaceHostPathMode"),
+    byId("workspaceVolumePrefix")
+  ].filter(Boolean);
 
   if (uiInput && !uiInput.dataset.bound) {
     uiInput.dataset.bound = "1";
@@ -68,6 +114,16 @@ function bindActions() {
   }
   bindInstanceDefaultDirtyTracking(document, "settings");
 
+  storageInputs.forEach((input) => {
+    if (input.dataset.bound) return;
+    input.dataset.bound = "1";
+    input.addEventListener("input", () => { input.dataset.dirty = "1"; });
+    input.addEventListener("change", () => {
+      input.dataset.dirty = "1";
+      syncStoragePreferenceFields();
+    });
+  });
+
   if (savePortsBtn && !savePortsBtn.dataset.bound) {
     savePortsBtn.dataset.bound = "1";
     savePortsBtn.addEventListener("click", async () => {
@@ -78,6 +134,19 @@ function bindActions() {
         if (uiInput) delete uiInput.dataset.dirty;
         if (sshInput) delete sshInput.dataset.dirty;
       }
+    });
+  }
+
+  if (saveWorkspaceStorageBtn && !saveWorkspaceStorageBtn.dataset.bound) {
+    saveWorkspaceStorageBtn.dataset.bound = "1";
+    saveWorkspaceStorageBtn.addEventListener("click", async () => {
+      const saved = await window.dockerManagerActions?.setStoragePreferences?.({
+        mode: byId("workspaceStorageMode")?.value || "host_directory",
+        hostRoot: byId("workspaceHostRoot")?.value || "~/agent-zero",
+        hostPathMode: byId("workspaceHostPathMode")?.value || "per_instance",
+        volumePrefix: byId("workspaceVolumePrefix")?.value || "a0-launcher"
+      });
+      if (saved) storageInputs.forEach((input) => { delete input.dataset.dirty; });
     });
   }
 

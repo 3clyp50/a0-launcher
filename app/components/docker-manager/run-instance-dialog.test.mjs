@@ -7,6 +7,7 @@ const {
   directWorkspaceFolder,
   installedVersionChoices,
   mergeGeneratedEnvText,
+  storageFieldVisibility,
   storageOverrideFromChoice
 } = await import('./run-instance-dialog.js');
 
@@ -95,6 +96,25 @@ test('workspace storage choices map to explicit mount behavior', () => {
   });
   assert.deepEqual(storageOverrideFromChoice('named_volume'), {
     storageMode: 'named_volume'
+  });
+});
+
+test('workspace storage choices expose only their relevant fields', () => {
+  assert.deepEqual(storageFieldVisibility(''), {
+    hostRoot: false,
+    volumeName: false
+  });
+  assert.deepEqual(storageFieldVisibility('host_directory'), {
+    hostRoot: false,
+    volumeName: false
+  });
+  assert.deepEqual(storageFieldVisibility('host_directory_exact'), {
+    hostRoot: true,
+    volumeName: false
+  });
+  assert.deepEqual(storageFieldVisibility('named_volume'), {
+    hostRoot: false,
+    volumeName: true
   });
 });
 

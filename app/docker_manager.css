@@ -35,7 +35,8 @@ body {
   --dm-sidebar-width: clamp(12rem, 12vw, 16rem);
 }
 
-.hidden {
+.hidden,
+[hidden] {
   display: none !important;
 }
 

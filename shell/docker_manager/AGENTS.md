@@ -50,9 +50,11 @@ This scope owns:
   separate structured state.
 - Channel-tagged images and containers may expose `matchedReleaseTag` when the
   local tag can be tied to a concrete semver release through digest matching or
-  local evidence for the current `latest` release tag. Channel install entries
-  may also expose optional `publishedReleaseTag` and `updatedAt` metadata
-  derived from cached Docker Hub tag metadata.
+  local evidence for the current `latest` release tag. For containers, channel
+  release labels must respect the container's actual image id so older stopped
+  `ready`/`latest` Instances do not inherit a newer repulled channel version.
+  Channel install entries may also expose optional `publishedReleaseTag` and
+  `updatedAt` metadata derived from cached Docker Hub tag metadata.
 - Start, switch, and run flows should give the Agent Zero UI enough time to
   finish a slow first boot before rolling back a newly-created container.
 - New managed Instance run progress should mark `uiReady: true` only after the

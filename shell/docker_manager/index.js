@@ -809,12 +809,34 @@ function imageTagForContainer(container) {
   ).trim();
 }
 
-function applyContainerMatchedReleaseTags(containers, matchedReleaseTagByTag) {
+function localSemverTagForImageId(imageId, localByTag) {
+  const id = String(imageId || '').trim();
+  if (!id || !(localByTag instanceof Map)) return '';
+  const tags = [];
+  for (const [tag, image] of localByTag.entries()) {
+    if (!isSemverReleaseTag(tag)) continue;
+    if (String(image?.imageId || '').trim() === id) tags.push(tag);
+  }
+  return sortedReleaseTags(tags)[0] || '';
+}
+
+function applyContainerMatchedReleaseTags(containers, matchedReleaseTagByTag, localByTag = null) {
   const matches = matchedReleaseTagByTag instanceof Map ? matchedReleaseTagByTag : new Map();
+  const localImages = localByTag instanceof Map ? localByTag : new Map();
   return (Array.isArray(containers) ? containers : []).map((container) => {
     const imageTag = imageTagForContainer(container);
+    if (!isChannelTag(imageTag)) return container;
+
+    const matchedImageTag = localSemverTagForImageId(container?.imageId, localImages);
+    if (matchedImageTag) return { ...container, matchedReleaseTag: matchedImageTag };
+
     const matchedReleaseTag = imageTag ? matches.get(imageTag) : '';
     if (!matchedReleaseTag) return container;
+
+    const localImageId = String(localImages.get(imageTag)?.imageId || '').trim();
+    const containerImageId = String(container?.imageId || '').trim();
+    if (localImageId && containerImageId && localImageId !== containerImageId) return container;
+
     return { ...container, matchedReleaseTag };
   });
 }
@@ -2213,7 +2235,7 @@ async function buildDerivedState(options = {}) {
     const matchedReleaseTag = matchedReleaseTagForLocalTag(tag, localByTag, knownRemoteDigests, latestReleaseTag);
     if (matchedReleaseTag) matchedReleaseTagByTag.set(tag, matchedReleaseTag);
   }
-  containers = applyContainerMatchedReleaseTags(containers, matchedReleaseTagByTag);
+  containers = applyContainerMatchedReleaseTags(containers, matchedReleaseTagByTag, localByTag);
 
   // First-class channel tags (not derived from GitHub Releases).
   for (const tag of CHANNEL_TAGS) {

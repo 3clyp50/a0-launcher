@@ -1262,11 +1262,8 @@ function renderDockerInstance(list, c, state) {
 
   const actions = document.createElement("div");
   actions.className = "dm-card-actions";
-  const role = c?.labels?.["a0.launcher.role"] || "";
-  const isActiveInstance = String(c?.containerName || "").includes("-active__");
-  const isManagedLocalInstance = c?.labels?.["a0.launcher.managed"] === "true" || role === "developer" || role === "clone";
   const isRunning = st === "running";
-  const canStartLocalInstance = !isRunning && (isActiveInstance || isManagedLocalInstance);
+  const canStartLocalInstance = !isRunning && !!containerId;
   const canStopStartingInstance = backgroundOperation?.type === "start" && backgroundOperation.status === "running";
   const powerMenuItem = instancePowerMenuConfig({
     isRunning,

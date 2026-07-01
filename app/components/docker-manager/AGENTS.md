@@ -211,6 +211,8 @@ This scope owns:
   use the same activation defaults dialog as Installs so local instance name,
   login, model, storage, port, and environment handling stays consistent.
 - Local instance cards keep `Open UI` or `Start` as the visible primary action.
+  Any stopped local Agent Zero container listed by Docker Manager may expose
+  `Start`; do not require newer launcher-managed labels just to start it.
   Secondary management and inspection actions such as `Rename`, `See logs`,
   `Open storage folder`, `Clone`, `Open A0 CLI`, dynamic `Start`/`Stop`, and
   `Delete` belong in the card overflow menu so they always apply to the

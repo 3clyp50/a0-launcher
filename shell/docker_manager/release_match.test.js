@@ -41,20 +41,67 @@ test('latest does not fall back when a local digest lacks a release match', () =
 });
 
 test('matched release tags are applied to matching channel containers', () => {
+  const imageId = 'sha256:old-ready';
   const containers = [
     {
       containerId: 'abc123',
       containerName: 'agent-zero-ready',
       imageRef: 'agent0ai/agent-zero:ready',
+      imageId,
       labels: { 'a0.launcher.versionTag': 'ready' }
     }
   ];
 
   assert.equal(imageTagForContainer(containers[0]), 'ready');
 
-  const [enriched] = applyContainerMatchedReleaseTags(containers, new Map([['ready', 'v1.20']]));
+  const [enriched] = applyContainerMatchedReleaseTags(
+    containers,
+    new Map([['ready', 'v1.20']]),
+    new Map([['ready', { imageId }]])
+  );
   assert.equal(enriched.matchedReleaseTag, 'v1.20');
   assert.equal(containers[0].matchedReleaseTag, undefined);
+});
+
+test('channel container release tags follow the container image id, not the current channel tag', () => {
+  const oldImageId = 'sha256:old-ready';
+  const newReadyImageId = 'sha256:new-ready';
+  const containers = [
+    {
+      containerId: 'abc123',
+      containerName: 'agent-zero-ready',
+      imageRef: 'agent0ai/agent-zero:ready',
+      imageId: oldImageId,
+      labels: { 'a0.launcher.versionTag': 'ready' }
+    }
+  ];
+
+  const [enriched] = applyContainerMatchedReleaseTags(
+    containers,
+    new Map([['ready', 'v2.1']]),
+    new Map([
+      ['ready', { imageId: newReadyImageId }],
+      ['v1.20', { imageId: oldImageId }]
+    ])
+  );
+
+  assert.equal(enriched.matchedReleaseTag, 'v1.20');
+});
+
+test('stale channel containers are not labeled as the current channel release', () => {
+  const [enriched] = applyContainerMatchedReleaseTags(
+    [{
+      containerId: 'abc123',
+      containerName: 'agent-zero-ready',
+      imageRef: 'agent0ai/agent-zero:ready',
+      imageId: 'sha256:old-ready',
+      labels: { 'a0.launcher.versionTag': 'ready' }
+    }],
+    new Map([['ready', 'v2.1']]),
+    new Map([['ready', { imageId: 'sha256:new-ready' }]])
+  );
+
+  assert.equal(enriched.matchedReleaseTag, undefined);
 });
 
 test('runtime source resolves release tags pointing at the current Git commit', async () => {

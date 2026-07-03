@@ -37,13 +37,18 @@ test('normalizeHttpUrl canonicalizes valid HTTP URLs and rejects invalid values'
   assert.equal(normalizeHttpUrl('file:///tmp/nope'), '');
 });
 
-test('instance tab navigation allows credential-free HTTP URLs', () => {
-  assert.equal(isAllowedInstanceTabNavigationUrl('https://github.com/login/oauth/authorize?client_id=abc'), true);
-  assert.equal(isAllowedInstanceTabNavigationUrl('https://agent-zero.trycloudflare.com/'), true);
-  assert.equal(isAllowedInstanceTabNavigationUrl('http://127.0.0.1:32080/oauth/callback'), true);
-  assert.equal(isAllowedInstanceTabNavigationUrl('https://token@example.com/'), false);
-  assert.equal(isAllowedInstanceTabNavigationUrl('file:///tmp/nope'), false);
-  assert.equal(isAllowedInstanceTabNavigationUrl('vscode://file/tmp/nope'), false);
+test('instance tab navigation stays on the Agent Zero origin', () => {
+  const localTab = { kind: 'local', url: 'http://127.0.0.1:32080/' };
+  const remoteTab = { kind: 'remote', url: 'https://agent-zero.example.com/' };
+
+  assert.equal(isAllowedInstanceTabNavigationUrl(localTab, 'http://127.0.0.1:32080/#settings'), true);
+  assert.equal(isAllowedInstanceTabNavigationUrl(localTab, 'http://127.0.0.1:32080/oauth/callback'), true);
+  assert.equal(isAllowedInstanceTabNavigationUrl(remoteTab, 'https://agent-zero.example.com/chats'), true);
+  assert.equal(isAllowedInstanceTabNavigationUrl(localTab, 'https://github.com/login/oauth/authorize?client_id=abc'), false);
+  assert.equal(isAllowedInstanceTabNavigationUrl(localTab, 'https://agent-zero.trycloudflare.com/'), false);
+  assert.equal(isAllowedInstanceTabNavigationUrl(localTab, 'https://token@example.com/'), false);
+  assert.equal(isAllowedInstanceTabNavigationUrl(localTab, 'file:///tmp/nope'), false);
+  assert.equal(isAllowedInstanceTabNavigationUrl(localTab, 'vscode://file/tmp/nope'), false);
 });
 
 test('makeTabKey uses stable identity before URL fallback', () => {

@@ -1564,7 +1564,16 @@ function cleanupInstanceTabs() {
 
 function isNavigationAllowedForTab(tab, url) {
   if (!tab || typeof url !== 'string') return false;
-  return isAllowedInstanceTabNavigationUrl(url);
+  return isAllowedInstanceTabNavigationUrl(tab, url);
+}
+
+async function openExternalIfSafe(url) {
+  const normalized = normalizeHttpUrl(url);
+  if (!normalized || !isAllowedRemoteInstanceUrl(normalized) || isAllowedLocalInstanceUrl(normalized)) {
+    return { opened: false };
+  }
+  await shell.openExternal(normalized);
+  return { opened: true };
 }
 
 function createTabTargetError(code, message) {
@@ -1693,11 +1702,14 @@ function attachInstanceTabEvents(tab) {
   const blockNavigation = (event, url) => {
     if (isNavigationAllowedForTab(tab, url)) return;
     if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    void openExternalIfSafe(url);
   };
 
   wc.setWindowOpenHandler(({ url }) => {
     if (isNavigationAllowedForTab(tab, url)) {
       void wc.loadURL(normalizeHttpUrl(url));
+    } else {
+      void openExternalIfSafe(url);
     }
     return { action: 'deny' };
   });

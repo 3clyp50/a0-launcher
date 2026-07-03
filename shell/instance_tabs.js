@@ -63,8 +63,22 @@ function isAllowedRemoteInstanceUrl(value) {
   return Boolean(parseHttpUrl(value));
 }
 
-function isAllowedInstanceTabNavigationUrl(value) {
-  return isAllowedRemoteInstanceUrl(value);
+function urlsShareOrigin(left, right) {
+  try {
+    const a = new URL(String(left || ''));
+    const b = new URL(String(right || ''));
+    return a.origin === b.origin;
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedInstanceTabNavigationUrl(tab, value) {
+  const safeTab = tab && typeof tab === 'object' ? tab : {};
+  const normalized = normalizeHttpUrl(value);
+  if (!normalized) return false;
+  const validator = safeTab.kind === 'remote' ? isAllowedRemoteInstanceUrl : isAllowedLocalInstanceUrl;
+  return validator(normalized) && urlsShareOrigin(safeTab.url, normalized);
 }
 
 function makeTabKey(target) {

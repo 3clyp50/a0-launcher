@@ -73,12 +73,12 @@ This scope owns:
   Zero `/login` route in the shell-owned browser session before loading the
   tab; remote credential POSTs must stay on `https:` URLs unless the target is
   local loopback. Do not put credentials in URLs or expose decrypted passwords
-  to the renderer. After a tab starts from a
-  validated Instance URL, in-tab navigation may follow credential-free `http:`
-  and `https:` URLs so OAuth, callback, and tunnel flows can complete inside the
-  tab. Embedded and detached Agent Zero UI web contents should attach the same
-  shell-owned edit context menu so selected text and editable fields keep normal
-  copy/paste behavior.
+  to the renderer. After a tab starts from a validated Instance URL, in-tab
+  navigation may stay on that Agent Zero origin, including same-origin anchors
+  and callbacks; safe off-origin `http:` and `https:` URLs should open through
+  the user's external browser. Embedded and detached Agent Zero UI web contents
+  should attach the same shell-owned edit context menu so selected text and
+  editable fields keep normal copy/paste behavior.
 - Local development content is selected by `A0_LAUNCHER_LOCAL_REPO`,
   `A0_LAUNCHER_USE_LOCAL_CONTENT`, a repo-shaped default-app current working
   directory, a repo-shaped unpackaged-app current working directory, or the

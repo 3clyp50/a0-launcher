@@ -22,8 +22,8 @@ This scope owns:
   updates, activation, start/stop, delete, rollback, and recovery actions.
 - `runtime-gate/`: mandatory startup runtime setup modal, runtime setup
   progress, recovery actions, and non-dismissable gating.
-- `remote-instance-dialog.js`: shared remote Instance URL dialog used by the
-  startup runtime gate and the Instances tab.
+- `remote-instance-dialog.js`: shared remote Instance URL and optional saved
+  credential dialog used by the startup runtime gate and the Instances tab.
 - `first-instance-setup/`: first image-pull defaults panel, optional first
   Instance run choice, and optional A0 CLI install step shown before the setup
   slideshow.

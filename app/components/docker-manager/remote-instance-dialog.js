@@ -38,6 +38,26 @@ function dialogIntroHtml(intro) {
   return text ? `<p class="dm-dialog-copy">${escapeHtml(text)}</p>` : "";
 }
 
+function cleanCredentialValue(value, maxLength) {
+  return String(value || "")
+    .replace(/[\r\n]+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function remoteCredentialPayload({ username, password, remember } = {}) {
+  if (remember !== true) return { ok: true, credentials: null };
+  const cleanUsername = cleanCredentialValue(username, 256);
+  const cleanPassword = cleanCredentialValue(password, 4096);
+  if (!cleanUsername || !cleanPassword) {
+    return { ok: false, message: "Enter both username and password to save credentials." };
+  }
+  return {
+    ok: true,
+    credentials: { username: cleanUsername, password: cleanPassword }
+  };
+}
+
 function openAddRemoteInstanceDialog(options = {}) {
   const existing = document.getElementById("remoteInstanceDialog");
   if (existing) existing.remove();
@@ -67,6 +87,18 @@ function openAddRemoteInstanceDialog(options = {}) {
           <input id="remoteInstanceName" class="dm-text-input" type="text" maxlength="80" autocomplete="off" placeholder="Remote Instance">
           <div class="dm-field-hint">Optional. This is only the friendly name shown in Instances.</div>
         </div>
+        <div class="dm-field">
+          <div class="dm-field-label">Login</div>
+          <div class="dm-inline-field-grid">
+            <input id="remoteAuthLogin" class="dm-text-input" type="text" autocomplete="username" placeholder="Username">
+            <input id="remoteAuthPassword" class="dm-text-input" type="password" autocomplete="new-password" placeholder="Password">
+          </div>
+          <div class="dm-field-hint">Optional. You can also save credentials later from the Instance menu.</div>
+          <label class="dm-checkbox-line">
+            <input id="remoteRememberCredentials" type="checkbox">
+            <span>Save credentials</span>
+          </label>
+        </div>
       </div>
       <div class="dm-dialog-footer">
         <button class="button" type="button" data-dialog-close>Cancel</button>
@@ -78,6 +110,9 @@ function openAddRemoteInstanceDialog(options = {}) {
   const form = dialog.querySelector("form");
   const urlInput = dialog.querySelector("#remoteInstanceUrl");
   const nameInput = dialog.querySelector("#remoteInstanceName");
+  const usernameInput = dialog.querySelector("#remoteAuthLogin");
+  const passwordInput = dialog.querySelector("#remoteAuthPassword");
+  const rememberInput = dialog.querySelector("#remoteRememberCredentials");
 
   const cancel = () => {
     closeDialog(dialog);
@@ -105,11 +140,27 @@ function openAddRemoteInstanceDialog(options = {}) {
       window.toastFrontendError?.("Enter a valid Instance URL.", "Agent Zero");
       return;
     }
+    const credentialResult = remoteCredentialPayload({
+      username: usernameInput?.value || "",
+      password: passwordInput?.value || "",
+      remember: rememberInput?.checked === true
+    });
+    if (!credentialResult.ok) {
+      window.toastFrontendError?.(credentialResult.message, "Agent Zero");
+      return;
+    }
     const result = await window.dockerManagerActions?.addRemoteInstance?.({
       url,
       name: nameInput?.value || ""
     });
     if (!result) return;
+    if (credentialResult.credentials) {
+      const saved = await window.dockerManagerActions?.setRemoteInstanceCredentials?.(
+        result.id || "",
+        credentialResult.credentials
+      );
+      if (saved === false) return;
+    }
     completed = true;
     closeDialog(dialog);
     await options.onAdded?.(result);
@@ -120,5 +171,6 @@ function openAddRemoteInstanceDialog(options = {}) {
 }
 
 export {
+  remoteCredentialPayload,
   openAddRemoteInstanceDialog
 };

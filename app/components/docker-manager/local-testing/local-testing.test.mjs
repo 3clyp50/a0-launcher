@@ -42,6 +42,7 @@ const {
   instancePowerMenuConfig,
   isBlockingOperationRunning,
   remoteInstanceStatusModel,
+  remoteCliMenuConfig,
   instanceVisualBadge,
   localCardsRenderKey,
   openCardMenu
@@ -334,6 +335,54 @@ test('remote instance status labels health states', () => {
   assert.equal(remoteInstanceStatusModel({ health: { status: 'offline', error: 'ECONNREFUSED' } }).label, 'Offline');
   assert.equal(remoteInstanceStatusModel({ health: { status: 'checking' } }).label, 'Checking');
   assert.equal(remoteInstanceStatusModel({}).label, 'Checking');
+});
+
+test('remote CLI menu opens saved remote target when CLI is installed', async () => {
+  const calls = [];
+  window.dockerManagerActions = {
+    openCliTerminal: (target) => calls.push(target),
+    installCli: () => calls.push('install')
+  };
+
+  const config = remoteCliMenuConfig({ id: 'remote-1' }, { cli: { installed: true } });
+  assert.equal(config.icon, 'terminal');
+  assert.equal(config.label, 'Open A0 CLI');
+  assert.equal(config.disabled, false);
+
+  await config.onSelect();
+
+  assert.deepEqual(calls, [{ kind: 'remote', instanceId: 'remote-1' }]);
+});
+
+test('remote CLI menu uses installer when CLI is missing', async () => {
+  const calls = [];
+  window.dockerManagerActions = {
+    openCliTerminal: (target) => calls.push(target),
+    installCli: () => calls.push('install')
+  };
+
+  const config = remoteCliMenuConfig({ id: 'remote-1' }, { cli: { installed: false } });
+  assert.equal(config.icon, 'download');
+  assert.equal(config.label, 'Install A0 CLI');
+  assert.equal(config.disabled, false);
+
+  await config.onSelect();
+
+  assert.deepEqual(calls, ['install']);
+});
+
+test('remote CLI menu disables opening without a saved remote id or during blocking work', () => {
+  assert.equal(
+    remoteCliMenuConfig({}, { cli: { installed: true } }).disabled,
+    true
+  );
+  assert.equal(
+    remoteCliMenuConfig({ id: 'remote-1' }, {
+      cli: { installed: true },
+      progress: { status: 'running' }
+    }).disabled,
+    true
+  );
 });
 
 test('card menu placement reserves fixed bottom chrome in short windows', () => {

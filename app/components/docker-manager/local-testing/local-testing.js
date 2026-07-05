@@ -409,6 +409,29 @@ function remoteInstanceStatusModel(remote) {
   };
 }
 
+function remoteCliMenuConfig(remote, state = {}) {
+  const cliInstalled = state?.cli?.installed === true;
+  const operationRunning = isBlockingOperationRunning(state);
+  const instanceId = typeof remote?.id === "string" ? remote.id : "";
+  return {
+    icon: cliInstalled ? "terminal" : "download",
+    label: cliInstalled ? "Open A0 CLI" : "Install A0 CLI",
+    disabled: cliInstalled ? (!instanceId || operationRunning) : operationRunning,
+    title: cliInstalled
+      ? instanceId
+        ? "Choose a folder and open A0 CLI for this remote instance"
+        : "A saved remote Instance is required"
+      : "Install A0 CLI on this computer",
+    onSelect: () => {
+      if (cliInstalled) {
+        window.dockerManagerActions?.openCliTerminal?.({ kind: "remote", instanceId });
+      } else {
+        window.dockerManagerActions?.installCli?.();
+      }
+    }
+  };
+}
+
 function closeDialog(dialog) {
   if (dialog && dialog.parentNode) dialog.parentNode.removeChild(dialog);
 }
@@ -1563,6 +1586,12 @@ function renderRemoteInstance(list, remote, state) {
       : "Save credentials"
   }));
 
+  const cliMenu = remoteCliMenuConfig(remote, state);
+  menuItems.push(menuButton(cliMenu.icon, cliMenu.label, cliMenu.onSelect, {
+    disabled: cliMenu.disabled,
+    title: cliMenu.title
+  }));
+
   if (cloneTarget?.containerId) {
     menuItems.push(menuButton("content_copy", "Clone locally", () => {
       openCloneInstanceDialog({
@@ -1644,6 +1673,7 @@ export {
   emptyInstancesStateModel,
   instancePowerMenuConfig,
   remoteInstanceStatusModel,
+  remoteCliMenuConfig,
   dockerInstanceRuntimeSummary,
   instanceVisualBadge,
   isBlockingOperationRunning,

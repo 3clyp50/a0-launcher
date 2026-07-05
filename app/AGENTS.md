@@ -63,13 +63,13 @@ This scope owns:
   the Docker Manager reports the new Instance UI ready, then hand off to the
   Instances tab so the created Instance is visible.
 - A0 CLI launch, rename, color selection, and log inspection controls belong to
-  each local instance card. Clone belongs to local containers and may appear on
-  a saved remote card only when that card points at a loopback URL backed by a
-  discovered local container. Pass the card's local UI URL through the
-  shell-owned terminal action; the shell prompts for the CLI working folder
-  before opening the terminal. If the shell reports that the `a0` command is
-  not installed, show `Install A0 CLI` instead of `Open A0 CLI`. Do not add a
-  global footer or ambiguous active-instance CLI button.
+  each relevant instance card. Clone belongs to local containers and may appear
+  on a saved remote card only when that card points at a loopback URL backed by
+  a discovered local container. Pass a local card's UI URL or a saved remote
+  Instance ID through the shell-owned terminal action; the shell prompts for the
+  CLI working folder before opening the terminal. If the shell reports that the
+  `a0` command is not installed, show `Install A0 CLI` instead of `Open A0 CLI`.
+  Do not add a global footer or ambiguous active-instance CLI button.
 - Local Instance Backup and Restore belong with the other card-local actions.
   They must call named renderer actions that delegate host path selection and
   container archive work to the shell and Docker Manager.

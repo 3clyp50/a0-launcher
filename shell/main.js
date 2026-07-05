@@ -16,6 +16,7 @@ const {
   isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
+  cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
   instanceContextMenuActions
 } = require('./instance_tabs');
@@ -2346,6 +2347,23 @@ async function localInstanceCredentialsForCli(containerId) {
   }
 }
 
+async function remoteInstanceCredentialsForCli(instanceId) {
+  const id = String(instanceId || '').trim();
+  if (!id) return null;
+  try {
+    return await dockerManager.getRemoteInstanceCredentials(id);
+  } catch (error) {
+    if (credentialsErrorShouldBlockCli(error)) throw error;
+    return null;
+  }
+}
+
+async function instanceCredentialsForCliTarget(target) {
+  if (!cliCredentialsAllowedForTarget(target)) return null;
+  if (target?.kind === 'remote') return await remoteInstanceCredentialsForCli(target.instanceId);
+  return await localInstanceCredentialsForCli(target?.containerId);
+}
+
 async function remoteInstanceCredentialsForWebUi(instanceId) {
   const id = String(instanceId || '').trim();
   if (!id) return null;
@@ -2666,22 +2684,48 @@ function openA0CliInstallTerminal() {
   throw err;
 }
 
-async function openA0CliTerminal(host, ownerWindow, options = {}) {
+async function resolveA0CliTerminalTarget(host, options = {}) {
+  const request = isPlainObject(options) ? options : {};
+  const kind = typeof request.kind === 'string' ? request.kind.trim() : '';
+  if (kind === 'remote') {
+    const instanceId = typeof request.instanceId === 'string' ? request.instanceId.trim() : '';
+    const remote = await dockerManager.getRemoteInstance(instanceId);
+    const url = normalizeHttpUrl(remote?.url);
+    if (!url || !isAllowedRemoteInstanceUrl(url)) {
+      throw createTabTargetError('INVALID_REMOTE_INSTANCE', 'Invalid remote instance');
+    }
+    return {
+      kind: 'remote',
+      instanceId: typeof remote?.id === 'string' && remote.id ? remote.id : instanceId,
+      containerId: '',
+      url
+    };
+  }
+
   const h = String(host || '').trim();
   if (!isAllowedLocalUrl(h)) {
     const err = new Error('Start an instance before opening the A0 CLI terminal.');
     err.code = 'UI_UNAVAILABLE';
     throw err;
   }
+  return {
+    kind: 'local',
+    instanceId: '',
+    containerId: normalizeContainerId(request.containerId),
+    url: h
+  };
+}
 
+async function openA0CliTerminal(host, ownerWindow, options = {}) {
+  const target = await resolveA0CliTerminalTarget(host, options);
   const cli = findA0CliBinary();
-  const credentials = await localInstanceCredentialsForCli(options?.containerId);
+  const credentials = await instanceCredentialsForCliTarget(target);
   const workingDirectory = await chooseA0CliWorkingDirectory(ownerWindow);
   if (!workingDirectory) return { opened: false, canceled: true };
 
-  if (process.platform === 'win32') return openA0CliTerminalWindows(h, cli, workingDirectory, credentials);
-  if (process.platform === 'darwin') return openA0CliTerminalMac(h, cli, workingDirectory, credentials);
-  if (process.platform === 'linux') return openA0CliTerminalLinux(h, cli, workingDirectory, credentials);
+  if (process.platform === 'win32') return openA0CliTerminalWindows(target.url, cli, workingDirectory, credentials);
+  if (process.platform === 'darwin') return openA0CliTerminalMac(target.url, cli, workingDirectory, credentials);
+  if (process.platform === 'linux') return openA0CliTerminalLinux(target.url, cli, workingDirectory, credentials);
 
   const err = new Error('Opening the A0 CLI terminal is not available on this system.');
   err.code = 'TERMINAL_UNAVAILABLE';
@@ -3965,10 +4009,12 @@ ipcMain.handle('docker-manager:openResourceLink', async (_event, body) => {
 ipcMain.handle('docker-manager:openCliTerminal', async (event, body) => {
   try {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const kind = typeof body.kind === 'string' ? body.kind : '';
     const host = typeof body.host === 'string' ? body.host : '';
     const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const instanceId = typeof body.instanceId === 'string' ? body.instanceId : '';
     const ownerWindow = BrowserWindow.fromWebContents(event.sender);
-    return await openA0CliTerminal(host, ownerWindow, { containerId });
+    return await openA0CliTerminal(host, ownerWindow, { kind, containerId, instanceId });
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

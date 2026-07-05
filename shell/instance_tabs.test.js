@@ -8,6 +8,7 @@ const {
   isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
+  cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
   instanceContextMenuActions
 } = require('./instance_tabs');
@@ -108,6 +109,41 @@ test('web UI login request ignores unsafe remote or incomplete credential target
       { username: 'jan', password: '' }
     ),
     null
+  );
+});
+
+test('CLI credential handoff allows local loopback and secure remotes only', () => {
+  assert.equal(
+    cliCredentialsAllowedForTarget({
+      kind: 'local',
+      containerId: 'abc123',
+      url: 'http://127.0.0.1:32080/'
+    }),
+    true
+  );
+  assert.equal(
+    cliCredentialsAllowedForTarget({
+      kind: 'remote',
+      instanceId: 'remote-1',
+      url: 'https://agent-zero.example.com/'
+    }),
+    true
+  );
+  assert.equal(
+    cliCredentialsAllowedForTarget({
+      kind: 'remote',
+      instanceId: 'remote-1',
+      url: 'http://agent-zero.example.test/'
+    }),
+    false
+  );
+  assert.equal(
+    cliCredentialsAllowedForTarget({
+      kind: 'remote',
+      instanceId: 'remote-1',
+      url: 'https://user:pass@agent-zero.example.com/'
+    }),
+    false
   );
 });
 

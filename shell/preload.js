@@ -266,8 +266,10 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   openCliTerminal: (target) => {
     const t = target && typeof target === 'object' ? target : { host: target };
     return ipcRenderer.invoke('docker-manager:openCliTerminal', {
+      kind: typeof t.kind === 'string' ? t.kind : '',
       host: typeof t.host === 'string' ? t.host : '',
-      containerId: typeof t.containerId === 'string' ? t.containerId : ''
+      containerId: typeof t.containerId === 'string' ? t.containerId : '',
+      instanceId: typeof t.instanceId === 'string' ? t.instanceId : ''
     });
   },
   installCli: () => ipcRenderer.invoke('docker-manager:installCli'),

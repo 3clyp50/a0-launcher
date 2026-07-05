@@ -1450,16 +1450,28 @@ async function openCliTerminal(target = "") {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.openCliTerminal !== "function") return;
   const request = target && typeof target === "object" ? target : { host: target };
-  const host = localUrl(request.host || "");
-  if (!host) {
-    setBanner("error", "Open the A0 CLI from a running local instance.");
-    return false;
-  }
-  try {
-    const res = await api.openCliTerminal({
+  const kind = typeof request.kind === "string" ? request.kind.trim() : "";
+  let payload = null;
+  if (kind === "remote") {
+    const instanceId = typeof request.instanceId === "string" ? request.instanceId.trim() : "";
+    if (!instanceId) {
+      setBanner("error", "Open the A0 CLI from a saved remote Instance.");
+      return false;
+    }
+    payload = { kind: "remote", instanceId };
+  } else {
+    const host = localUrl(request.host || "");
+    if (!host) {
+      setBanner("error", "Open the A0 CLI from a running local instance.");
+      return false;
+    }
+    payload = {
       host,
       containerId: typeof request.containerId === "string" ? request.containerId : ""
-    });
+    };
+  }
+  try {
+    const res = await api.openCliTerminal(payload);
     if (res?.canceled) return false;
     if (isErrorResponse(res)) {
       setBanner("error", res.message);

@@ -40,21 +40,24 @@ This scope owns:
   `shell/docker_manager`.
 - New windows that open Agent Zero UIs or remote instances must sanitize URLs and
   allow only `http:` or `https:`.
-- The A0 CLI terminal IPC must accept only local `http:` or `https:` URLs
-  without credentials. Terminal launch should stay shell-owned and work across
-  Windows, macOS, and Linux when the `a0` CLI is installed or available in a
-  sibling `a0-connector` development checkout. Launcher-owned instance launches
-  should pass the known host directly to the CLI and only use CLI flags
-  advertised by that installed `a0 --help`; use the direct `--connect` plus
+- The A0 CLI terminal IPC may accept a local `http:` or `https:` URL without
+  credentials, or a saved remote Instance ID. Remote CLI launches must resolve
+  the saved URL in `shell/main.js`; the renderer must not pass arbitrary remote
+  URLs. Terminal launch should stay shell-owned and work across Windows, macOS,
+  and Linux when the `a0` CLI is installed or available in a sibling
+  `a0-connector` development checkout. Launcher-owned instance launches should
+  pass the known host directly to the CLI and only use CLI flags advertised by
+  that installed `a0 --help`; use the direct `--connect` plus
   `--no-docker-discovery` path only when supported, otherwise pass `--host` and
   let the installed CLI use its normal discovery/autoconnect behavior. Before
   launching, the shell should use a native directory picker so the user chooses
   the CLI working folder; canceling that picker is a quiet no-op. Start the
   interactive CLI through a launcher-owned wrapper script rather than a long
-  inline shell command so Textual receives normal terminal input. If a local
-  Instance has launcher-saved credentials, pass them to `a0` only as ephemeral
-  `A0_USERNAME` and `A0_PASSWORD` environment variables for that terminal
-  launch; do not write passwords into wrapper scripts or command lines.
+  inline shell command so Textual receives normal terminal input. If an Instance
+  has launcher-saved credentials, pass them to `a0` only as ephemeral
+  `A0_USERNAME` and `A0_PASSWORD` environment variables for that terminal launch
+  when the target is local loopback or remote `https:`; do not write passwords
+  into wrapper scripts or command lines.
 - A0 CLI availability shown to the renderer is based on whether the `a0`
   terminal command can be discovered on the host. Installing A0 CLI is a named
   shell-owned intent that opens a fixed installer wrapper for the official

@@ -116,6 +116,19 @@ function webUiLoginRequestForTarget(target, credentials) {
   };
 }
 
+function cliCredentialsAllowedForTarget(target) {
+  const safeTarget = target && typeof target === 'object' ? target : {};
+  const kind = typeof safeTarget.kind === 'string' ? safeTarget.kind : '';
+  const hasTargetId =
+    (kind === 'local' && !!safeTarget.containerId) ||
+    (kind === 'remote' && !!safeTarget.instanceId);
+  if (!hasTargetId) return false;
+
+  const url = parseHttpUrl(safeTarget.url);
+  if (!url) return false;
+  return isAllowedLocalInstanceUrl(url.href) || (kind === 'remote' && url.protocol === 'https:');
+}
+
 function makeTabsSnapshot(tabs, activeTabId) {
   const source = tabs instanceof Map ? tabs.values() : [];
   return {
@@ -167,6 +180,7 @@ module.exports = {
   isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
+  cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
   instanceContextMenuActions
 };

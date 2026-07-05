@@ -226,8 +226,9 @@ This scope owns:
   The card overflow menu should choose its up/down direction from available
   viewport space, reserve any fixed bottom launcher chrome, and use bounded
   internal scrolling when the window is short.
-  `Open A0 CLI` should let the shell show the native working-folder picker
-  before terminal launch; canceling that picker should not display an error.
+  `Open A0 CLI` may appear on local and saved remote Instance cards. It should
+  let the shell show the native working-folder picker before terminal launch;
+  canceling that picker should not display an error.
   If the shell reports that the host `a0` command is unavailable, the same menu
   slot should become `Install A0 CLI` and launch the shell-owned installer
   intent instead of failing late.
@@ -269,6 +270,8 @@ This scope owns:
 - Saved remote URL-only instance cards must not expose Docker mutation actions.
   Their footer status should display the Docker Manager-provided remote health
   state as `Online`, `Offline`, or `Checking`, not a generic `Remote` tag.
+  Remote `Open A0 CLI` must pass only the saved remote Instance ID to the
+  renderer action; shell code resolves and validates the URL.
   A saved remote card may show `Clone locally` only when its URL is loopback
   (`localhost`, `127.0.0.1`, or IPv6 loopback) and the port matches a discovered
   local Docker container; the action must clone that local container.

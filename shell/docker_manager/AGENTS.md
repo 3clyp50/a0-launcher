@@ -53,7 +53,7 @@ This scope owns:
   local evidence for the current `latest` release tag. For containers, channel
   release labels must respect the container's actual image id so older stopped
   `ready`/`latest` Instances do not inherit a newer repulled channel version.
-  Channel install entries may also expose optional `publishedReleaseTag` and
+  Channel Version entries may also expose optional `publishedReleaseTag` and
   `updatedAt` metadata derived from cached Docker Hub tag metadata.
 - Start, switch, and run flows should give the Agent Zero UI enough time to
   finish a slow first boot before rolling back a newly-created container.
@@ -142,7 +142,7 @@ This scope owns:
 - Successful Agent Zero image pulls may clean up the previous local image id for
   the same tag, but only through non-forced Docker image removal. If Docker says
   the old image is still referenced by any container or another tag, keep it.
-- Image removal from Installs must validate the tag, target a locally installed
+- Image removal from Versions must validate the tag, target a locally installed
   Agent Zero image, and call Docker image removal without force. If Docker
   reports the image is still used by a container, return a stable UI error
   instead of deleting related Instances or storage.
@@ -182,7 +182,7 @@ This scope owns:
   Linux Engine.
 - Progress messages should be user-oriented: `Starting selected version`, not
   raw Docker implementation chatter.
-- Running an installed image from Installs should create a new launcher-managed
+- Running an installed Version from Versions should create a new launcher-managed
   container with a unique Docker name and open host ports, so repeated runs of
   the same image can coexist.
 - Running, active-instance creation, developer custom-image runs, and clones

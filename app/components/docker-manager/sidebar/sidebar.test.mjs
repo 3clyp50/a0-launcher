@@ -74,12 +74,12 @@ class MiniWindow {
 function installDom() {
   const navItems = [
     new MiniElement('sessions', 'dm-nav-item active'),
-    new MiniElement('installs', 'dm-nav-item'),
+    new MiniElement('versions', 'dm-nav-item'),
     new MiniElement('advanced', 'dm-nav-item')
   ];
   const panels = [
     new MiniElement('sessions', 'dm-tab-content active'),
-    new MiniElement('installs', 'dm-tab-content'),
+    new MiniElement('versions', 'dm-tab-content'),
     new MiniElement('advanced', 'dm-tab-content')
   ];
   const storage = new Map();
@@ -129,19 +129,26 @@ test('navigateToTab updates the visible tab and publishes navigation detail', ()
   const events = [];
   window.addEventListener('dm:nav', (event) => events.push(event.detail));
 
-  const tab = navigateToTab('installs', { userInitiated: true, source: 'sidebar' });
+  const tab = navigateToTab('versions', { userInitiated: true, source: 'sidebar' });
 
-  assert.equal(tab, 'installs');
-  assert.equal(dom.storage.get('dm-active-tab'), 'installs');
+  assert.equal(tab, 'versions');
+  assert.equal(dom.storage.get('dm-active-tab'), 'versions');
   assert.equal(dom.navItems[0].classList.contains('active'), false);
   assert.equal(dom.navItems[1].classList.contains('active'), true);
   assert.equal(dom.panels[0].classList.contains('active'), false);
   assert.equal(dom.panels[1].classList.contains('active'), true);
   assert.deepEqual(events.at(-1), {
-    tab: 'installs',
+    tab: 'versions',
     userInitiated: true,
     source: 'sidebar'
   });
+});
+
+test('legacy tab requests land on Versions', () => {
+  const tab = navigateToTab('installs', { userInitiated: false, source: 'legacy' });
+
+  assert.equal(tab, 'versions');
+  assert.equal(dom.storage.get('dm-active-tab'), 'versions');
 });
 
 test('programmatic navigation requests use the same tab path', () => {

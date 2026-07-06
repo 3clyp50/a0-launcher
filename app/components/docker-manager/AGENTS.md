@@ -32,7 +32,7 @@ This scope owns:
   until they are removed.
 - `sidebar/`: tab navigation, `dm:nav` event publication, and sidebar resource
   links.
-- `official-versions/`: install/version cards, activation dialog, saved
+- `official-versions/`: Version cards, activation dialog, saved
   Instance defaults, port/env overrides, data-loss acknowledgement, and
   update/switch actions.
 - `local-testing/`: local containers, per-instance action menus, rename, color
@@ -100,7 +100,7 @@ This scope owns:
   picker to Settings or the global chrome.
 - Post-runtime image installs, activation, rollback, start, stop, and delete
   progress should use the centered operation modal rather than a top-page
-  status strip. Updating an already-installed image from Installs should keep
+  status strip. Updating an already-installed Version from Versions should keep
   progress in a background toast so the existing install can still be used.
   Non-onboarding image installs may offer `Download in background`, which moves
   that operation into the same progress toast without stopping the download.
@@ -141,13 +141,13 @@ This scope owns:
   visible date plus size only, even when structured match/digest hints are
   present in state. Numbered release cards should be grouped by major version,
   with only the highest major version group expanded by default. The
-  unmaintained `testing` tag is intentionally hidden from the Installs view.
-  The Installs view may offer an `All` / `Installed` filter; `Installed` should
+  unmaintained `testing` tag is intentionally hidden from the Versions view.
+  The Versions view may offer an `All` / `Installed` filter; `Installed` should
   keep entries that already have a local image, differ from the published
   digest, are active, or are currently installing.
-  Shared Instance and Install card visuals should keep title glows unclipped
+  Shared Instance and Version card visuals should keep title glows unclipped
   and avoid inset divider lines inside the colored artwork area.
-- Running an installed tag from Installs creates another managed local instance
+- Running an installed tag from Versions creates another managed local instance
   and must not stop existing instances or require a data-loss acknowledgement.
   Stale installed tags should keep `Run` visible and expose `Update` as a
   separate action, naming the concrete upstream release when Docker Manager
@@ -192,7 +192,7 @@ This scope owns:
   creation dialog.
   The Instances header may expose `Create local Instance` beside `Add remote
   Instance`. Creating a local Instance should list installed versions only, then
-  use the same activation defaults dialog as Installs so local instance name,
+  use the same activation defaults dialog as Versions so local instance name,
   login, model, storage, port, and environment handling stays consistent.
 - Local instance cards keep `Open UI` or `Start` as the visible primary action.
   Any stopped local Agent Zero container listed by Docker Manager may expose

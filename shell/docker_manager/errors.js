@@ -72,7 +72,7 @@ function mapDockerInterfaceErrorToUiMessage(error) {
     case 'NOT_INSTALLED':
       return 'This version is not installed yet.';
     case 'IMAGE_IN_USE':
-      return 'This install is still used by an Instance. Delete the Instance first, then remove the install.';
+      return 'This version is still used by an Instance. Delete the Instance first, then remove the version.';
     case 'NOT_YET_AVAILABLE':
       return 'This version is not available yet. Please try again later.';
     case 'INSTANCE_NOT_FOUND':

@@ -481,7 +481,7 @@ function renderDiagnostics(state) {
     ["Images used", fmtBytes(state?.storage?.usedBytes)]
   ]));
   box.appendChild(diagnosticSection("Launcher Inventory", [
-    ["Installs", String((state?.images || []).length || 0)],
+    ["Versions", String((state?.images || []).length || 0)],
     ["Instances", String((state?.containers || []).length || 0)],
     ["Storage volumes", String((state?.volumes || []).length || 0)]
   ]));

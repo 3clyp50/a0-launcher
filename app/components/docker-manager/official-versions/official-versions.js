@@ -358,9 +358,9 @@ function canRemoveEntry(entry) {
 }
 
 function confirmRemoveInstall(entry) {
-  const label = entry?.title || entry?.tag || "this install";
+  const label = entry?.title || entry?.tag || "this version";
   return window.confirm(
-    `Remove ${label} from Installs?\n\nDocker will refuse if any Instance still uses this image. Delete those Instances first, then remove the install.`
+    `Remove ${label} from Versions?\n\nDocker will refuse if any Instance still uses this image. Delete those Instances first, then remove the version.`
   );
 }
 
@@ -477,8 +477,8 @@ function renderEntryCard(entry, state, entries) {
     const removeBtn = document.createElement("button");
     removeBtn.className = "button cancel dm-icon-button";
     removeBtn.type = "button";
-    removeBtn.title = "Remove install";
-    removeBtn.setAttribute("aria-label", `Remove ${entry.title || entry.tag} install`);
+    removeBtn.title = "Remove version";
+    removeBtn.setAttribute("aria-label", `Remove ${entry.title || entry.tag} version`);
     removeBtn.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">delete</span>';
     removeBtn.addEventListener("click", () => {
       if (!confirmRemoveInstall(entry)) return;
@@ -556,10 +556,10 @@ function render(state) {
   const awaitingFirstInventory = isAwaitingFirstInventory(state, allEntries);
   if (subtitle) {
     subtitle.textContent = awaitingFirstInventory
-      ? "Checking installs..."
+      ? "Checking versions..."
       : allEntries.length
       ? `${installedCount} installed · ${availableCount} available`
-      : "0 installs detected";
+      : "0 versions detected";
   }
 
   list.innerHTML = "";

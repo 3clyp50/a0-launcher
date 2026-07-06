@@ -58,7 +58,7 @@ This scope owns:
   actions. They must not open the global operation modal or make the page inert;
   show queue/running state on the affected card and surface failures with toast
   feedback.
-- Running an installed image from Installs must keep the operation modal until
+- Running an installed Version from Versions must keep the operation modal until
   the Docker Manager reports the new Instance UI ready, then hand off to the
   Instances tab so the created Instance is visible.
 - A0 CLI launch, rename, color selection, and log inspection controls belong to
@@ -75,7 +75,7 @@ This scope owns:
 - Per-Instance color selection is launcher identity metadata for local and saved
   remote Instances. It should use bounded palette IDs from Docker Manager state,
   tint only the card visual, and never imply Docker or Agent Zero runtime state.
-- Removing an Install is a named renderer action from the Installs view. The
+- Removing a Version is a named renderer action from the Versions view. The
   renderer should present it as image cleanup and let Docker Manager report
   Docker's in-use refusal rather than trying to infer container/image bindings
   in component code.
@@ -97,7 +97,7 @@ This scope owns:
   about risk without adding Docker jargon where a user decision is enough.
 - Toast feedback for modal actions must remain visible above blocking modal
   backdrops, especially recoverable failures such as Docker Hub sign-in.
-- Keep `Open UI` colocated with the instance or install it opens.
+- Keep `Open UI` colocated with the Instance or Version it opens.
 - Keep compact controls stable in width and avoid text overflow on small
   windows.
 - Keep the launcher workspace responsive across large displays. Do not

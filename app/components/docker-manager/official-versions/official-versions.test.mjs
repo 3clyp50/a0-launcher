@@ -39,7 +39,7 @@ test('installed active entries still expose Run for additional instances', () =>
   assert.equal(action?.disabled, undefined);
 });
 
-test('update-ready install entries keep Run and expose Update separately', () => {
+test('update-ready version entries keep Run and expose Update separately', () => {
   const actions = actionsForEntry({
     tag: 'ready',
     availability: 'update_available'
@@ -68,7 +68,7 @@ test('update action labels concrete upstream target when known', () => {
   }), 'Update');
 });
 
-test('update-ready install entries do not render a duplicate status chip', () => {
+test('update-ready version entries do not render a duplicate status chip', () => {
   assert.equal(statusForEntry({
     tag: 'ready',
     availability: 'update_available'
@@ -98,7 +98,7 @@ test('update action uses background install update flow', () => {
   assert.equal(updatedTag, 'latest');
 });
 
-test('toast progress does not change the Install card render key', () => {
+test('toast progress does not change the Version card render key', () => {
   const baseState = {
     stateLoaded: true,
     loading: false,
@@ -116,7 +116,7 @@ test('toast progress does not change the Install card render key', () => {
   );
 });
 
-test('running operations still suppress install card actions', () => {
+test('running operations still suppress version card actions', () => {
   const action = actionForEntry({
     tag: 'latest',
     availability: 'installing',
@@ -126,7 +126,7 @@ test('running operations still suppress install card actions', () => {
   assert.equal(action, null);
 });
 
-test('installed and differing install cards can expose remove control', () => {
+test('installed and differing version cards can expose remove control', () => {
   assert.equal(canRemoveEntry({ availability: 'installed' }), true);
   assert.equal(canRemoveEntry({ availability: 'update_available' }), true);
   assert.equal(canRemoveEntry({ availability: 'available' }), false);
@@ -134,7 +134,7 @@ test('installed and differing install cards can expose remove control', () => {
   assert.equal(canRemoveEntry({ availability: 'available', differsFromPublished: true }), true);
 });
 
-test('installed filter keeps local or in-progress installs only', () => {
+test('installed filter keeps local or in-progress versions only', () => {
   const entries = [
     { tag: 'latest', availability: 'installed' },
     { tag: 'ready', availability: 'update_available' },
@@ -172,7 +172,7 @@ test('release match badge labels omit leading v', () => {
   assert.equal(releaseMatchBadgeLabel('ready'), 'ready');
 });
 
-test('channel install cards display update dates from channel metadata or matched releases', () => {
+test('channel version cards display update dates from channel metadata or matched releases', () => {
   const entries = [
     { tag: 'latest', title: 'latest', matchedReleaseTag: 'v2.0' },
     { tag: 'ready', title: 'ready', updatedAt: '2026-06-25T12:44:56.141Z' },
@@ -193,7 +193,7 @@ test('channel install cards display update dates from channel metadata or matche
   });
 });
 
-test('channel install card meta keeps only date and size', () => {
+test('channel version card meta keeps only date and size', () => {
   const entries = [
     {
       tag: 'ready',
@@ -211,7 +211,7 @@ test('channel install card meta keeps only date and size', () => {
   ]);
 });
 
-test('install catalog groups numbered versions by major and collapses older majors by default', () => {
+test('version catalog groups numbered versions by major and collapses older majors by default', () => {
   const model = buildInstallCatalogModel([
     { tag: 'v1.20', title: '1.20' },
     { tag: 'ready', title: 'ready' },

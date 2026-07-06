@@ -611,7 +611,7 @@ async function refresh() {
   }
 }
 
-const NAV_REFRESH_TABS = new Set(["installs", "sessions", "advanced"]);
+const NAV_REFRESH_TABS = new Set(["versions", "sessions", "advanced"]);
 const INSTANCE_TAB = "sessions";
 let navRefreshTimer = 0;
 const handledRunCompletionOps = new Set();

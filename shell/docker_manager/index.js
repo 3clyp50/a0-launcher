@@ -4563,7 +4563,7 @@ async function removeInstalledImage(tag) {
   const localImages = await docker.listLocalImages(imageRepo);
   const target = (localImages || []).find((img) => img?.tag === t) || null;
   if (!target?.imageRef) {
-    throw makeDockerManagerError('NOT_INSTALLED', 'This install is not available locally.');
+    throw makeDockerManagerError('NOT_INSTALLED', 'This version is not available locally.');
   }
 
   try {
@@ -4572,7 +4572,7 @@ async function removeInstalledImage(tag) {
     return { removed: true, tag: t };
   } catch (error) {
     if (error?.code === 'CONFLICT') {
-      throw makeDockerManagerError('IMAGE_IN_USE', 'This install is still used by an Instance. Delete the Instance first, then remove the install.');
+      throw makeDockerManagerError('IMAGE_IN_USE', 'This version is still used by an Instance. Delete the Instance first, then remove the version.');
     }
     throw error;
   }

@@ -1,12 +1,14 @@
 const STORAGE_KEY = "dm-active-tab";
 const DEFAULT_TAB = "sessions";
-const VALID_TABS = new Set(["installs", "sessions", "advanced", "settings"]);
+const VALID_TABS = new Set(["versions", "sessions", "advanced", "settings"]);
+const TAB_ALIASES = new Map([["installs", "versions"]]);
 const NAVIGATE_EVENT = "dm:navigate";
 
 let programmaticNavigationBound = false;
 
 function validTab(tab) {
-  return VALID_TABS.has(tab) ? tab : DEFAULT_TAB;
+  const normalized = TAB_ALIASES.get(tab) || tab;
+  return VALID_TABS.has(normalized) ? normalized : DEFAULT_TAB;
 }
 
 function getActiveTab() {

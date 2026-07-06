@@ -12,7 +12,7 @@ container, release, storage-volume, and remote-instance orchestration.
 
 - Detects Docker Desktop or Docker Engine availability.
 - Lists Agent Zero backend releases and local Docker images.
-- Installs, updates, activates, starts, stops, and switches Agent Zero instances.
+- Manages Agent Zero Versions and Instances: downloads, updates, activates, starts, stops, and switches.
 - Keeps retained instances available for rollback.
 - Shows local containers, saved remote instances, and storage volumes.
 - Opens Agent Zero UIs from the instance where they belong.

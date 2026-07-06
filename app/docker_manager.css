@@ -224,7 +224,7 @@ body {
   min-width: 0;
 }
 
-.dm-tab-content[data-tab="installs"] > x-component > .section,
+.dm-tab-content[data-tab="versions"] > x-component > .section,
 .dm-tab-content[data-tab="advanced"] > x-component > .section,
 .dm-tab-content[data-tab="settings"] > x-component > .section {
   display: flex;

@@ -139,7 +139,7 @@ Product language:
   local Docker setup or an image pull before a user can add a remote Agent Zero
   URL.
 - Say `Storage volumes`, not just `Storage`, when referring to Docker volumes.
-- Installs may be removed from the Installs view, but image removal must be a
+- Downloaded Versions may be removed from the Versions view, but image removal must be a
   non-forced Docker image delete so Docker refuses removal while any Instance
   still references the image.
 - Keep instance deletion separate from workspace deletion. Host workspace

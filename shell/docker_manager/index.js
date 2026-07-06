@@ -1719,6 +1719,47 @@ function computeImageBytesStats(localImages) {
   };
 }
 
+async function localImageIdForTag(docker, imageRepo, tag) {
+  try {
+    const localImages = await docker.listLocalImages(imageRepo);
+    return localImageIdForTagFromList(localImages, tag);
+  } catch {
+    return '';
+  }
+}
+
+function localImageIdForTagFromList(localImages, tag) {
+  const t = String(tag || '').trim();
+  const match = (Array.isArray(localImages) ? localImages : []).find((img) => img?.tag === t) || null;
+  return typeof match?.imageId === 'string' ? match.imageId.trim() : '';
+}
+
+async function removeReplacedLocalImage(docker, imageRepo, tag, previousImageId) {
+  const oldId = String(previousImageId || '').trim();
+  if (!oldId) return false;
+
+  let localImages = [];
+  try {
+    localImages = await docker.listLocalImages(imageRepo);
+  } catch {
+    return false;
+  }
+
+  const currentImageId = localImageIdForTagFromList(localImages, tag);
+  if (!currentImageId || currentImageId === oldId) return false;
+  if ((Array.isArray(localImages) ? localImages : []).some((img) => String(img?.imageId || '').trim() === oldId)) return false;
+
+  try {
+    await docker.removeLocalImage(oldId, { force: false });
+    return true;
+  } catch (error) {
+    if (error?.code !== 'CONFLICT' && error?.code !== 'NOT_FOUND') {
+      logDockerManagerError('removeReplacedLocalImage', error, { tag, imageId: shortLogId(oldId) });
+    }
+    return false;
+  }
+}
+
 function applyLocalInstanceIdentity(containers, localInstanceNames, localInstanceColors, localInstanceCredentials) {
   const names = isPlainObject(localInstanceNames) ? localInstanceNames : {};
   const colors = isPlainObject(localInstanceColors) ? localInstanceColors : {};
@@ -4472,6 +4513,7 @@ async function installOrSync(tag, options = {}) {
       updateOperationProgress({ message: 'Downloading', progress: null, downloadProgress: 0, extractProgress: 0, canCancel: true });
 
       const imageRef = imageRefForTag(imageRepo, t);
+      const previousImageId = await localImageIdForTag(docker, imageRepo, t);
       const result = await docker.pullImage(imageRef, {
         signal: controller.signal,
         onProgress: (evt) => {
@@ -4491,6 +4533,7 @@ async function installOrSync(tag, options = {}) {
       if (result?.status === 'aborted_client') {
         finishOperation('canceled', 'Canceled');
       } else {
+        await removeReplacedLocalImage(docker, imageRepo, t, previousImageId);
         finishOperation('completed', null);
         updateOperationProgress({ progress: 100, downloadProgress: 100, extractProgress: 100, message: 'Completed' });
       }
@@ -5278,6 +5321,7 @@ async function updateToLatest(dataLossAck) {
       const controller = new AbortController();
       _abortControllers.set(opId, controller);
       updateOperationProgress({ message: 'Downloading', progress: null, downloadProgress: 0, extractProgress: 0, canCancel: true });
+      const previousImageId = await localImageIdForTag(docker, imageRepo, latest);
       const pullResult = await docker.pullImage(imageRefForTag(imageRepo, latest), {
         signal: controller.signal,
         onProgress: (evt) => {
@@ -5299,6 +5343,7 @@ async function updateToLatest(dataLossAck) {
         return;
       }
 
+      await removeReplacedLocalImage(docker, imageRepo, latest, previousImageId);
       updateOperationProgress({ message: 'Switching versions', progress: null, canCancel: false });
 
       const containers = await docker.listContainers(imageRepo);
@@ -5970,6 +6015,8 @@ module.exports = {
     restoreAgentZeroBackupZip,
     normalizeCustomImageOptions,
     developerContainerName,
+    localImageIdForTag,
+    removeReplacedLocalImage,
     releaseTagLabel,
     matchedSemverReleaseTagForDigest,
     matchedReleaseTagForLocalTag,

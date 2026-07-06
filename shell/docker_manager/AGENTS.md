@@ -139,6 +139,9 @@ This scope owns:
 - Image installs may target Docker channel tags (`latest`, `ready`, `testing`)
   in addition to semver releases and local development tags, because first-run
   setup uses `latest` as the default image choice.
+- Successful Agent Zero image pulls may clean up the previous local image id for
+  the same tag, but only through non-forced Docker image removal. If Docker says
+  the old image is still referenced by any container or another tag, keep it.
 - Image removal from Installs must validate the tag, target a locally installed
   Agent Zero image, and call Docker image removal without force. If Docker
   reports the image is still used by a container, return a stable UI error

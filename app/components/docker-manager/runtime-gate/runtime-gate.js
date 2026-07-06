@@ -1,5 +1,6 @@
 import { estimatedProgressFromSteps, progressMetaText } from "../progress-eta.js";
 import { openAddRemoteInstanceDialog } from "../remote-instance-dialog.js";
+import { openCreateLocalInstanceDialog } from "../run-instance-dialog.js";
 
 const RUNTIME_GATE_ID = "runtimeSetupDialog";
 
@@ -196,7 +197,7 @@ function setupTagOptions(state = {}) {
   const versions = Array.isArray(state?.versions) ? state.versions : [];
   for (const version of versions) {
     const tag = asText(version?.id);
-    if (!tag) continue;
+    if (!tag || tag === "testing") continue;
     const unavailable = version?.availability === "available" && version?.installability === "not_yet_available";
     if (unavailable) continue;
     addSetupOption(out, seen, tag, tag);
@@ -221,19 +222,20 @@ function installedTagOptions(state = {}) {
   const seen = new Set();
   const versions = Array.isArray(state?.versions) ? state.versions : [];
   const images = Array.isArray(state?.images) ? state.images : [];
+  const hasInstalledImage = images.some((image) => asText(image?.tag) || asText(image?.imageRef));
+  const hasInstalledVersion = versions.some((version) => versionIsInstalled(version));
 
-  const latest = versions.find((version) => asText(version?.id) === "latest" && versionIsInstalled(version));
-  if (latest) addSetupOption(out, seen, "latest", "latest");
+  if (hasInstalledImage || hasInstalledVersion) addSetupOption(out, seen, "latest", "latest");
 
   for (const version of versions) {
     const tag = asText(version?.id);
-    if (!tag || !versionIsInstalled(version)) continue;
+    if (!tag || tag === "testing" || !versionIsInstalled(version)) continue;
     addSetupOption(out, seen, tag, tag);
   }
 
   for (const image of images) {
     const tag = asText(image?.tag) || asText(image?.imageRef);
-    if (!tag) continue;
+    if (!tag || tag === "testing" || tag.endsWith(":testing")) continue;
     addSetupOption(out, seen, tag, tag);
   }
 
@@ -241,7 +243,10 @@ function installedTagOptions(state = {}) {
 }
 
 function hasInstalledAgentZeroImage(state = {}) {
-  return installedTagOptions(state).length > 0;
+  const versions = Array.isArray(state?.versions) ? state.versions : [];
+  const images = Array.isArray(state?.images) ? state.images : [];
+  return versions.some((version) => versionIsInstalled(version)) ||
+    images.some((image) => asText(image?.tag) || asText(image?.imageRef));
 }
 
 function hasLocalInstances(state = {}) {
@@ -705,10 +710,8 @@ async function runAction(action, runtime, actions, root = null) {
     }
     acknowledgedRuntimeSetupKey = runtimeSetupKey(state.progress);
     removeRuntimeGate();
-    if (action.kind === "install_image") {
-      actions?.installOrSync?.(selectedTag);
-    } else if (action.kind === "run_image") {
-      actions?.activateTag?.(selectedTag, { dataLossAck: "proceed_without_backup", portMappings: "0:80" });
+    if (action.kind === "install_image" || action.kind === "run_image") {
+      openCreateLocalInstanceDialog(state, { selectedTag });
     }
   }
 }

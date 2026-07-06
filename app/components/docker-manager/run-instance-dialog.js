@@ -139,8 +139,21 @@ function isReadyEntry(entry) {
   return entry?.tag === "ready";
 }
 
+function isChannelVersionChoice(entry = {}) {
+  return isLatestEntry(entry) || isReadyEntry(entry);
+}
+
 function isTestingEntry(entry) {
   return entry?.tag === "testing";
+}
+
+function releaseTagIsNewer(candidate, current) {
+  const candidateParts = parseReleaseTagParts(candidate);
+  const currentParts = parseReleaseTagParts(current);
+  if (!candidateParts || !currentParts) return false;
+  if (candidateParts.major !== currentParts.major) return candidateParts.major > currentParts.major;
+  if (candidateParts.minor !== currentParts.minor) return candidateParts.minor > currentParts.minor;
+  return candidateParts.patch > currentParts.patch;
 }
 
 function isInstalledRunEntry(entry) {
@@ -188,6 +201,9 @@ function normalizeVersionChoice(entry = {}) {
     category: entry.category || "",
     isActive: !!entry.isActive,
     differsFromPublished: !!entry.differsFromPublished,
+    installability: entry.installability || null,
+    matchedReleaseTag: entry.matchedReleaseTag || "",
+    publishedReleaseTag: entry.publishedReleaseTag || "",
     publishedAt: entry.publishedAt || null,
     updatedAt: entry.updatedAt || null,
     createdAt: entry.createdAt || null,
@@ -201,7 +217,12 @@ function installedVersionChoices(state = {}) {
   const addChoice = (entry) => {
     const choice = normalizeVersionChoice(entry);
     if (!choice || seen.has(choice.tag) || isTestingEntry(choice)) return;
-    if (!isInstalledRunEntry(choice)) return;
+    if (choice.availability === "installing") return;
+    if (isChannelVersionChoice(choice)) {
+      if (choice.installability === "not_yet_available") return;
+    } else if (!isInstalledRunEntry(choice)) {
+      return;
+    }
     seen.add(choice.tag);
     choices.push(choice);
   };
@@ -215,6 +236,9 @@ function installedVersionChoices(state = {}) {
       category: version?.category || "",
       isActive: !!version?.isActive,
       differsFromPublished: !!version?.differsFromPublished,
+      installability: version?.installability || null,
+      matchedReleaseTag: version?.matchedReleaseTag || "",
+      publishedReleaseTag: version?.publishedReleaseTag || "",
       publishedAt: version?.publishedAt || null,
       updatedAt: version?.updatedAt || null
     });
@@ -247,7 +271,7 @@ function createLocalInstanceButtonModel(state = {}) {
   if (!choices.length) {
     return {
       disabled: true,
-      title: "Install a version before creating a local Instance"
+      title: "Agent Zero versions are not ready yet"
     };
   }
   if (operationRunning) {
@@ -258,7 +282,7 @@ function createLocalInstanceButtonModel(state = {}) {
   }
   return {
     disabled: false,
-    title: "Create a local Instance from an installed version"
+    title: "Create a local Instance"
   };
 }
 
@@ -271,10 +295,12 @@ function versionOptionsHtml(choices, selectedTag) {
   }).join("");
 }
 
-function selectedChoiceFromDialog(dialog, fallbackEntry) {
+function selectedChoiceFromDialog(dialog, fallbackEntry, choices = []) {
   const select = dialog?.querySelector?.("#activateInstanceVersion");
   const selectedTag = String(select?.value || "").trim();
   if (!selectedTag) return fallbackEntry || null;
+  const found = (Array.isArray(choices) ? choices : []).find((choice) => choice?.tag === selectedTag);
+  if (found) return found;
   return {
     ...(fallbackEntry || {}),
     tag: selectedTag,
@@ -282,7 +308,14 @@ function selectedChoiceFromDialog(dialog, fallbackEntry) {
   };
 }
 
-function openRunInstanceDialog({ entry, state, versionChoices = null, includeVersionPicker = false, title = "Run instance", submitLabel = "Run" } = {}) {
+function channelPullDefault(choice = null) {
+  if (!isChannelVersionChoice(choice)) return false;
+  if (!isInstalledRunEntry(choice)) return true;
+  if (choice?.differsFromPublished) return true;
+  return releaseTagIsNewer(choice?.publishedReleaseTag, choice?.matchedReleaseTag);
+}
+
+function openRunInstanceDialog({ entry, state, versionChoices = null, includeVersionPicker = false, title = "Run instance", submitLabel = "Run", selectedTag = "" } = {}) {
   const existing = document.getElementById("activateInstanceDialog");
   if (existing) existing.remove();
 
@@ -291,7 +324,8 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
     : entry?.tag
       ? [entry]
       : [];
-  const initialEntry = entry?.tag ? entry : choices[0] || null;
+  const selectedEntry = selectedTag ? choices.find((choice) => choice?.tag === selectedTag) : null;
+  const initialEntry = selectedEntry || (entry?.tag ? entry : choices[0] || null);
   const initialTag = initialEntry?.tag || "";
   if (!initialTag) {
     window.toastFrontendError?.("Choose an installed version before creating an Instance.", "Agent Zero");
@@ -306,11 +340,16 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
 
   const versionField = includeVersionPicker ? `
         <div class="dm-field">
-          <label for="activateInstanceVersion">Installed version</label>
+          <label for="activateInstanceVersion">Select version</label>
           <select id="activateInstanceVersion" class="dm-select">
             ${versionOptionsHtml(choices, initialTag)}
           </select>
-          <div class="dm-field-hint">Only installed Agent Zero images are shown.</div>
+          <div class="dm-field-hint">Choose a channel tag or an installed version.</div>
+          <label id="activateChannelPullField" class="dm-checkbox-line dm-channel-pull-field hidden">
+            <input id="activatePullChannel" type="checkbox">
+            <span id="activatePullChannelLabel">Pull updates</span>
+          </label>
+          <div id="activateChannelPullHint" class="dm-field-hint hidden"></div>
         </div>
   ` : "";
 
@@ -339,21 +378,15 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
             <span>Save credentials</span>
           </label>
         </div>
-        <div class="dm-field dm-model-defaults">
-          <div class="dm-field-label">Choose your models</div>
-          <div class="dm-model-grid">
-            ${instanceModelRowsHtml(PRIMARY_INSTANCE_MODEL_SLOTS, instanceDefaults, "activate")}
-          </div>
-          <div class="dm-field-hint">Using a subscription-based provider? Leave the defaults and connect the subscription during onboarding in the Agent Zero Web UI.</div>
-        </div>
         <details class="dm-advanced">
           <summary>Advanced</summary>
           <div class="dm-advanced-body">
             <div class="dm-field dm-model-defaults">
-              <div class="dm-field-label">Embedding model</div>
+              <div class="dm-field-label">Choose your models</div>
               <div class="dm-model-grid">
-                ${instanceModelRowsHtml(ADVANCED_INSTANCE_MODEL_SLOTS, instanceDefaults, "activate")}
+                ${instanceModelRowsHtml([...PRIMARY_INSTANCE_MODEL_SLOTS, ...ADVANCED_INSTANCE_MODEL_SLOTS], instanceDefaults, "activate")}
               </div>
+              <div class="dm-field-hint">Using a subscription-based provider? Leave the defaults and connect the subscription during onboarding in the Agent Zero Web UI.</div>
             </div>
             <div class="dm-field">
               <label for="activatePortMappings">Port mapping</label>
@@ -393,6 +426,10 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
 
   const form = dialog.querySelector("form");
   const versionInput = dialog.querySelector("#activateInstanceVersion");
+  const channelPullField = dialog.querySelector("#activateChannelPullField");
+  const channelPullInput = dialog.querySelector("#activatePullChannel");
+  const channelPullLabel = dialog.querySelector("#activatePullChannelLabel");
+  const channelPullHint = dialog.querySelector("#activateChannelPullHint");
   const nameInput = dialog.querySelector("#activateInstanceName");
   const portInput = dialog.querySelector("#activatePortMappings");
   const storageModeInput = dialog.querySelector("#activateStorageMode");
@@ -402,6 +439,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   let nameDirty = false;
   let storageHostDirty = false;
   const defaultHostRoot = state?.storagePreferences?.hostRoot || "~/agent-zero";
+  let lastChannelPullTag = "";
 
   bindInstanceDefaultProviderPlaceholderSync(dialog, "activate");
   if (nameInput) nameInput.value = defaultInstanceName(initialTag, state);
@@ -420,14 +458,37 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   storageHostRootInput?.addEventListener("input", () => { storageHostDirty = true; });
   storageModeInput?.addEventListener("change", syncStorageFields);
   syncStorageFields();
+  const syncChannelPull = () => {
+    const choice = selectedChoiceFromDialog(dialog, initialEntry, choices);
+    const tag = choice?.tag || "";
+    const isChannel = isChannelVersionChoice(choice);
+    if (channelPullField) channelPullField.classList.toggle("hidden", !isChannel);
+    if (channelPullHint) channelPullHint.classList.toggle("hidden", !isChannel);
+    if (!isChannel) {
+      lastChannelPullTag = "";
+      return;
+    }
+    if (channelPullLabel) channelPullLabel.textContent = `Pull updates from ${tag}`;
+    if (channelPullHint) {
+      channelPullHint.textContent = isInstalledRunEntry(choice)
+        ? `Run the installed ${tag} image, or pull the channel tag before creating this Instance.`
+        : `The ${tag} image is not installed yet. Pull it before creating this Instance.`;
+    }
+    if (channelPullInput && lastChannelPullTag !== tag) {
+      channelPullInput.checked = channelPullDefault(choice);
+      lastChannelPullTag = tag;
+    }
+  };
+  syncChannelPull();
   nameInput?.addEventListener("input", () => {
     nameDirty = true;
     if (!storageHostDirty) syncStorageFields();
   });
   versionInput?.addEventListener("change", () => {
-    if (!nameInput || nameDirty) return;
-    nameInput.value = defaultInstanceName(versionInput.value, state);
+    const choice = selectedChoiceFromDialog(dialog, initialEntry, choices);
+    if (nameInput && !nameDirty) nameInput.value = defaultInstanceName(choice?.tag || versionInput.value, state);
     if (!storageHostDirty) syncStorageFields();
+    syncChannelPull();
   });
 
   dialog.querySelectorAll("[data-dialog-close]").forEach((btn) => {
@@ -438,10 +499,15 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   });
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const selectedEntry = selectedChoiceFromDialog(dialog, initialEntry);
+    const selectedEntry = selectedChoiceFromDialog(dialog, initialEntry, choices);
     const tag = selectedEntry?.tag || "";
     if (!tag) {
       window.toastFrontendError?.("Choose an installed version before creating an Instance.", "Agent Zero");
+      return;
+    }
+    const shouldPullChannel = isChannelVersionChoice(selectedEntry) && channelPullInput?.checked === true;
+    if (isChannelVersionChoice(selectedEntry) && !shouldPullChannel && !isInstalledRunEntry(selectedEntry)) {
+      window.toastFrontendError?.(`Pull ${tag} before creating this Instance.`, "Agent Zero");
       return;
     }
     const instanceDefaults = readInstanceDefaultsFromForm(dialog, "activate");
@@ -477,7 +543,11 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
     const defaultsSaved = await window.dockerManagerActions?.setInstanceDefaults?.(instanceDefaults, { quiet: true });
     if (defaultsSaved === false) return;
     closeDialog(dialog);
-    await window.dockerManagerActions?.activateTag?.(tag, options);
+    if (shouldPullChannel) {
+      await window.dockerManagerActions?.runAfterPull?.(tag, options);
+    } else {
+      await window.dockerManagerActions?.activateTag?.(tag, options);
+    }
   });
 
   document.body.appendChild(dialog);
@@ -485,17 +555,28 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   return true;
 }
 
-function openCreateLocalInstanceDialog(state = {}) {
-  const choices = installedVersionChoices(state);
+function openCreateLocalInstanceDialog(state = {}, options = {}) {
+  const selectedTag = String(options?.selectedTag || "").trim();
+  let choices = installedVersionChoices(state);
+  if (selectedTag && !choices.some((choice) => choice.tag === selectedTag)) {
+    const selectedChoice = normalizeVersionChoice({
+      tag: selectedTag,
+      title: selectedTag,
+      availability: "available"
+    });
+    if (selectedChoice && isChannelVersionChoice(selectedChoice)) choices = [selectedChoice, ...choices];
+  }
   if (!choices.length) {
-    window.toastFrontendError?.("Install a version before creating a local Instance.", "Agent Zero");
+    window.toastFrontendError?.("Agent Zero versions are not ready yet.", "Agent Zero");
     return false;
   }
+  const entry = selectedTag ? choices.find((choice) => choice.tag === selectedTag) || choices[0] : choices[0];
   return openRunInstanceDialog({
-    entry: choices[0],
+    entry,
     state,
     versionChoices: choices,
     includeVersionPicker: true,
+    selectedTag,
     title: "Create local Instance",
     submitLabel: "Create"
   });
@@ -503,9 +584,11 @@ function openCreateLocalInstanceDialog(state = {}) {
 
 export {
   authEnvLinesFromValues,
+  channelPullDefault,
   createLocalInstanceButtonModel,
   directWorkspaceFolder,
   installedVersionChoices,
+  isChannelVersionChoice,
   mergeGeneratedEnvText,
   openCreateLocalInstanceDialog,
   openRunInstanceDialog,

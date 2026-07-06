@@ -83,7 +83,7 @@ function openAddRemoteInstanceDialog(options = {}) {
           <div class="dm-field-hint">Use the URL where this Agent Zero Instance is already running. If no protocol is entered, the launcher will use http://.</div>
         </div>
         <div class="dm-field">
-          <label for="remoteInstanceName">Display name</label>
+          <label for="remoteInstanceName">Instance name</label>
           <input id="remoteInstanceName" class="dm-text-input" type="text" maxlength="80" autocomplete="off" placeholder="Remote Instance">
           <div class="dm-field-hint">Optional. This is only the friendly name shown in Instances.</div>
         </div>

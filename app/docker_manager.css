@@ -2190,11 +2190,11 @@ body {
 }
 
 .dm-operation-dialog.has-setup-showcase {
-  width: min(64rem, 100%);
+  width: min(38rem, 100%);
 }
 
 .dm-operation-dialog.has-first-instance-setup {
-  width: min(64rem, 100%);
+  width: min(38rem, 100%);
 }
 
 .dm-operation-dialog.has-setup-showcase .dm-dialog-body {
@@ -2203,6 +2203,7 @@ body {
 
 .dm-operation-dialog.has-setup-showcase .dm-setup-showcase {
   order: -1;
+  grid-template-columns: 1fr;
 }
 
 .dm-operation-dialog.has-first-instance-setup .dm-dialog-body {

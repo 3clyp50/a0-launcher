@@ -259,13 +259,14 @@ function emptyInstancesStateModel(state = {}) {
     };
   }
   const operationRunning = isBlockingOperationRunning(state);
+  const createButton = createLocalInstanceButtonModel(state);
   return {
-    kind: "install_latest",
+    kind: "create_local",
     title: "No Instances yet",
-    detail: "Download Agent Zero and create your first Instance.",
-    actionLabel: "Install latest version",
-    disabled: operationRunning,
-    actionTitle: operationRunning ? "Another operation is running" : "Install latest Agent Zero version"
+    detail: "Create a local or remote Agent Zero Instance.",
+    actionLabel: "Create local Instance",
+    disabled: operationRunning || !!createButton.disabled,
+    actionTitle: operationRunning ? "Another operation is running" : createButton.title
   };
 }
 
@@ -296,10 +297,10 @@ function renderEmptyInstances(list, state = {}) {
   action.type = "button";
   action.disabled = !!model.disabled;
   action.title = model.actionTitle;
-  action.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">download</span><span></span>';
+  action.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">add</span><span></span>';
   action.querySelector("span:last-child").textContent = model.actionLabel;
   action.addEventListener("click", () => {
-    window.dockerManagerActions?.installOrSync?.("latest");
+    openCreateLocalInstanceDialog(window.__dmLastState || state);
   });
   content.appendChild(title);
   content.appendChild(detail);

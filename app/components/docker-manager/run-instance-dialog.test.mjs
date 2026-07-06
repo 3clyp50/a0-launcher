@@ -1,20 +1,23 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 const {
   authEnvLinesFromValues,
+  channelPullDefault,
   createLocalInstanceButtonModel,
   directWorkspaceFolder,
   installedVersionChoices,
+  isChannelVersionChoice,
   mergeGeneratedEnvText,
   storageFieldVisibility,
   storageOverrideFromChoice
 } = await import('./run-instance-dialog.js');
 
-test('installed version choices include runnable installed versions and local images only', () => {
+test('version choices pin channels, include installed versions and hide testing', () => {
   const choices = installedVersionChoices({
     versions: [
-      { id: 'ready', displayVersion: 'ready', availability: 'update_available' },
+      { id: 'ready', displayVersion: 'ready', availability: 'available', installability: 'installable' },
       { id: 'latest', displayVersion: 'latest', availability: 'installed' },
       { id: 'v2.0', displayVersion: '2.0', availability: 'available' },
       { id: 'v1.20', displayVersion: '1.20', availability: 'available', differsFromPublished: true },
@@ -37,10 +40,29 @@ test('installed version choices include runnable installed versions and local im
   ]);
 });
 
+test('channel pull defaults only when missing or stale', () => {
+  assert.equal(isChannelVersionChoice({ tag: 'latest' }), true);
+  assert.equal(isChannelVersionChoice({ tag: 'v2.0' }), false);
+  assert.equal(channelPullDefault({ tag: 'latest', availability: 'available' }), true);
+  assert.equal(channelPullDefault({ tag: 'ready', availability: 'installed', differsFromPublished: true }), true);
+  assert.equal(channelPullDefault({
+    tag: 'latest',
+    availability: 'installed',
+    matchedReleaseTag: 'v1.9',
+    publishedReleaseTag: 'v1.10'
+  }), true);
+  assert.equal(channelPullDefault({
+    tag: 'latest',
+    availability: 'installed',
+    matchedReleaseTag: 'v1.10',
+    publishedReleaseTag: 'v1.10'
+  }), false);
+});
+
 test('create local instance button model explains disabled states', () => {
   assert.deepEqual(createLocalInstanceButtonModel({ versions: [] }), {
     disabled: true,
-    title: 'Install a version before creating a local Instance'
+    title: 'Agent Zero versions are not ready yet'
   });
 
   assert.deepEqual(createLocalInstanceButtonModel({
@@ -56,14 +78,14 @@ test('create local instance button model explains disabled states', () => {
     progress: { status: 'running', presentation: 'toast' }
   }), {
     disabled: false,
-    title: 'Create a local Instance from an installed version'
+    title: 'Create a local Instance'
   });
 
   assert.deepEqual(createLocalInstanceButtonModel({
     versions: [{ id: 'latest', availability: 'installed' }]
   }), {
     disabled: false,
-    title: 'Create a local Instance from an installed version'
+    title: 'Create a local Instance'
   });
 });
 
@@ -121,4 +143,10 @@ test('workspace storage choices expose only their relevant fields', () => {
 test('direct workspace folder defaults to the instance name under the root', () => {
   assert.equal(directWorkspaceFolder('~/agent-zero', 'personal2'), '~/agent-zero/personal2');
   assert.equal(directWorkspaceFolder('~/agent-zero/', 'Personal/Two'), '~/agent-zero/Personal-Two');
+});
+
+test('advanced options are collapsed by default', async () => {
+  const source = await readFile(new URL('./run-instance-dialog.js', import.meta.url), 'utf8');
+  assert.match(source, /<details class="dm-advanced">/);
+  assert.doesNotMatch(source, /<details class="dm-advanced" open>/);
 });

@@ -205,7 +205,7 @@ function installDom() {
   page.className = 'dm-page';
   document.body.appendChild(page);
   globalThis.document = document;
-  globalThis.window = { __dmLastState: null };
+  globalThis.window = { __dmLastState: null, setTimeout };
   return document;
 }
 
@@ -394,10 +394,10 @@ test('completed runtime setup prompts for image download only when no image is i
   assert.equal(model.success, true);
   assert.equal(model.headline, 'Runtime Ready');
   assert.equal(model.action.label, 'Download Agent Zero');
-  assert.deepEqual(model.setupOptions.map((option) => option.value), ['latest', 'v1.20', 'testing']);
+  assert.deepEqual(model.setupOptions.map((option) => option.value), ['latest', 'v1.20']);
 
-  let installTag = '';
-  assert.equal(renderRuntimeGate(state, { installOrSync: (tag) => { installTag = tag; } }), true);
+  let installCalled = false;
+  assert.equal(renderRuntimeGate(state, { installOrSync: () => { installCalled = true; } }), true);
   assert.ok(document.querySelector('.dm-runtime-success'));
   assert.equal(document.querySelector('.dm-runtime-gate-detail')?.textContent, 'Agent Zero can run on this computer now.');
   assert.equal(document.querySelector('.dm-runtime-install-text')?.textContent, 'Download Agent Zero to create your first Instance.');
@@ -408,7 +408,8 @@ test('completed runtime setup prompts for image download only when no image is i
   assert.equal(document.querySelector('.dm-runtime-steps'), null);
 
   buttonByText(document, 'Download Agent Zero').dispatchEvent(new MiniEvent('click'));
-  assert.equal(installTag, 'latest');
+  assert.equal(installCalled, false);
+  assert.ok(document.getElementById('activateInstanceDialog'));
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
   assert.equal(document.querySelector('.dm-page').inert, false);
 });
@@ -420,7 +421,7 @@ test('completed runtime setup runs an already-installed image when no local inst
     dockerAvailable: true,
     runtime: { platform: 'win32', state: 'ready' },
     versions: [
-      { id: 'latest', displayVersion: 'latest', availability: 'installed' },
+      { id: 'ready', displayVersion: 'ready', availability: 'installed' },
       { id: 'v1.20', displayVersion: '1.20', availability: 'installed' }
     ],
     containers: [],
@@ -438,22 +439,19 @@ test('completed runtime setup runs an already-installed image when no local inst
   const model = normalizedRuntimeGate(state);
   assert.equal(model.successMode, 'run');
   assert.equal(model.action.label, 'Run Agent Zero');
-  assert.deepEqual(model.setupOptions.map((option) => option.value), ['latest', 'v1.20']);
+  assert.deepEqual(model.setupOptions.map((option) => option.value), ['latest', 'ready', 'v1.20']);
 
-  let runTag = '';
-  let runOptions = null;
+  let runCalled = false;
   renderRuntimeGate(state, {
-    activateTag: (tag, options) => {
-      runTag = tag;
-      runOptions = options;
-    }
+    activateTag: () => { runCalled = true; }
   });
 
   assert.equal(document.querySelector('.dm-runtime-install-text')?.textContent, "Agent Zero is already downloaded. Start an Instance when you're ready.");
+  assert.equal(document.querySelector('#runtimeSetupTag')?.value, 'latest');
   buttonByText(document, 'Run Agent Zero').dispatchEvent(new MiniEvent('click'));
 
-  assert.equal(runTag, 'latest');
-  assert.deepEqual(runOptions, { dataLossAck: 'proceed_without_backup', portMappings: '0:80' });
+  assert.equal(runCalled, false);
+  assert.ok(document.getElementById('activateInstanceDialog'));
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
 });
 
@@ -584,7 +582,8 @@ test('runtime selector appears for multiple endpoints and submits before image i
   await Promise.resolve();
   await Promise.resolve();
 
-  assert.deepEqual(calls, ['select:runtime-two', 'install:latest']);
+  assert.deepEqual(calls, ['select:runtime-two']);
+  assert.ok(document.getElementById('activateInstanceDialog'));
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
 });
 

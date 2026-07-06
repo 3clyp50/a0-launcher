@@ -122,13 +122,7 @@ function shouldOfferFirstInstanceSetup(progress = null) {
 }
 
 function shouldShowFirstInstanceSetup(state = {}) {
-  const progress = state?.progress || null;
-  const opId = asText(progress?.opId);
-  const targetTag = asText(progress?.targetTag);
-  if (!opId || !targetTag) return false;
-  if (acknowledgedOps.has(opId)) return false;
-  if (!shouldOfferFirstInstanceSetup(progress)) return false;
-  return !hasLocalInstance(state);
+  return false;
 }
 
 function setStep(panel, step) {

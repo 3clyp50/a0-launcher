@@ -249,7 +249,7 @@ test('openable card header binds click and keyboard activation', () => {
   assert.equal(prevented, true);
 });
 
-test('empty Instances state offers latest install after first inventory', () => {
+test('empty Instances state opens local creation after first inventory', () => {
   assert.deepEqual(
     emptyInstancesStateModel({ stateLoaded: false, loading: true, containers: [], remoteInstances: [] }),
     {
@@ -259,14 +259,20 @@ test('empty Instances state offers latest install after first inventory', () => 
   );
 
   assert.deepEqual(
-    emptyInstancesStateModel({ stateLoaded: true, loading: false, containers: [], remoteInstances: [] }),
+    emptyInstancesStateModel({
+      stateLoaded: true,
+      loading: false,
+      containers: [],
+      remoteInstances: [],
+      versions: [{ id: 'latest', availability: 'available', installability: 'installable' }]
+    }),
     {
-      kind: 'install_latest',
+      kind: 'create_local',
       title: 'No Instances yet',
-      detail: 'Download Agent Zero and create your first Instance.',
-      actionLabel: 'Install latest version',
+      detail: 'Create a local or remote Agent Zero Instance.',
+      actionLabel: 'Create local Instance',
       disabled: false,
-      actionTitle: 'Install latest Agent Zero version'
+      actionTitle: 'Create a local Instance'
     }
   );
 
@@ -283,7 +289,8 @@ test('empty Instances state offers latest install after first inventory', () => 
       stateLoaded: true,
       containers: [],
       remoteInstances: [],
-      progress: { status: 'running' }
+      progress: { status: 'running' },
+      versions: [{ id: 'latest', availability: 'available', installability: 'installable' }]
     }).disabled,
     true
   );
@@ -292,7 +299,8 @@ test('empty Instances state offers latest install after first inventory', () => 
       stateLoaded: true,
       containers: [],
       remoteInstances: [],
-      progress: { status: 'running', presentation: 'toast' }
+      progress: { status: 'running', presentation: 'toast' },
+      versions: [{ id: 'latest', availability: 'available', installability: 'installable' }]
     }).disabled,
     false
   );

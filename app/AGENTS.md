@@ -45,16 +45,15 @@ This scope owns:
   implying Agent Zero is still missing: download an image if none is installed,
   run Agent Zero if an image is installed but no local Instance exists, or
   continue if an Instance already exists.
-- During the first Agent Zero image pull, the operation modal may offer saved
-  Instance provider/model defaults and an explicit one-time checkbox to start
-  the first Instance after the download finishes. It may also offer an optional
-  A0 CLI install step before the setup slideshow; every first-pull setup step
-  must include a visible Skip affordance.
+- First Instance launch settings belong in the normal Create local Instance
+  dialog, including model, storage, port, environment, and credential options.
+  The first Agent Zero image pull operation modal should stay focused on
+  progress and setup showcase content instead of adding a second launch form.
 - Long-running non-runtime Docker operations should use the same centered modal
   affordance rather than a top-of-page status strip. Keep the header quiet once
   the modal flow exists. Post-onboarding image downloads may be moved into a
-  background progress toast by explicit user action; first-run onboarding image
-  downloads must keep the setup procedure visible.
+  background progress toast by explicit user action; first-run image downloads
+  must keep visible progress.
 - Local instance card `Start`, `Stop`, and `Delete` are background queued
   actions. They must not open the global operation modal or make the page inert;
   show queue/running state on the affected card and surface failures with toast

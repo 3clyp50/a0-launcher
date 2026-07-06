@@ -84,7 +84,8 @@ function isBackgroundableImageDownload(state = {}) {
   if (!asText(progress?.opId)) return false;
   if (asText(progress?.type) !== "install" || asText(progress?.status) !== "running") return false;
   if (!shouldShowSetupShowcase(progress)) return false;
-  return !shouldShowFirstInstanceSetup(state);
+  const containers = Array.isArray(state?.containers) ? state.containers : [];
+  return containers.some((container) => asText(container?.containerId) || asText(container?.containerName));
 }
 
 function runningAction(state = {}) {

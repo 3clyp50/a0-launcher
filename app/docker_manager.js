@@ -853,6 +853,47 @@ async function updateInstall(tag) {
   return installOrSync(tag, { operationType: "update", presentation: "toast" });
 }
 
+function runAfterPullMatches(progress = null) {
+  const pending = pendingRunAfterPull;
+  if (!pending) return false;
+  const opId = typeof progress?.opId === "string" ? progress.opId.trim() : "";
+  const targetTag = typeof progress?.targetTag === "string" ? progress.targetTag.trim() : "";
+  return !!opId && pending.opId === opId && (!targetTag || pending.targetTag === targetTag);
+}
+
+function clearRunAfterPull(progress = null) {
+  if (!progress || runAfterPullMatches(progress)) pendingRunAfterPull = null;
+}
+
+async function startRunAfterPull(progress = null) {
+  if (!runAfterPullMatches(progress)) return false;
+  const pending = pendingRunAfterPull;
+  if (Date.now() - Number(pending.createdAtMs || 0) > RUN_AFTER_PULL_TTL_MS) {
+    pendingRunAfterPull = null;
+    return false;
+  }
+  pendingRunAfterPull = null;
+  await activateTag(pending.targetTag, pending.options || {});
+  return true;
+}
+
+async function runAfterPull(tag, options = {}) {
+  const targetTag = typeof tag === "string" ? tag.trim() : "";
+  if (!targetTag) {
+    setBanner("error", "Choose a version before creating an Instance.");
+    return false;
+  }
+  const res = await installOrSync(targetTag, { operationType: "update" });
+  if (isErrorResponse(res) || !res?.opId) return res;
+  pendingRunAfterPull = {
+    opId: res.opId,
+    targetTag,
+    options: options && typeof options === "object" ? { ...options } : {},
+    createdAtMs: Date.now()
+  };
+  return res;
+}
+
 function backgroundOperation(opId = "") {
   const id = cleanDialogText(opId);
   if (!id) return false;
@@ -881,8 +922,10 @@ async function removeInstalledImage(tag) {
 
 const FIRST_INSTANCE_RUN_KEY = "a0Launcher.pendingFirstInstanceRun.v1";
 const FIRST_INSTANCE_RUN_TTL_MS = 24 * 60 * 60 * 1000;
+const RUN_AFTER_PULL_TTL_MS = 24 * 60 * 60 * 1000;
 
 const handledFirstInstanceRunOps = new Set();
+let pendingRunAfterPull = null;
 
 function normalizeWorkspaceStorageMode(value) {
   const mode = typeof value === "string" ? value.trim() : "";
@@ -1674,6 +1717,7 @@ window.dockerManagerActions = {
   selectRuntimeEndpoint,
   installOrSync,
   updateInstall,
+  runAfterPull,
   backgroundOperation,
   removeInstalledImage,
   startActive,
@@ -1780,11 +1824,22 @@ function initSubscriptions() {
       emitState();
       const status = typeof progress?.status === "string" ? progress.status : "";
       if (status === "completed" || status === "failed" || status === "canceled") {
-        if (progress?.type === "install" && status === "completed") {
+        let handledRunAfterPull = false;
+        if ((progress?.type === "install" || progress?.type === "update") && runAfterPullMatches(progress)) {
+          handledRunAfterPull = true;
+          if (status === "completed") {
+            startRunAfterPull(progress).catch((e) => {
+              setBanner("error", e?.message || "Unable to create the Instance");
+            });
+          } else {
+            clearRunAfterPull(progress);
+          }
+        }
+        if (!handledRunAfterPull && progress?.type === "install" && status === "completed") {
           startPendingFirstInstance(progress).catch((e) => {
             setBanner("error", e?.message || "Unable to start the first Instance");
           });
-        } else if (progress?.type === "install") {
+        } else if (!handledRunAfterPull && progress?.type === "install") {
           clearPendingFirstInstanceRun(progress);
         }
         if (progress?.type === "migrate_workspace" && status === "completed") {

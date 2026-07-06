@@ -24,9 +24,8 @@ This scope owns:
   progress, recovery actions, and non-dismissable gating.
 - `remote-instance-dialog.js`: shared remote Instance URL and optional saved
   credential dialog used by the startup runtime gate and the Instances tab.
-- `first-instance-setup/`: first image-pull defaults panel, optional first
-  Instance run choice, and optional A0 CLI install step shown before the setup
-  slideshow.
+- `first-instance-setup/`: retired first image-pull defaults panel retained for
+  compatibility while normal creation owns first Instance launch choices.
 - `setup-showcase/`: Agent Zero capability slideshow helper shown during the
   long Agent Zero image pull phase.
 - `onboarding/`: retired runtime setup banner files kept only for compatibility
@@ -114,27 +113,13 @@ This scope owns:
   short preflight checks. Slides should use renderer-visible still image assets
   so the blocking install modal never depends on video playback to show
   meaningful media.
-- On a first image pull with no local Instances, the operation modal may show a
-  saved Instance defaults panel before the slideshow. Ask for providers,
-  models, and API keys before the optional first-Instance name/run choice.
-  The first-Instance step may also ask for workspace storage: default to a
-  persistent workspace, allow named Docker volumes as the advanced persistent
-  choice, and show a clear warning for the explicit no-volume ephemeral choice.
-  After the first-Instance step, show an optional A0 CLI install step that
-  explains local files, host browser access, and Computer Use in user-friendly
-  terms before the setup slideshow. Every first-pull setup phase needs a
-  visible Skip button; skipping the CLI step must preserve any already-saved
-  first-Instance run choice.
-  If the image download finishes before the user completes those first-run
-  choices, keep the same modal open and do not start the requested first
-  Instance until the setup panel is finished. Do not offer a background/hide
-  action during this onboarding image download; the setup choices must remain
-  visible until skipped or completed.
-  Persist provider/model defaults to Settings, but keep the "start my first
-  Instance" checkbox and storage choice as a one-shot install-scoped intent,
-  not a reusable preference. That intent may survive renderer reloads or a
-  terminal detour during the active first install, and must be cleared on skip,
-  install failure/cancel, or when the first local Instance exists.
+- First Instance name, credential, model, storage, port, and environment
+  choices belong to the normal Create local Instance dialog. On first image
+  pull, the operation modal should not show a separate launch wizard, model
+  defaults panel, workspace storage step, or "start my first Instance" checkbox.
+  Starting after a pull is automatic only for the submitted Create local
+  Instance form. First-run image pulls should keep visible progress and should
+  not expose `Download in background`.
 - Active modal progress should show the current phase once, in the progress
   header above the bar. Do not repeat the same phase as body detail under the
   modal title.
@@ -173,11 +158,11 @@ This scope owns:
   must be non-forced so Docker refuses images still used by an Instance.
   Destructive switch, update, and retained-instance activation flows must keep
   the backup/proceed acknowledgement.
-- Activation may offer optional model provider/model/API-key helpers. Keep Main
-  and Utility in the primary dialog body, keep Embedding under Advanced, compile
-  helpers to Agent Zero environment defaults, save edited helpers as Instance
-  Defaults for future runs, and preserve Advanced environment variables as the
-  explicit escape hatch. Activation may also offer optional web login
+- Activation may offer optional model provider/model/API-key helpers under
+  Advanced as `Choose your models`, compile helpers to Agent Zero environment
+  defaults, save edited helpers as Instance Defaults for future runs, and
+  preserve Advanced environment variables as the explicit escape hatch.
+  Activation may also offer optional web login
   username/password helpers that compile to Agent Zero auth environment
   defaults; blank values must preserve Agent Zero's normal onboarding/default
   behavior.
@@ -203,9 +188,8 @@ This scope owns:
 - The Instances tab owns both local Docker containers and saved remote
   instances. Visible copy must say `Instances`, not `Sessions`.
   When the first inventory has loaded and there are no local or saved remote
-  Instances, show a centered `Install latest version` action that calls the
-  existing latest-image install flow so the first-Instance setup modal still
-  owns model/provider/name choices.
+  Instances, show a centered Create local Instance action that opens the normal
+  creation dialog.
   The Instances header may expose `Create local Instance` beside `Add remote
   Instance`. Creating a local Instance should list installed versions only, then
   use the same activation defaults dialog as Installs so local instance name,

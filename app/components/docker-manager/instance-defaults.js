@@ -53,7 +53,7 @@ const PRIMARY_INSTANCE_MODEL_SLOTS = Object.freeze([
     defaultProvider: "openrouter",
     providerEnv: "A0_SET__model_config__chat_model__provider",
     modelEnv: "A0_SET__model_config__chat_model__name",
-    modelPlaceholder: "anthropic/claude-sonnet-4.6",
+    modelPlaceholder: "anthropic/claude-sonnet-5",
     keyPlaceholder: "OpenRouter API key",
     providerOptions: CHAT_MODEL_PROVIDER_OPTIONS
   }),

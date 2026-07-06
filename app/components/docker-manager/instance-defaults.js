@@ -97,22 +97,83 @@ function sanitizeName(value) {
   return cleaned || "agent-zero";
 }
 
-function defaultInstanceName(tag, state = {}) {
-  const base = sanitizeName(`agent-zero-${tag || "instance"}`).slice(0, 64);
+const INSTANCE_NAME_ADJECTIVES = Object.freeze([
+  "brave",
+  "bright",
+  "curious",
+  "elegant",
+  "gentle",
+  "luminous",
+  "nimble",
+  "patient",
+  "quiet",
+  "radiant",
+  "steady",
+  "vivid"
+]);
+
+const INSTANCE_NAME_NAMES = Object.freeze([
+  "ada",
+  "bohr",
+  "curie",
+  "darwin",
+  "euclid",
+  "faraday",
+  "gauss",
+  "hopper",
+  "hypatia",
+  "lovelace",
+  "newton",
+  "noether",
+  "pagani",
+  "sagan",
+  "tesla",
+  "turing"
+]);
+
+function randomListItem(items, random) {
+  const value = typeof random === "function" ? Number(random()) : Math.random();
+  const index = Math.max(0, Math.min(items.length - 1, Math.floor((Number.isFinite(value) ? value : 0) * items.length)));
+  return items[index] || "";
+}
+
+function instanceNameCandidate(adjective, name) {
+  return sanitizeName(`${adjective}-${name}`).slice(0, 64);
+}
+
+function randomInstanceName(random) {
+  return instanceNameCandidate(
+    randomListItem(INSTANCE_NAME_ADJECTIVES, random),
+    randomListItem(INSTANCE_NAME_NAMES, random)
+  );
+}
+
+function defaultInstanceName(_tag, state = {}, random = Math.random) {
   const containers = Array.isArray(state?.containers) ? state.containers : [];
   const used = new Set(containers.map((container) =>
     String(container?.instanceName || container?.containerName || "").trim()
   ).filter(Boolean));
-  if (!used.has(base)) return base;
+
+  for (let i = 0; i < 24; i += 1) {
+    const candidate = randomInstanceName(random);
+    if (!used.has(candidate)) return candidate;
+  }
+
+  for (const adjective of INSTANCE_NAME_ADJECTIVES) {
+    for (const name of INSTANCE_NAME_NAMES) {
+      const candidate = instanceNameCandidate(adjective, name);
+      if (!used.has(candidate)) return candidate;
+    }
+  }
 
   for (let i = 2; i < 100; i += 1) {
     const suffix = `-${i}`;
-    const candidate = `${base.slice(0, 64 - suffix.length)}${suffix}`;
+    const candidate = `${randomInstanceName(random).slice(0, 64 - suffix.length)}${suffix}`;
     if (!used.has(candidate)) return candidate;
   }
 
   const suffix = `-${Date.now().toString(36).slice(-6)}`;
-  return `${base.slice(0, 64 - suffix.length)}${suffix}`;
+  return `${randomInstanceName(random).slice(0, 64 - suffix.length)}${suffix}`;
 }
 
 function cleanText(value, maxLength = 512) {

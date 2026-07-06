@@ -1,3 +1,5 @@
+import { defaultInstanceName } from "../instance-defaults.js";
+
 const DEFAULT_IMAGE = "agent0ai/agent-zero";
 const DEFAULT_TAG = "latest";
 const DEFAULT_PORTS = "0:80";
@@ -71,11 +73,6 @@ function sanitizeName(value, fallback = "agent-zero-dev") {
     .replace(/-+$/, "")
     .slice(0, 64);
   return cleaned || fallback;
-}
-
-function defaultInstanceName(image, tag) {
-  const tail = compactText(image, DEFAULT_IMAGE).split("/").filter(Boolean).pop() || "image";
-  return sanitizeName(`${tail}-${tag || DEFAULT_TAG}`, "agent-zero-dev");
 }
 
 function serviceName(value) {
@@ -174,7 +171,7 @@ function readImagePair() {
 
 function readForm() {
   const pair = readImagePair();
-  const name = sanitizeName(byId("advancedInstanceNameInput")?.value || defaultInstanceName(pair.image, pair.tag));
+  const name = sanitizeName(byId("advancedInstanceNameInput")?.value || defaultInstanceName(pair.tag, lastState));
   return {
     image: pair.image,
     tag: pair.tag,
@@ -238,7 +235,7 @@ function syncDefaultName() {
   const nameInput = byId("advancedInstanceNameInput");
   if (!nameInput || nameInput.dataset.dirty) return;
   const pair = readImagePair();
-  nameInput.value = defaultInstanceName(pair.image, pair.tag);
+  nameInput.value = defaultInstanceName(pair.tag, lastState);
 }
 
 function syncEmbeddedTagFromImage() {
@@ -259,7 +256,7 @@ function setInitialFormValues() {
   if (imageInput && !imageInput.value) imageInput.value = DEFAULT_IMAGE;
   if (tagInput && !tagInput.value) tagInput.value = DEFAULT_TAG;
   if (portsInput && !portsInput.value) portsInput.value = DEFAULT_PORTS;
-  if (nameInput && !nameInput.value) nameInput.value = defaultInstanceName(DEFAULT_IMAGE, DEFAULT_TAG);
+  if (nameInput && !nameInput.value) nameInput.value = defaultInstanceName(DEFAULT_TAG, lastState);
 }
 
 function updateActionState() {

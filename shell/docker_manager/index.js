@@ -79,6 +79,40 @@ const CLONE_ENV_AUTH_KEYS = Object.freeze([
   'ROOT_PASSWORD',
   'RFC_PASSWORD'
 ]);
+
+const INSTANCE_NAME_ADJECTIVES = Object.freeze([
+  'brave',
+  'bright',
+  'curious',
+  'elegant',
+  'gentle',
+  'luminous',
+  'nimble',
+  'patient',
+  'quiet',
+  'radiant',
+  'steady',
+  'vivid'
+]);
+
+const INSTANCE_NAME_NAMES = Object.freeze([
+  'ada',
+  'bohr',
+  'curie',
+  'darwin',
+  'euclid',
+  'faraday',
+  'gauss',
+  'hopper',
+  'hypatia',
+  'lovelace',
+  'newton',
+  'noether',
+  'pagani',
+  'sagan',
+  'tesla',
+  'turing'
+]);
 const CLONE_ENV_SETTINGS_KEYS = Object.freeze([
   'DEFAULT_USER_TIMEZONE',
   'DEFAULT_USER_UTC_OFFSET_MINUTES'
@@ -2589,6 +2623,16 @@ function sanitizeInstanceName(value, fallback = 'agent-zero') {
   return cleaned || fallback;
 }
 
+function randomListItem(items, random) {
+  const value = typeof random === 'function' ? Number(random()) : Math.random();
+  const index = Math.max(0, Math.min(items.length - 1, Math.floor((Number.isFinite(value) ? value : 0) * items.length)));
+  return items[index] || '';
+}
+
+function defaultManagedInstanceName(random = Math.random) {
+  return sanitizeInstanceName(`${randomListItem(INSTANCE_NAME_ADJECTIVES, random)}-${randomListItem(INSTANCE_NAME_NAMES, random)}`);
+}
+
 function parsePortMappings(value) {
   const raw = typeof value === 'string' ? value.trim() : '';
   const source = raw || '0:80';
@@ -2957,9 +3001,9 @@ function normalizeActivationCredentials(raw) {
   return { remember, username, password };
 }
 
-function normalizeActivationOptions(options = {}, tag = '') {
+function normalizeActivationOptions(options = {}, tag = '', random = Math.random) {
   const raw = options && typeof options === 'object' ? options : {};
-  const fallbackName = sanitizeInstanceName(`agent-zero-${tag || 'instance'}`);
+  const fallbackName = defaultManagedInstanceName(random);
   const hasPortMappings = typeof raw.portMappings === 'string' && raw.portMappings.trim();
   return {
     instanceName: sanitizeInstanceName(raw.instanceName, fallbackName),
@@ -2973,8 +3017,7 @@ function normalizeActivationOptions(options = {}, tag = '') {
 function normalizeCustomImageOptions(options = {}) {
   const raw = options && typeof options === 'object' ? options : {};
   const spec = assertCustomImageSpec(raw);
-  const imageTail = spec.imageRepo.split('/').filter(Boolean).pop() || 'image';
-  const fallbackName = sanitizeInstanceName(`${imageTail}-${spec.tag}`, 'agent-zero-dev');
+  const fallbackName = defaultManagedInstanceName();
   const hasPortMappings = typeof raw.portMappings === 'string' && raw.portMappings.trim();
   return {
     ...spec,
@@ -4220,7 +4263,7 @@ async function createAndStartActiveContainer(docker, imageRepo, tag, portPrefere
 
   const { exposedPorts, portBindings } = buildPortExposure(mappings);
 
-  const instanceName = sanitizeInstanceName(activationOptions?.instanceName, sanitizeInstanceName(`agent-zero-${tag}`));
+  const instanceName = sanitizeInstanceName(activationOptions?.instanceName, defaultManagedInstanceName());
   const uiMapping = preferredUiMapping(mappings);
   const sshMapping = mappings.find((m) => Number(m.containerPort) === 22) || null;
   const portMapLabel = mappings.map((m) => `${m.hostPort}:${m.containerPort}`).join(',');
@@ -4292,7 +4335,7 @@ function developerContainerName(instanceName) {
 
 function managedInstanceContainerName(tag, instanceName) {
   const suffix = Date.now().toString(36);
-  const baseName = instanceName || `agent-zero-${tag || 'instance'}`;
+  const baseName = instanceName || defaultManagedInstanceName();
   const base = sanitizeInstanceName(`a0-inst-${baseName}`, 'a0-inst').slice(0, 48);
   return sanitizeInstanceName(`${base}-${suffix}`, `a0-inst-${suffix}`);
 }
@@ -4310,7 +4353,7 @@ async function createAndStartManagedInstanceContainer(docker, imageRepo, tag, ac
   const { exposedPorts, portBindings } = buildPortExposure(mappings);
   const uiMapping = preferredUiMapping(mappings);
   const sshMapping = mappings.find((mapping) => Number(mapping.containerPort) === 22) || null;
-  const instanceName = sanitizeInstanceName(activationOptions?.instanceName, sanitizeInstanceName(`agent-zero-${tag}`));
+  const instanceName = sanitizeInstanceName(activationOptions?.instanceName, defaultManagedInstanceName());
   const containerName = managedInstanceContainerName(tag, instanceName);
   const portMapLabel = mappings.map((m) => `${m.hostPort}:${m.containerPort}`).join(',');
 
@@ -6013,6 +6056,8 @@ module.exports = {
     buildAgentZeroBackupMetadata,
     createAgentZeroBackupZip,
     restoreAgentZeroBackupZip,
+    defaultManagedInstanceName,
+    normalizeActivationOptions,
     normalizeCustomImageOptions,
     developerContainerName,
     localImageIdForTag,

@@ -5,8 +5,15 @@ const dockerManager = require('./index');
 
 const {
   developerContainerName,
+  defaultManagedInstanceName,
+  normalizeActivationOptions,
   normalizeCustomImageOptions
 } = dockerManager._test;
+
+test('empty activation names get generated friendly defaults', () => {
+  assert.equal(defaultManagedInstanceName(() => 0), 'brave-ada');
+  assert.equal(normalizeActivationOptions({ instanceName: '' }, 'latest', () => 0).instanceName, 'brave-ada');
+});
 
 test('custom Agent Zero image tags accept shorthand release numbers', () => {
   const custom = normalizeCustomImageOptions({

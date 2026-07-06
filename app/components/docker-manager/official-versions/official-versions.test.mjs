@@ -156,15 +156,18 @@ test('installed filter keeps local or in-progress versions only', () => {
   assert.deepEqual(filterInstallEntries(entries, 'all').map((entry) => entry.tag), entries.map((entry) => entry.tag));
 });
 
-test('default run names increment when same-tag instances exist', () => {
+test('default run names use Docker-like random pairs', () => {
+  assert.equal(defaultInstanceName('latest', {}, () => 0), 'brave-ada');
+});
+
+test('default run names avoid existing random pairs', () => {
   const name = defaultInstanceName('latest', {
     containers: [
-      { instanceName: 'agent-zero-latest' },
-      { instanceName: 'agent-zero-latest-2' }
+      { instanceName: 'brave-ada' }
     ]
-  });
+  }, () => 0);
 
-  assert.equal(name, 'agent-zero-latest-3');
+  assert.equal(name, 'brave-bohr');
 });
 
 test('release match badge labels omit leading v', () => {

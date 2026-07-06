@@ -71,7 +71,10 @@ This scope owns:
   bounds, but URL resolution, URL validation, web contents lifecycle, and
   detached windows stay in `shell/main.js`. Local `Open UI` requests should wait
   briefly for a freshly running container's HTTP UI before returning an
-  unavailable error. If a local Instance or saved remote Instance has
+  unavailable error. Renderer open requests may pass a bounded Agent Zero
+  section selector such as `self-update`; the shell validates the Instance URL,
+  then opens only the matching known in-page Agent Zero modal or same-origin
+  anchor. If a local Instance or saved remote Instance has
   launcher-saved credentials, `Open UI` may POST them to the same-origin Agent
   Zero `/login` route in the shell-owned browser session before loading the
   tab; remote credential POSTs must stay on `https:` URLs unless the target is

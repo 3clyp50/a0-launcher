@@ -3,6 +3,8 @@ const { test } = require('node:test');
 
 const {
   normalizeHttpUrl,
+  instanceUiSectionUrl,
+  instanceUiSectionScript,
   isAllowedLocalInstanceUrl,
   isAllowedRemoteInstanceUrl,
   isAllowedInstanceTabNavigationUrl,
@@ -36,6 +38,29 @@ test('normalizeHttpUrl canonicalizes valid HTTP URLs and rejects invalid values'
   assert.equal(normalizeHttpUrl(' http://127.0.0.1:32080 '), 'http://127.0.0.1:32080/');
   assert.equal(normalizeHttpUrl('not a url'), '');
   assert.equal(normalizeHttpUrl('file:///tmp/nope'), '');
+});
+
+test('instance section URL only appends known Agent Zero anchors', () => {
+  assert.equal(
+    instanceUiSectionUrl('http://127.0.0.1:32080/', 'self-update'),
+    'http://127.0.0.1:32080/#section-self-update'
+  );
+  assert.equal(
+    instanceUiSectionUrl('http://127.0.0.1:32080/#settings', 'self-update'),
+    'http://127.0.0.1:32080/#section-self-update'
+  );
+  assert.equal(
+    instanceUiSectionUrl('http://127.0.0.1:32080/', 'advanced'),
+    'http://127.0.0.1:32080/'
+  );
+});
+
+test('instance section script opens only the known self-update modal', () => {
+  assert.equal(
+    instanceUiSectionScript('self-update').includes('settings/external/self-update-modal.html'),
+    true
+  );
+  assert.equal(instanceUiSectionScript('advanced'), '');
 });
 
 test('instance tab navigation stays on the Agent Zero origin', () => {

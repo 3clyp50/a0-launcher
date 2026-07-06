@@ -287,7 +287,8 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
       kind: typeof t.kind === 'string' ? t.kind : '',
       containerId: typeof t.containerId === 'string' ? t.containerId : '',
       instanceId: typeof t.instanceId === 'string' ? t.instanceId : '',
-      title: typeof t.title === 'string' ? t.title : ''
+      title: typeof t.title === 'string' ? t.title : '',
+      section: typeof t.section === 'string' ? t.section : ''
     });
   },
   selectInstanceHome: () => ipcRenderer.invoke('docker-manager:selectInstanceHome'),

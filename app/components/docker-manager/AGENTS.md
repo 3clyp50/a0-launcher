@@ -236,6 +236,12 @@ This scope owns:
   release-or-branch/commit first, put the URL on its own line, and avoid listing
   routine `image latest` or persistent workspace fragments in the primary card
   text.
+- Local instance cards may show an `Update` action when the runtime release tag,
+  matched channel release, or concrete image release is older than the newest
+  official release in Docker Manager state. The action must start stopped
+  Instances through the normal card-local start flow and, for running Instances,
+  open Agent Zero's self-update page instead of performing backend update work
+  in the launcher.
 - Local instance cards should keep workspace state quiet. Persistent host
   directories, named volumes, custom mounts, and legacy ephemeral workspaces
   should be distinguishable through relevant controls and storage affordances

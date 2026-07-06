@@ -93,6 +93,57 @@ function isReleaseTag(tag) {
   return /^v\d+\.\d+(?:\.\d+)?$/i.test(String(tag || "").trim());
 }
 
+function releaseTagParts(tag) {
+  const match = String(tag || "").trim().match(/^v(\d+)\.(\d+)(?:\.(\d+))?$/i);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3] || 0)];
+}
+
+function compareReleaseTagVersions(left, right) {
+  const a = releaseTagParts(left);
+  const b = releaseTagParts(right);
+  if (!a || !b) return 0;
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return 0;
+}
+
+function latestAvailableReleaseTag(state = {}) {
+  let latest = "";
+  for (const version of Array.isArray(state?.versions) ? state.versions : []) {
+    const tag = String(version?.id || "").trim();
+    if (!isReleaseTag(tag)) continue;
+    if (!latest || compareReleaseTagVersions(tag, latest) > 0) latest = tag;
+  }
+  return latest;
+}
+
+function instanceCurrentReleaseTag(c) {
+  const sourceTag = runtimeTag(c);
+  if (isReleaseTag(sourceTag)) return sourceTag;
+
+  const imageTag = imageTagForContainer(c);
+  const matchedReleaseTag = String(c?.matchedReleaseTag || "").trim();
+  if ((imageTag === "latest" || imageTag === "ready") && isReleaseTag(matchedReleaseTag)) {
+    return matchedReleaseTag;
+  }
+  if (isReleaseTag(imageTag)) return imageTag;
+  return "";
+}
+
+function instanceUpdateModel(c, state = {}) {
+  const currentTag = instanceCurrentReleaseTag(c);
+  const latestTag = latestAvailableReleaseTag(state);
+  const available = !!currentTag && !!latestTag && compareReleaseTagVersions(latestTag, currentTag) > 0;
+  return {
+    available,
+    currentTag,
+    latestTag,
+    latestLabel: releaseTagLabel(latestTag)
+  };
+}
+
 function instanceVisualBadge(c) {
   const sourceTag = releaseTagLabel(runtimeTag(c));
   if (sourceTag) return sourceTag;
@@ -1486,12 +1537,21 @@ function renderDockerInstance(list, c, state) {
     containerId,
     containerOperationRunning
   });
-  const openLocalInstanceUi = () => {
+  const openLocalInstanceUi = (section = "") => {
     window.dockerManagerActions?.openInstanceUi?.({
       kind: "local",
       containerId: c?.containerId || "",
-      title: displayName
+      title: displayName,
+      section
     });
+  };
+  const updateModel = instanceUpdateModel(c, state);
+  const openLocalInstanceUpdate = () => {
+    if (isRunning) {
+      openLocalInstanceUi("self-update");
+      return;
+    }
+    window.dockerManagerActions?.startLocalInstance?.(containerId);
   };
 
   if (isRunning && !containerOperationRunning) {
@@ -1499,6 +1559,19 @@ function renderDockerInstance(list, c, state) {
       title: "Open this instance",
       ariaLabel: `Open ${displayName}`
     });
+  }
+
+  if (updateModel.available && !canStopStartingInstance) {
+    const updateBtn = document.createElement("button");
+    updateBtn.className = "button";
+    updateBtn.type = "button";
+    updateBtn.textContent = "Update";
+    updateBtn.disabled = !containerId || containerOperationRunning;
+    updateBtn.title = isRunning
+      ? `Open Agent Zero self update to ${updateModel.latestLabel || "the latest version"}`
+      : "Start this instance before updating";
+    updateBtn.addEventListener("click", openLocalInstanceUpdate);
+    actions.appendChild(updateBtn);
   }
 
   if (canStopStartingInstance) {
@@ -1518,9 +1591,9 @@ function renderDockerInstance(list, c, state) {
     openBtn.textContent = "Open UI";
     openBtn.disabled = containerOperationRunning;
     openBtn.title = containerOperationRunning ? "An action is already queued for this instance" : "Open this instance";
-    openBtn.addEventListener("click", openLocalInstanceUi);
+    openBtn.addEventListener("click", () => openLocalInstanceUi());
     actions.appendChild(openBtn);
-  } else if (canStartLocalInstance) {
+  } else if (canStartLocalInstance && !updateModel.available) {
     const startBtn = document.createElement("button");
     startBtn.className = "button confirm";
     startBtn.type = "button";
@@ -1818,11 +1891,13 @@ export {
   deleteInstanceStorageModel,
   emptyInstancesStateModel,
   instancePowerMenuConfig,
+  instanceUpdateModel,
   remoteInstanceStatusModel,
   remoteCliMenuConfig,
   dockerInstanceRuntimeSummary,
   instanceVisualBadge,
   isBlockingOperationRunning,
+  latestAvailableReleaseTag,
   localCardsRenderKey,
   openCardMenu,
   storageOpenButtonLabel

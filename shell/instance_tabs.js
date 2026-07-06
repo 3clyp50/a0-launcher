@@ -35,6 +35,40 @@ function normalizeHttpUrl(value) {
   return url ? url.href : '';
 }
 
+function instanceUiSectionUrl(value, section) {
+  const url = parseHttpUrl(value);
+  if (!url) return '';
+  if (String(section || '').trim() === 'self-update') {
+    url.hash = 'section-self-update';
+  }
+  return url.href;
+}
+
+function instanceUiSectionScript(section) {
+  if (String(section || '').trim() !== 'self-update') return '';
+  return `(() => new Promise((resolve) => {
+    let tries = 0;
+    const openSelfUpdate = () => {
+      const openModal = window.openModal || window.ensureModalOpen;
+      if (typeof openModal === 'function') {
+        openModal('settings/external/self-update-modal.html');
+        resolve(true);
+        return;
+      }
+      if (tries < 20) {
+        tries += 1;
+        window.setTimeout(openSelfUpdate, 100);
+        return;
+      }
+      if (window.history && window.location) {
+        window.history.replaceState(null, '', '#section-self-update');
+      }
+      resolve(false);
+    };
+    openSelfUpdate();
+  }))()`;
+}
+
 function hasAllowedLocalPort(url) {
   if (!url.port) {
     return true;
@@ -175,6 +209,8 @@ function instanceContextMenuActions(params) {
 
 module.exports = {
   normalizeHttpUrl,
+  instanceUiSectionUrl,
+  instanceUiSectionScript,
   isAllowedLocalInstanceUrl,
   isAllowedRemoteInstanceUrl,
   isAllowedInstanceTabNavigationUrl,

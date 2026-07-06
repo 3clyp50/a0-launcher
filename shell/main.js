@@ -11,6 +11,8 @@ const { pipeline } = require('node:stream/promises');
 const dockerManager = require('./docker_manager');
 const {
   normalizeHttpUrl,
+  instanceUiSectionUrl,
+  instanceUiSectionScript,
   isAllowedLocalInstanceUrl,
   isAllowedRemoteInstanceUrl,
   isAllowedInstanceTabNavigationUrl,
@@ -1592,6 +1594,7 @@ function sanitizeInstanceTabTitle(value, fallback = 'Agent Zero') {
 async function resolveInstanceUiTarget(body) {
   const request = isPlainObject(body) ? body : {};
   const kind = typeof request.kind === 'string' && request.kind.trim() ? request.kind.trim() : 'local';
+  const section = typeof request.section === 'string' ? request.section.trim() : '';
 
   if (kind === 'remote') {
     const instanceId = typeof request.instanceId === 'string' && request.instanceId.trim()
@@ -1622,10 +1625,10 @@ async function resolveInstanceUiTarget(body) {
 
   const containerId = typeof request.containerId === 'string' ? request.containerId.trim() : '';
   if (containerId) {
-    const url = normalizeHttpUrl(await dockerManager.getContainerUiUrl(containerId, {
+    const url = instanceUiSectionUrl(await dockerManager.getContainerUiUrl(containerId, {
       timeoutMs: OPEN_UI_READY_TIMEOUT_MS,
       intervalMs: OPEN_UI_READY_INTERVAL_MS
-    }));
+    }), section);
     if (!url || !isAllowedLocalInstanceUrl(url)) {
       throw createTabTargetError('UI_UNAVAILABLE', 'Agent Zero is still starting. Try Open UI again in a moment.');
     }
@@ -1633,6 +1636,7 @@ async function resolveInstanceUiTarget(body) {
       kind: 'local',
       instanceId: '',
       containerId,
+      section,
       title: sanitizeInstanceTabTitle(request.title, 'Agent Zero'),
       url
     };
@@ -1641,7 +1645,7 @@ async function resolveInstanceUiTarget(body) {
   }
 
   const state = await dockerManager.refreshDockerManager({ forceRefresh: false });
-  const url = normalizeHttpUrl(state?.uiUrl);
+  const url = instanceUiSectionUrl(state?.uiUrl, section);
   if (!url) {
     throw createTabTargetError('UI_UNAVAILABLE', 'Agent Zero UI is not available. Start a version first.');
   }
@@ -1653,6 +1657,7 @@ async function resolveInstanceUiTarget(body) {
     kind: 'local',
     instanceId: '',
     containerId: '',
+    section,
     title: sanitizeInstanceTabTitle(request.title, 'Agent Zero'),
     url
   };
@@ -1764,6 +1769,17 @@ function attachInstanceTabEvents(tab) {
   });
 }
 
+async function applyInstanceUiSection(tab, section) {
+  const script = instanceUiSectionScript(section);
+  const wc = tab?.view?.webContents;
+  if (!script || !wc || wc.isDestroyed?.()) return false;
+  try {
+    return await wc.executeJavaScript(script, true);
+  } catch {
+    return false;
+  }
+}
+
 async function openInstanceTab(target) {
   if (!mainWindow || mainWindow.isDestroyed()) {
     throw createTabTargetError('UI_UNAVAILABLE', 'Launcher window is not available.');
@@ -1790,6 +1806,7 @@ async function openInstanceTab(target) {
       sendInstanceTabsEvent();
       await existing.view?.webContents?.loadURL(nextUrl);
     }
+    await applyInstanceUiSection(existing, target.section);
     setActiveInstanceTab(existing.id);
     return { opened: true, tabId: existing.id, focusedExisting: true };
   }
@@ -1826,6 +1843,7 @@ async function openInstanceTab(target) {
   try {
     await loginInstanceWebUiSession(target, view.webContents);
     await view.webContents.loadURL(target.url);
+    await applyInstanceUiSection(tab, target.section);
   } catch (error) {
     instanceTabs.delete(tab.id);
     destroyInstanceTab(tab);

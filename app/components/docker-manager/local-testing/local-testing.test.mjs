@@ -41,7 +41,9 @@ const {
   dockerInstanceRuntimeSummary,
   emptyInstancesStateModel,
   instancePowerMenuConfig,
+  instanceUpdateModel,
   isBlockingOperationRunning,
+  latestAvailableReleaseTag,
   remoteInstanceStatusModel,
   remoteCliMenuConfig,
   instanceVisualBadge,
@@ -149,6 +151,45 @@ test('instance chips fall back to runtime branch without a concrete release', ()
       runtimeBranch: 'ready'
     }),
     'ready'
+  );
+});
+
+test('instance update model compares runtime version with latest available release', () => {
+  const state = {
+    versions: [
+      { id: 'latest', displayVersion: 'latest' },
+      { id: 'v2.1', displayVersion: '2.1' },
+      { id: 'v2.2', displayVersion: '2.2' },
+      { id: 'ready', displayVersion: 'ready' }
+    ]
+  };
+
+  assert.equal(latestAvailableReleaseTag(state), 'v2.2');
+  assert.deepEqual(
+    instanceUpdateModel({
+      runtimeTag: 'v2.0',
+      matchedReleaseTag: 'v1.20',
+      versionTag: 'ready'
+    }, state),
+    {
+      available: true,
+      currentTag: 'v2.0',
+      latestTag: 'v2.2',
+      latestLabel: '2.2'
+    }
+  );
+  assert.equal(instanceUpdateModel({ runtimeTag: 'v2.2' }, state).available, false);
+});
+
+test('instance update model uses matched channel release when runtime tag is missing', () => {
+  assert.equal(
+    instanceUpdateModel({
+      versionTag: 'latest',
+      matchedReleaseTag: 'v2.0'
+    }, {
+      versions: [{ id: 'v2.2', displayVersion: '2.2' }]
+    }).available,
+    true
   );
 });
 

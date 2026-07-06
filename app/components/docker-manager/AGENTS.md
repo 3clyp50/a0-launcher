@@ -140,7 +140,8 @@ This scope owns:
   release date when available. Their primary card meta should stay compact:
   visible date plus size only, even when structured match/digest hints are
   present in state. Numbered release cards should be grouped by major version,
-  with only the highest major version group expanded by default. The
+  with every numbered series collapsed by default so only pinned channel cards
+  such as `latest` and `ready` are immediately visible. The
   unmaintained `testing` tag is intentionally hidden from the Versions view.
   The Versions view may offer an `All` / `Installed` filter; `Installed` should
   keep entries that already have a local image, differ from the published

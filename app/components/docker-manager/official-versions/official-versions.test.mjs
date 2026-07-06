@@ -211,7 +211,7 @@ test('channel version card meta keeps only date and size', () => {
   ]);
 });
 
-test('version catalog groups numbered versions by major and collapses older majors by default', () => {
+test('version catalog collapses numbered version groups by default', () => {
   const model = buildInstallCatalogModel([
     { tag: 'v1.20', title: '1.20' },
     { tag: 'ready', title: 'ready' },
@@ -223,6 +223,6 @@ test('version catalog groups numbered versions by major and collapses older majo
 
   assert.deepEqual(model.channels.map((entry) => entry.tag), ['latest', 'ready']);
   assert.deepEqual(model.groups.map((group) => group.major), [2, 1, 0]);
-  assert.deepEqual(model.groups.map((group) => group.defaultOpen), [true, false, false]);
+  assert.deepEqual(model.groups.map((group) => group.defaultOpen), [false, false, false]);
   assert.deepEqual(model.groups[1].entries.map((entry) => entry.tag), ['v1.20', 'v1.19']);
 });

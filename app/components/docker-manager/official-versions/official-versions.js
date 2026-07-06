@@ -213,7 +213,7 @@ function buildInstallCatalogModel(entries) {
       major,
       title: `${major}.x`,
       entries: groupEntries,
-      defaultOpen: index === 0
+      defaultOpen: false
     }));
 
   return {

@@ -131,7 +131,8 @@ This scope owns:
   needlessly.
 - Storage-volume operations must remain separate from retained-instance
   activation/removal and from container deletion. Deleting an instance must not
-  remove its host workspace directory or named volume.
+  remove its host workspace directory or named volume unless the renderer sends
+  an explicit storage-removal option from the deletion dialog.
 - Host-directory workspace paths may be resolved for the shell-owned
   `Open storage folder` action. Named Docker volumes should stay represented as
   Docker volumes rather than guessed host paths.

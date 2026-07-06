@@ -204,7 +204,10 @@ This scope owns:
   Secondary management and inspection actions such as `Rename`, `See logs`,
   `Open storage folder`, `Clone`, `Open A0 CLI`, dynamic `Start`/`Stop`, and
   `Delete` belong in the card overflow menu so they always apply to the
-  specific instance shown.
+  specific instance shown. Local Instance deletion must use a launcher dialog,
+  not a native confirm; when persistent `/a0/usr` storage is known, the dialog
+  should offer explicit keep/delete storage choices and a host-folder opener
+  only for host-backed storage.
   The visual header area of a running local card or saved remote card may
   mirror `Open UI`; the body/meta area should stay ordinary selectable text so
   values such as URLs remain easy to copy.
@@ -257,6 +260,8 @@ This scope owns:
   state as `Online`, `Offline`, or `Checking`, not a generic `Remote` tag.
   Remote `Open A0 CLI` must pass only the saved remote Instance ID to the
   renderer action; shell code resolves and validates the URL.
+  Saved remote deletion must use a launcher dialog and make clear that it only
+  removes the saved launcher entry.
   A saved remote card may show `Clone locally` only when its URL is loopback
   (`localhost`, `127.0.0.1`, or IPv6 loopback) and the port matches a discovered
   local Docker container; the action must clone that local container.

@@ -201,7 +201,13 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   },
   clearRemoteInstanceCredentials: (id) =>
     ipcRenderer.invoke('docker-manager:clearRemoteInstanceCredentials', { id }),
-  deleteLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:deleteLocalInstance', { containerId }),
+  deleteLocalInstance: (containerId, options = {}) => {
+    const opts = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:deleteLocalInstance', {
+      containerId,
+      removeStorage: opts.removeStorage === true
+    });
+  },
   deleteRetainedInstance: (containerId) =>
     ipcRenderer.invoke('docker-manager:deleteRetainedInstance', { containerId }),
   updateToLatest: (dataLossAck) => ipcRenderer.invoke('docker-manager:updateToLatest', { dataLossAck }),

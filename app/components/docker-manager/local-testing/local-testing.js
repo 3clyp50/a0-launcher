@@ -124,6 +124,30 @@ function workspaceStorageFolderAvailable(c) {
   return !!(storage?.persistent && typeof storage.hostPath === "string" && storage.hostPath.trim());
 }
 
+function storageOpenButtonLabel(platform) {
+  const value = String(platform || "").trim().toLowerCase();
+  if (value === "darwin") return "Open in Finder";
+  if (value === "win32") return "Open in Explorer";
+  return "Open folder";
+}
+
+function deleteInstanceStorageModel(instance = {}, state = {}) {
+  const storage = instance?.workspaceStorage || null;
+  const persistent = storage?.persistent === true;
+  const hostPath = persistent && typeof storage?.hostPath === "string" ? storage.hostPath.trim() : "";
+  const volumeName = persistent && !hostPath && typeof storage?.volumeName === "string" ? storage.volumeName.trim() : "";
+  const storageKind = hostPath ? "folder" : volumeName ? "volume" : "";
+  return {
+    hasStorageChoice: !!storageKind,
+    canOpenStorage: !!hostPath,
+    storageKind,
+    storageValue: hostPath || volumeName,
+    keepLabel: storageKind === "folder" ? "Keep folder" : storageKind === "volume" ? "Keep volume" : "Delete",
+    deleteStorageLabel: storageKind === "folder" ? "Delete folder" : storageKind === "volume" ? "Delete volume" : "",
+    openLabel: storageOpenButtonLabel(state?.runtime?.platform || state?.environment?.platform)
+  };
+}
+
 function backgroundOperationForContainer(state, containerId) {
   const id = String(containerId || "").trim();
   if (!id) return null;
@@ -797,6 +821,132 @@ function openInstanceCredentialsDialog({ displayName, credentials = null, onSave
     if (usernameInput && !usernameInput.value) usernameInput.focus();
     else passwordInput?.focus();
   }, 0);
+}
+
+function openDeleteInstanceDialog({ instance, state }) {
+  const existing = document.getElementById("deleteInstanceDialog");
+  if (existing) existing.remove();
+
+  const containerId = String(instance?.containerId || "").trim();
+  if (!containerId) return;
+  const displayName = instance?.instanceName || instance?.containerName || containerId.slice(0, 12) || "this instance";
+  const isRunning = String(instance?.state || "").toLowerCase() === "running";
+  const storage = deleteInstanceStorageModel(instance, state);
+  const dialog = document.createElement("div");
+  dialog.id = "deleteInstanceDialog";
+  dialog.className = "dm-dialog-backdrop";
+  dialog.setAttribute("role", "presentation");
+
+  const storageCopy = storage.hasStorageChoice
+    ? storage.storageKind === "folder"
+      ? `The /a0/usr folder can be kept, opened, or deleted now.`
+      : `The /a0/usr Docker volume can be kept or deleted now.`
+    : "";
+  const storageValue = storage.storageValue
+    ? `<div class="dm-delete-storage-path">${escapeHtml(storage.storageValue)}</div>`
+    : "";
+  const openStorageButton = storage.canOpenStorage
+    ? `<button class="button" type="button" data-open-storage>${escapeHtml(storage.openLabel)}</button>`
+    : "";
+  const storageActions = storage.hasStorageChoice
+    ? `
+        <div class="dm-dialog-footer-group">
+          <button class="button confirm" type="button" data-delete-keep-storage>${escapeHtml(storage.keepLabel)}</button>
+          <button class="button cancel" type="button" data-delete-remove-storage>${escapeHtml(storage.deleteStorageLabel)}</button>
+        </div>
+      `
+    : `<button class="button cancel" type="button" data-delete-keep-storage>Delete</button>`;
+
+  dialog.innerHTML = `
+    <div class="dm-dialog dm-delete-instance-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteInstanceTitle">
+      <div class="dm-dialog-header">
+        <h2 id="deleteInstanceTitle" class="dm-dialog-title">Delete ${escapeHtml(displayName)}?</h2>
+        <button class="button dm-dialog-close" type="button" data-dialog-close aria-label="Close">×</button>
+      </div>
+      <div class="dm-dialog-body">
+        <p class="dm-dialog-copy">${isRunning ? "This will stop and delete the container." : "This removes the container."}</p>
+        ${storageCopy ? `<p class="dm-dialog-copy">${storageCopy}</p>${storageValue}` : ""}
+      </div>
+      <div class="dm-dialog-footer dm-delete-instance-footer">
+        <div class="dm-dialog-footer-group">
+          <button class="button" type="button" data-dialog-close>Cancel</button>
+          ${openStorageButton}
+        </div>
+        ${storageActions}
+      </div>
+    </div>
+  `;
+
+  const close = () => closeDialog(dialog);
+  dialog.querySelectorAll("[data-dialog-close]").forEach((btn) => {
+    btn.addEventListener("click", close);
+  });
+  dialog.addEventListener("mousedown", (event) => {
+    if (event.target === dialog) close();
+  });
+  dialog.querySelector("[data-open-storage]")?.addEventListener("click", async () => {
+    await window.dockerManagerActions?.openLocalInstanceStorageFolder?.(containerId);
+  });
+  dialog.querySelector("[data-delete-keep-storage]")?.addEventListener("click", async () => {
+    close();
+    await window.dockerManagerActions?.deleteLocalInstance?.(containerId, { removeStorage: false });
+  });
+  dialog.querySelector("[data-delete-remove-storage]")?.addEventListener("click", async () => {
+    close();
+    await window.dockerManagerActions?.deleteLocalInstance?.(containerId, { removeStorage: true });
+  });
+
+  document.body.appendChild(dialog);
+  window.setTimeout(() => {
+    const focusTarget = storage.hasStorageChoice
+      ? dialog.querySelector("[data-delete-keep-storage]")
+      : dialog.querySelector("[data-dialog-close]");
+    focusTarget?.focus?.();
+  }, 0);
+}
+
+function openDeleteRemoteInstanceDialog(remote) {
+  const existing = document.getElementById("deleteRemoteInstanceDialog");
+  if (existing) existing.remove();
+
+  const id = String(remote?.id || "").trim();
+  if (!id) return;
+  const displayName = remote?.name || "Remote instance";
+  const dialog = document.createElement("div");
+  dialog.id = "deleteRemoteInstanceDialog";
+  dialog.className = "dm-dialog-backdrop";
+  dialog.setAttribute("role", "presentation");
+
+  dialog.innerHTML = `
+    <div class="dm-dialog dm-delete-instance-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteRemoteInstanceTitle">
+      <div class="dm-dialog-header">
+        <h2 id="deleteRemoteInstanceTitle" class="dm-dialog-title">Delete ${escapeHtml(displayName)}?</h2>
+        <button class="button dm-dialog-close" type="button" data-dialog-close aria-label="Close">×</button>
+      </div>
+      <div class="dm-dialog-body">
+        <p class="dm-dialog-copy">This removes the saved remote Instance from the launcher. The remote server and its data are not changed.</p>
+      </div>
+      <div class="dm-dialog-footer dm-delete-instance-footer">
+        <button class="button" type="button" data-dialog-close>Cancel</button>
+        <button class="button cancel" type="button" data-delete-remote>Delete</button>
+      </div>
+    </div>
+  `;
+
+  const close = () => closeDialog(dialog);
+  dialog.querySelectorAll("[data-dialog-close]").forEach((btn) => {
+    btn.addEventListener("click", close);
+  });
+  dialog.addEventListener("mousedown", (event) => {
+    if (event.target === dialog) close();
+  });
+  dialog.querySelector("[data-delete-remote]")?.addEventListener("click", async () => {
+    close();
+    await window.dockerManagerActions?.deleteRemoteInstance?.(id);
+  });
+
+  document.body.appendChild(dialog);
+  window.setTimeout(() => dialog.querySelector("[data-dialog-close]")?.focus?.(), 0);
 }
 
 function openInstanceColorDialog({ title, currentColor, onSelect }) {
@@ -1478,12 +1628,7 @@ function renderDockerInstance(list, c, state) {
       title: powerMenuItem.title
     }),
     menuButton("delete", "Delete", async () => {
-      const verb = isRunning ? "Stop and delete" : "Delete";
-      const detail = isRunning
-        ? "This will stop and delete the container. Storage volumes are not removed."
-        : "This removes the container. Storage volumes are not removed.";
-      if (!window.confirm(`${verb} ${displayName}?\n\n${detail}`)) return;
-      await window.dockerManagerActions?.deleteLocalInstance?.(containerId);
+      openDeleteInstanceDialog({ instance: c, state });
     }, {
       danger: true,
       disabled: !containerId || containerOperationRunning,
@@ -1606,8 +1751,7 @@ function renderRemoteInstance(list, remote, state) {
   }
 
   menuItems.push(menuButton("delete", "Delete", async () => {
-    if (!window.confirm(`Delete ${displayName}?`)) return;
-    await window.dockerManagerActions?.deleteRemoteInstance?.(remote?.id || "");
+    openDeleteRemoteInstanceDialog(remote);
   }, {
     danger: true,
     disabled: !remote?.id,
@@ -1671,6 +1815,7 @@ export {
   bindOpenableCardHeader,
   backgroundOperationLabel,
   computeCardMenuPlacement,
+  deleteInstanceStorageModel,
   emptyInstancesStateModel,
   instancePowerMenuConfig,
   remoteInstanceStatusModel,
@@ -1679,7 +1824,8 @@ export {
   instanceVisualBadge,
   isBlockingOperationRunning,
   localCardsRenderKey,
-  openCardMenu
+  openCardMenu,
+  storageOpenButtonLabel
 };
 
 window.addEventListener("dm:state", (e) => render(e.detail || {}));

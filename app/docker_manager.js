@@ -1305,12 +1305,13 @@ async function restoreLocalInstance(containerId) {
   }
 }
 
-async function deleteLocalInstance(containerId) {
+async function deleteLocalInstance(containerId, options = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.deleteLocalInstance !== "function") return false;
+  const opts = options && typeof options === "object" ? options : {};
   const res = await runDockerOperation(
     "Delete",
-    () => api.deleteLocalInstance(containerId || ""),
+    () => api.deleteLocalInstance(containerId || "", { removeStorage: opts.removeStorage === true }),
     "Instance delete requested."
   );
   return !isErrorResponse(res);

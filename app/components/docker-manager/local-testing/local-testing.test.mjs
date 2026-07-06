@@ -37,6 +37,7 @@ const {
   bindOpenableCardHeader,
   backgroundOperationLabel,
   computeCardMenuPlacement,
+  deleteInstanceStorageModel,
   dockerInstanceRuntimeSummary,
   emptyInstancesStateModel,
   instancePowerMenuConfig,
@@ -45,7 +46,8 @@ const {
   remoteCliMenuConfig,
   instanceVisualBadge,
   localCardsRenderKey,
-  openCardMenu
+  openCardMenu,
+  storageOpenButtonLabel
 } = await import('./local-testing.js');
 const { createInstanceVisual } = await import('../card-visuals.js');
 
@@ -217,6 +219,56 @@ test('background operation labels use running progress messages', () => {
     backgroundOperationLabel({ type: 'start', status: 'running', message: '' }),
     'Starting'
   );
+});
+
+test('delete dialog storage model exposes folder choices and platform opener labels', () => {
+  assert.equal(storageOpenButtonLabel('darwin'), 'Open in Finder');
+  assert.equal(storageOpenButtonLabel('win32'), 'Open in Explorer');
+  assert.equal(storageOpenButtonLabel('linux'), 'Open folder');
+
+  assert.deepEqual(
+    deleteInstanceStorageModel({
+      workspaceStorage: {
+        persistent: true,
+        hostPath: '/home/ada/agent-zero/brave-ada'
+      }
+    }, {
+      runtime: { platform: 'darwin' }
+    }),
+    {
+      hasStorageChoice: true,
+      canOpenStorage: true,
+      storageKind: 'folder',
+      storageValue: '/home/ada/agent-zero/brave-ada',
+      keepLabel: 'Keep folder',
+      deleteStorageLabel: 'Delete folder',
+      openLabel: 'Open in Finder'
+    }
+  );
+});
+
+test('delete dialog storage model handles Docker volumes without file-manager action', () => {
+  assert.deepEqual(
+    deleteInstanceStorageModel({
+      workspaceStorage: {
+        persistent: true,
+        volumeName: 'a0-launcher-brave-ada-usr'
+      }
+    }, {
+      runtime: { platform: 'linux' }
+    }),
+    {
+      hasStorageChoice: true,
+      canOpenStorage: false,
+      storageKind: 'volume',
+      storageValue: 'a0-launcher-brave-ada-usr',
+      keepLabel: 'Keep volume',
+      deleteStorageLabel: 'Delete volume',
+      openLabel: 'Open folder'
+    }
+  );
+
+  assert.equal(deleteInstanceStorageModel({ workspaceStorage: { persistent: false } }).hasStorageChoice, false);
 });
 
 test('openable card header binds click and keyboard activation', () => {

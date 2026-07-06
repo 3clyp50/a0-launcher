@@ -1662,6 +1662,27 @@ body {
   overflow-y: auto;
 }
 
+.dm-delete-instance-dialog {
+  width: min(34rem, 100%);
+}
+
+.dm-delete-instance-footer {
+  flex-wrap: wrap;
+}
+
+.dm-delete-storage-path {
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--dm-line-soft);
+  border-radius: var(--dm-radius-max);
+  background: color-mix(in srgb, var(--color-background) 74%, #000 26%);
+  color: var(--color-text-muted);
+  font-family: "Roboto Mono", monospace;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .dm-run-instance-body {
   gap: 1.15rem;
 }

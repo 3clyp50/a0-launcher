@@ -1214,6 +1214,51 @@ function workspaceHostPathFromInspect(inspect) {
   return path.resolve(hostPath);
 }
 
+function isWindowsAbsolutePath(value) {
+  return /^[A-Za-z]:[\\/]/.test(String(value || '')) || /^\\\\[^\\]+\\[^\\]+/.test(String(value || ''));
+}
+
+function removableHostWorkspacePath(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (!path.isAbsolute(raw)) {
+    if (process.platform !== 'win32' || !isWindowsAbsolutePath(raw)) return '';
+  }
+  const resolved = path.resolve(raw);
+  const root = path.parse(resolved).root;
+  if (!resolved || resolved === root) return '';
+  if (resolved === path.resolve(os.homedir())) return '';
+  return resolved;
+}
+
+function workspaceStorageRemovalPlanFromInspect(inspect) {
+  const storage = workspaceStorageFromInspect(inspect);
+  if (!storage?.persistent) return null;
+  if (storage.mode === STORAGE_MODE_HOST_DIRECTORY) {
+    const hostPath = removableHostWorkspacePath(storage.hostPath);
+    return hostPath ? { type: STORAGE_MODE_HOST_DIRECTORY, hostPath } : null;
+  }
+  if (storage.mode === STORAGE_MODE_NAMED_VOLUME) {
+    const volumeName = dockerVolumeName(storage.volumeName || '', '');
+    return volumeName ? { type: STORAGE_MODE_NAMED_VOLUME, volumeName } : null;
+  }
+  return null;
+}
+
+async function removeWorkspaceStorageAfterContainerDelete(docker, inspect) {
+  const plan = workspaceStorageRemovalPlanFromInspect(inspect);
+  if (!plan) return null;
+  if (plan.type === STORAGE_MODE_HOST_DIRECTORY) {
+    await fs.rm(plan.hostPath, { recursive: true, force: true });
+    return plan;
+  }
+  if (plan.type === STORAGE_MODE_NAMED_VOLUME) {
+    await docker.removeVolume(plan.volumeName);
+    return plan;
+  }
+  return null;
+}
+
 async function enrichContainersWithWorkspaceStorage(docker, containers) {
   const out = [];
   for (const container of Array.isArray(containers) ? containers : []) {
@@ -5279,9 +5324,17 @@ async function deleteRetainedInstance(containerId) {
   return { opId };
 }
 
-async function deleteLocalInstance(containerId) {
+function normalizeDeleteLocalInstanceOptions(options = {}) {
+  const raw = options && typeof options === 'object' ? options : {};
+  return {
+    removeStorage: raw.removeStorage === true
+  };
+}
+
+async function deleteLocalInstance(containerId, options = {}) {
   const imageRepo = getBackendImageRepo();
   const id = assertContainerId(containerId);
+  const deleteOptions = normalizeDeleteLocalInstanceOptions(options);
 
   return enqueueContainerOperation({
     type: 'delete_instance',
@@ -5301,8 +5354,10 @@ async function deleteLocalInstance(containerId) {
       const cloneImageRef = typeof target?.labels?.['a0.launcher.cloneImageRef'] === 'string'
         ? target.labels['a0.launcher.cloneImageRef']
         : '';
+      const inspect = deleteOptions.removeStorage ? await docker.inspectContainer(target.containerId) : null;
 
       await docker.deleteContainer(target.containerId, { force: true });
+      if (inspect) await removeWorkspaceStorageAfterContainerDelete(docker, inspect);
       if (cloneImageRef && cloneImageRef.startsWith(`${CLONE_IMAGE_REPO}:`)) {
         await docker.removeLocalImage(cloneImageRef).catch(() => {});
       }
@@ -6037,6 +6092,8 @@ module.exports = {
     dockerMountSourceForHostPath,
     workspaceStorageFromInspect,
     workspaceHostPathFromInspect,
+    workspaceStorageRemovalPlanFromInspect,
+    normalizeDeleteLocalInstanceOptions,
     waitForUiReachable,
     waitForStartedLocalInstanceUi,
     remoteHealthUrl,

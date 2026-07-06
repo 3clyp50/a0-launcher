@@ -17,6 +17,8 @@ const {
   dockerMountSourceForHostPath,
   workspaceStorageFromInspect,
   workspaceHostPathFromInspect,
+  workspaceStorageRemovalPlanFromInspect,
+  normalizeDeleteLocalInstanceOptions,
   waitForUiReachable,
   waitForStartedLocalInstanceUi,
   remoteHealthUrl,
@@ -563,6 +565,43 @@ test('workspace host folder resolver only returns persistent bind paths', () => 
   assert.equal(workspaceHostPathFromInspect(bindInspect), path.resolve('/tmp/a0/usr'));
   assert.equal(workspaceHostPathFromInspect(volumeInspect), '');
   assert.equal(workspaceHostPathFromInspect(ephemeralInspect), '');
+});
+
+test('workspace storage removal plans only target explicit persistent storage', () => {
+  assert.deepEqual(normalizeDeleteLocalInstanceOptions({ removeStorage: true }), { removeStorage: true });
+  assert.deepEqual(normalizeDeleteLocalInstanceOptions({}), { removeStorage: false });
+
+  assert.deepEqual(
+    workspaceStorageRemovalPlanFromInspect({
+      Config: { Labels: {} },
+      Mounts: [{ Type: 'bind', Source: '/tmp/a0/usr', Destination: WORKSPACE_MOUNT_TARGET }]
+    }),
+    { type: 'host_directory', hostPath: path.resolve('/tmp/a0/usr') }
+  );
+
+  assert.deepEqual(
+    workspaceStorageRemovalPlanFromInspect({
+      Config: { Labels: {} },
+      Mounts: [{ Type: 'volume', Name: 'a0-volume', Destination: WORKSPACE_MOUNT_TARGET }]
+    }),
+    { type: 'named_volume', volumeName: 'a0-volume' }
+  );
+
+  assert.equal(
+    workspaceStorageRemovalPlanFromInspect({
+      Config: { Labels: {} },
+      Mounts: [{ Type: 'volume', Destination: WORKSPACE_MOUNT_TARGET }]
+    }),
+    null
+  );
+  assert.equal(workspaceStorageRemovalPlanFromInspect({ Config: { Labels: {} }, Mounts: [] }), null);
+  assert.equal(
+    workspaceStorageRemovalPlanFromInspect({
+      Config: { Labels: {} },
+      Mounts: [{ Type: 'bind', Source: '/', Destination: WORKSPACE_MOUNT_TARGET }]
+    }),
+    null
+  );
 });
 
 test('clone create options replace source workspace mounts with a fresh workspace', async () => {

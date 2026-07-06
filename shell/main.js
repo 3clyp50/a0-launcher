@@ -3704,7 +3704,9 @@ ipcMain.handle('docker-manager:deleteLocalInstance', async (_event, body) => {
   try {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     const containerId = typeof body.containerId === 'string' ? body.containerId : '';
-    const accepted = await dockerManager.deleteLocalInstance(containerId);
+    const accepted = await dockerManager.deleteLocalInstance(containerId, {
+      removeStorage: body.removeStorage === true
+    });
     if (!accepted || typeof accepted.opId !== 'string') {
       return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Delete did not return an opId' });
     }

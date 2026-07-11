@@ -831,7 +831,7 @@ async function selectRuntimeEndpoint(id) {
       setBanner("error", res.message);
       return false;
     }
-    return true;
+    return res;
   } catch (e) {
     setBanner("error", e?.message || "Unable to select runtime");
     return false;

@@ -124,6 +124,11 @@ This scope owns:
 - If that preference is unavailable, use another reachable endpoint without
   overwriting it. Explicitly selecting, starting, or provisioning an endpoint
   replaces the preference after the endpoint is confirmed reachable.
+- When another daemon is reachable, an installed stopped Docker Desktop may be
+  exposed as a startable runtime candidate. Selecting it should reuse the
+  runtime setup operation, verify its exact endpoint, and only then replace the
+  preference; startup failure must leave the fallback and prior preference
+  intact.
 - Retention policy is stored as a retained-instance count.
 - Remote instances must normalize and validate URLs before persistence. Their
   optional saved `color` field uses the same bounded palette IDs as local

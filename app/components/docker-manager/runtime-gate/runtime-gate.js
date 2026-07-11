@@ -136,6 +136,7 @@ function headlineForRuntime(runtime, progress = null) {
 }
 
 function detailForRuntime(runtime, progress = null) {
+  if (progress?.status === "failed" && asText(progress?.error)) return asText(progress.error);
   const detail = asText(progress?.detail) || asText(progress?.message);
   if (detail) return detail;
   if (runtime?.state === "manual_install" && Array.isArray(runtime.manualPackages) && runtime.manualPackages.length) {
@@ -292,11 +293,19 @@ function runtimeEndpointOptions(state = {}) {
   for (const candidate of candidates) {
     const id = asText(candidate?.id);
     const daemonId = asText(candidate?.daemonId);
-    if (!id || !daemonId || seen.has(daemonId) || candidate?.available !== true) continue;
-    seen.add(daemonId);
+    const startable = candidate?.available === false &&
+      candidate?.startable === true &&
+      candidate?.provider === "docker_desktop" &&
+      candidate?.state === "engine_stopped";
+    const identity = candidate?.available === true && daemonId
+      ? `daemon:${daemonId}`
+      : startable ? "stopped:docker_desktop" : "";
+    if (!id || !identity || seen.has(identity)) continue;
+    seen.add(identity);
     out.push({
       id,
-      label: asText(candidate?.label) || "Container runtime",
+      label: `${asText(candidate?.label) || "Container runtime"}${startable ? " (stopped)" : ""}`,
+      startable,
       isSelected: candidate?.isSelected === true || id === asText(state?.runtime?.selectedRuntimeEndpointId)
     });
   }
@@ -329,7 +338,8 @@ function shouldChooseRuntime(state = {}) {
   const candidates = Array.isArray(state?.runtime?.runtimeCandidates)
     ? state.runtime.runtimeCandidates
     : Array.isArray(state?.environment?.runtimeCandidates) ? state.environment.runtimeCandidates : [];
-  return isRuntimeReady(state) &&
+  return !(state?.progress?.type === "runtime_setup" && ["running", "failed"].includes(state.progress.status)) &&
+    isRuntimeReady(state) &&
     runtimeEndpointOptions(state).length >= 2 &&
     !candidates.some((candidate) => candidate?.source === "preference");
 }
@@ -337,6 +347,10 @@ function shouldChooseRuntime(state = {}) {
 function shouldShowRuntimeGate(state = {}) {
   if (!state?.stateLoaded) return false;
   if (hasRemoteInstances(state)) return false;
+  if (state?.progress?.type === "runtime_setup" && state.progress.status === "running") return true;
+  if (state?.progress?.type === "runtime_setup" && state.progress.status === "failed") {
+    return acknowledgedRuntimeSetupKey !== runtimeSetupKey(state.progress);
+  }
   if (shouldChooseRuntime(state)) return true;
   if (shouldShowRuntimeSuccess(state)) return true;
   return !isRuntimeReady(state);
@@ -347,6 +361,9 @@ function normalizedRuntimeGate(state = {}) {
   const progress = state?.progress?.type === "runtime_setup" ? state.progress : null;
   const kind = runtimeKind(runtime);
   const success = shouldShowRuntimeSuccess(state) || shouldChooseRuntime(state);
+  const runtimeOptions = runtimeEndpointOptions(state);
+  const failedWithReadyRuntime = progress?.status === "failed" && isRuntimeReady(state);
+  const setupFlow = success || failedWithReadyRuntime;
   const rawStatus = asText(progress?.status) || "idle";
   const completedButStillBlocked = rawStatus === "completed" && !success && !isRuntimeReady(state);
   const status = completedButStillBlocked ? "idle" : rawStatus;
@@ -355,8 +372,8 @@ function normalizedRuntimeGate(state = {}) {
   const indeterminate = !completedButStillBlocked && (progress?.indeterminate === true || (progress?.type === "runtime_setup" && status === "running" && numericProgress === null));
   const steps = completedButStillBlocked ? [] : normalizeSteps(progress?.steps);
   const renderedSteps = steps.length ? steps : decorateSteps(kind, phase, status);
-  const successMode = success ? successModeForState(state) : "";
-  const setupOptions = success
+  const successMode = setupFlow ? successModeForState(state) : "";
+  const setupOptions = setupFlow
     ? successMode === "run" ? installedTagOptions(state) : successMode === "install" ? setupTagOptions(state) : []
     : [];
 
@@ -377,13 +394,14 @@ function normalizedRuntimeGate(state = {}) {
     }),
     steps: renderedSteps,
     success,
+    setupFlow,
     successMode,
-    setupText: success ? successTextForMode(successMode) : "",
+    setupText: setupFlow ? successTextForMode(successMode) : "",
     setupOptions,
     setupTag: setupOptions.some((option) => option.value === "latest") ? "latest" : (setupOptions[0]?.value || "latest"),
-    runtimeOptions: success ? runtimeEndpointOptions(state) : [],
+    runtimeOptions: setupFlow ? runtimeOptions : [],
     runtimeEndpointId: asText(state?.runtime?.selectedRuntimeEndpointId),
-    action: success ? successActionForMode(successMode) : actionForRuntime(runtime, progress)
+    action: setupFlow ? successActionForMode(successMode) : actionForRuntime(runtime, progress)
   };
 }
 
@@ -506,7 +524,7 @@ function renderSuccess(model, parent) {
 
 function renderRuntimeChoice(model, parent, selectedEndpointId = "") {
   const options = Array.isArray(model.runtimeOptions) ? model.runtimeOptions : [];
-  if (!model.success || options.length < 2) return null;
+  if (options.length < 2) return null;
 
   const selected = options.some((option) => option.id === selectedEndpointId)
     ? selectedEndpointId
@@ -537,7 +555,7 @@ function renderRuntimeChoice(model, parent, selectedEndpointId = "") {
 }
 
 function renderSetupChoice(model, parent, selectedTag = "") {
-  if (!model.success || model.successMode === "continue") return null;
+  if (!model.setupFlow || model.successMode === "continue") return null;
 
   const options = Array.isArray(model.setupOptions) && model.setupOptions.length
     ? model.setupOptions
@@ -716,8 +734,8 @@ async function runAction(action, runtime, actions, root = null) {
     const selectedTag = asText(root?.querySelector?.("#runtimeSetupTag")?.value) || "latest";
     const selectedEndpointId = asText(root?.querySelector?.("#runtimeEndpointChoice")?.value);
     if (selectedEndpointId && typeof actions?.selectRuntimeEndpoint === "function") {
-      const ok = await actions.selectRuntimeEndpoint(selectedEndpointId);
-      if (ok === false) return;
+      const result = await actions.selectRuntimeEndpoint(selectedEndpointId);
+      if (result === false || asText(result?.opId)) return;
     }
     acknowledgedRuntimeSetupKey = runtimeSetupKey(state.progress);
     removeRuntimeGate();
@@ -779,7 +797,7 @@ function renderRuntimeGate(state = {}, actions = {}) {
   body.className = "dm-dialog-body";
   if (model.showDetail) appendText(body, "dm-runtime-gate-detail", model.detail);
   renderSuccess(model, body);
-  renderRuntimeChoice(model, body, previousRuntimeEndpointId);
+  const runtimeChoice = renderRuntimeChoice(model, body, previousRuntimeEndpointId);
   renderSetupChoice(model, body, previousSetupTag);
   const remoteButton = renderRemoteOption(model, body);
   remoteButton.addEventListener("click", () => openRemoteInstanceSetup(actions, state));
@@ -806,6 +824,12 @@ function renderRuntimeGate(state = {}, actions = {}) {
   const primary = makeButton(model.action.label, "button confirm", model.action.disabled);
   primary.dataset.runtimeAction = model.action.kind;
   primary.addEventListener("click", () => { void runAction(model.action, runtime, actions, backdrop); });
+  const updatePrimaryLabel = () => {
+    const selected = model.runtimeOptions.find((option) => option.id === runtimeChoice?.value);
+    primary.textContent = selected?.startable ? "Start Docker Desktop" : model.action.label;
+  };
+  runtimeChoice?.addEventListener("change", updatePrimaryLabel);
+  updatePrimaryLabel();
   primaryWrap.appendChild(primary);
 
   footer.appendChild(secondary);

@@ -68,6 +68,9 @@ This scope owns:
   messages stable enough for Docker Manager to normalize into modal steps.
 - Runtime start and provision results should report the Docker endpoint they
   made reachable so the product layer can remember an explicit user choice.
+- Platform provisioners should expose Docker Desktop-only assessment and
+  targeted start behavior so the product can offer an installed stopped Docker
+  Desktop beside a different reachable daemon without disturbing that fallback.
 - Renderer-visible runtime assessment labels and details should use `Setup`,
   not `Set up`, `Set Up`, or `Setting up`; internal field names may remain
   `setup`.

@@ -81,6 +81,10 @@ export class ColimaRuntime extends RuntimeProvisioner {
     };
   }
 
+  async assessDockerDesktop() {
+    return await this.#dockerDesktopInstalled() ? this.#dockerDesktopStoppedAssessment() : null;
+  }
+
   async provision(options = {}) {
     await this.ensureBinaries(options);
     const bin = await this.findColimaBinary();
@@ -117,6 +121,9 @@ export class ColimaRuntime extends RuntimeProvisioner {
   }
 
   async start(options = {}) {
+    if (options.mode === 'docker_desktop') {
+      return await this.#startDockerDesktop(options);
+    }
     const assessment = await this.assess();
     if (assessment?.mode === 'docker_desktop') {
       return await this.#startDockerDesktop(options);

@@ -3252,6 +3252,32 @@ function sanitizeDockerManagerState(state) {
     }
     if (typeof r.manualCommand === 'string') runtime.manualCommand = r.manualCommand;
     if (typeof r.manualUrl === 'string' && /^https?:\/\//i.test(r.manualUrl)) runtime.manualUrl = r.manualUrl;
+    if (typeof r.selectedRuntimeEndpointId === 'string' && /^[A-Za-z0-9_.:-]{1,160}$/.test(r.selectedRuntimeEndpointId)) {
+      runtime.selectedRuntimeEndpointId = r.selectedRuntimeEndpointId;
+    }
+    if (Array.isArray(r.runtimeCandidates)) {
+      runtime.runtimeCandidates = r.runtimeCandidates.slice(0, 32).flatMap((candidate) => {
+        if (!isPlainObject(candidate)) return [];
+        const id = typeof candidate.id === 'string' && /^[A-Za-z0-9_.:-]{1,160}$/.test(candidate.id) ? candidate.id : '';
+        const label = typeof candidate.label === 'string' ? candidate.label.trim().slice(0, 120) : '';
+        const provider = typeof candidate.provider === 'string' ? candidate.provider.trim().slice(0, 64) : '';
+        if (!id || !label || !provider) return [];
+        const out = {
+          id,
+          label,
+          provider,
+          source: typeof candidate.source === 'string' ? candidate.source.trim().slice(0, 64) : '',
+          available: candidate.available === true,
+          isSelected: candidate.isSelected === true,
+          daemonId: typeof candidate.daemonId === 'string' ? candidate.daemonId.trim().slice(0, 128) || null : null
+        };
+        if (provider === 'docker_desktop' && out.available === false && candidate.startable === true && candidate.state === 'engine_stopped') {
+          out.startable = true;
+          out.state = 'engine_stopped';
+        }
+        return [out];
+      });
+    }
     outState.runtime = runtime;
   }
 

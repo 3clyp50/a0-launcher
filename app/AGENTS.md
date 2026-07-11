@@ -42,6 +42,9 @@ This scope owns:
 - When first launch finds multiple distinct reachable local Docker daemons and
   no saved preference, show the existing compact runtime selector once before
   continuing. Multiple endpoint aliases for one daemon must remain one choice.
+- The selector may also include an installed stopped Docker Desktop beside a
+  reachable daemon. Selecting it starts Docker Desktop through the named runtime
+  action before the normal Run or Download step continues.
 - The setup capability slideshow is for the long Agent Zero image pull/extract
   wait, not for Docker runtime setup or short install preflight checks.
 - When runtime setup completes, the same modal shell owns the next step without

@@ -51,6 +51,28 @@ test('ColimaRuntime assess asks to start installed Docker Desktop before setup',
   }
 });
 
+test('ColimaRuntime can detect stopped Docker Desktop while Colima is running', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  try {
+    const dockerApp = path.join(managedDir, 'Docker.app');
+    await mkdirp(dockerApp);
+    const runtime = new ColimaRuntime({
+      managedDir,
+      dockerDesktopAppPaths: [dockerApp],
+      runCommand: async (_cmd, args) => {
+        if (args?.[0] === 'version') return { code: 0, stdout: 'colima version', stderr: '' };
+        if (args?.[0] === 'list') return { code: 0, stdout: '{"name":"a0","status":"Running"}', stderr: '' };
+        return { code: 1, stdout: '', stderr: '' };
+      }
+    });
+
+    assert.equal((await runtime.assess()).state, 'ready');
+    assert.equal((await runtime.assessDockerDesktop()).mode, 'docker_desktop');
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
 test('WindowsWslRuntime assess directs Windows clients without WSL to runtime install guidance', async () => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
   try {
@@ -120,6 +142,27 @@ test('WindowsWslRuntime assess detects Docker Desktop when WSL2 is incomplete', 
     assert.match(assessment.detail, /Docker Desktop is installed/i);
     assert.match(assessment.detail, /Start Docker Desktop/i);
     assert.equal(assessment.manualUrl, undefined);
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime can detect stopped Docker Desktop beside a WSL runtime', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  try {
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      isWindowsServer: false,
+      runCommand: fakeWindowsCommandRunner({
+        binaries: ['wsl.exe'],
+        dockerDesktopPath: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe',
+        wslList: '  NAME      STATE    VERSION\r\n* Ubuntu    Running  2\r\n',
+        wslDockerInstalled: true
+      })
+    });
+
+    assert.equal((await runtime.assess()).mode, 'wsl_engine');
+    assert.equal((await runtime.assessDockerDesktop()).mode, 'docker_desktop');
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -817,6 +860,29 @@ test('LinuxEngineRuntime starts installed Docker Desktop without privileged nati
     assert.equal(result.endpoint.dockerHost, `unix://${desktopSocket}`);
     assert.ok(calls.some(({ cmd, args }) => cmd === 'systemctl' && args?.join(' ') === '--user start docker-desktop'));
     assert.deepEqual(privilegedScripts, []);
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('LinuxEngineRuntime can start Docker Desktop while native Engine is ready', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const desktopSocket = `${os.homedir()}/.docker/desktop/docker.sock`;
+  try {
+    const runtime = new LinuxEngineRuntime({
+      managedDir,
+      isRoot: false,
+      probeNativeSocket: async () => 'OK',
+      runCommand: fakeLinuxCommandRunner({
+        binaries: ['docker'],
+        dockerDesktopInstalled: true
+      })
+    });
+
+    assert.equal((await runtime.assess()).state, 'ready');
+    assert.equal((await runtime.assessDockerDesktop()).mode, 'docker_desktop');
+    const result = await runtime.start({ mode: 'docker_desktop' });
+    assert.equal(result.endpoint.dockerHost, `unix://${desktopSocket}`);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }

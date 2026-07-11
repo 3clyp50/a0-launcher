@@ -587,6 +587,105 @@ test('runtime selector appears for multiple daemons and submits before image ins
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
 });
 
+test('stopped Docker Desktop is a startable runtime choice', async () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: true,
+    runtime: {
+      platform: 'linux',
+      state: 'ready',
+      selectedRuntimeEndpointId: 'runtime-engine',
+      runtimeCandidates: [
+        { id: 'runtime-engine', label: 'Docker Engine', daemonId: 'daemon-engine', available: true, isSelected: true },
+        { id: 'runtime-desktop', label: 'Docker Desktop', provider: 'docker_desktop', available: false, daemonId: null, startable: true, state: 'engine_stopped' }
+      ]
+    },
+    versions: [{ id: 'latest', availability: 'installed' }]
+  };
+  window.__dmLastState = state;
+
+  const calls = [];
+  renderRuntimeGate(state, {
+    selectRuntimeEndpoint: async (id) => {
+      calls.push(id);
+      return id === 'runtime-desktop'
+        ? { opId: 'runtime-start-desktop' }
+        : { id };
+    }
+  });
+
+  const selector = document.querySelector('#runtimeEndpointChoice');
+  assert.deepEqual(selector.querySelectorAll('option').map((option) => option.textContent), ['Docker Engine', 'Docker Desktop (stopped)']);
+  assert.ok(buttonByText(document, 'Run Agent Zero'));
+
+  selector.value = 'runtime-desktop';
+  selector.dispatchEvent(new MiniEvent('change'));
+  buttonByText(document, 'Start Docker Desktop').dispatchEvent(new MiniEvent('click'));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(calls, ['runtime-desktop']);
+  assert.ok(document.getElementById('runtimeSetupDialog'));
+  assert.equal(document.getElementById('activateInstanceDialog'), null);
+
+  const running = {
+    ...state,
+    progress: {
+      opId: 'runtime-start-desktop',
+      type: 'runtime_setup',
+      status: 'running',
+      headline: 'Starting Docker Desktop',
+      phase: 'start_desktop',
+      detail: 'Starting Docker Desktop'
+    }
+  };
+  assert.equal(normalizedRuntimeGate(running).success, false);
+  renderRuntimeGate(running, {});
+  assert.ok(buttonByText(document, 'Continue').disabled);
+  assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
+
+  const failed = {
+    ...running,
+    progress: {
+      ...running.progress,
+      status: 'failed',
+      error: 'Docker Desktop did not start.'
+    }
+  };
+  window.__dmLastState = failed;
+  assert.equal(normalizedRuntimeGate(failed).success, false);
+  renderRuntimeGate(failed, {});
+  assert.equal(document.querySelector('.dm-runtime-gate-detail')?.textContent, 'Docker Desktop did not start.');
+  assert.equal(document.querySelector('.dm-runtime-success'), null);
+  const failedSelector = document.querySelector('#runtimeEndpointChoice');
+  assert.deepEqual(failedSelector.querySelectorAll('option').map((option) => option.textContent), ['Docker Engine', 'Docker Desktop (stopped)']);
+  assert.ok(buttonByText(document, 'Run Agent Zero'));
+  failedSelector.value = 'runtime-desktop';
+  failedSelector.dispatchEvent(new MiniEvent('change'));
+  assert.ok(buttonByText(document, 'Start Docker Desktop'));
+  failedSelector.value = 'runtime-engine';
+  failedSelector.dispatchEvent(new MiniEvent('change'));
+  buttonByText(document, 'Run Agent Zero').dispatchEvent(new MiniEvent('click'));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(document.getElementById('runtimeSetupDialog'), null);
+  assert.ok(document.getElementById('activateInstanceDialog'));
+  assert.equal(renderRuntimeGate(failed, {}), false);
+
+  const failedWithoutDesktop = {
+    ...failed,
+    progress: { ...failed.progress, opId: 'runtime-start-desktop-stale' },
+    runtime: {
+      ...failed.runtime,
+      runtimeCandidates: [failed.runtime.runtimeCandidates[0]]
+    }
+  };
+  window.__dmLastState = failedWithoutDesktop;
+  renderRuntimeGate(failedWithoutDesktop, {});
+  assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
+  assert.ok(buttonByText(document, 'Run Agent Zero'));
+});
+
 test('first launch asks once when multiple runtimes are already reachable', () => {
   let document = installDom();
   const state = {

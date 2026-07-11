@@ -108,6 +108,9 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   but show the first-run runtime picker only when those endpoints identify two
   or more distinct Docker daemons. Endpoint aliases and unidentified daemons
   must not create a picker choice by themselves.
+- An installed stopped Docker Desktop may count as one additional first-run
+  choice when another daemon is reachable. Label it as stopped and start it
+  through the existing platform runtime setup before saving the preference.
 - Launcher-managed local instances should mount isolated persistent workspace
   storage at `/a0/usr` by default. The default backing store is a per-instance
   host directory under `~/agent-zero`; named Docker volumes are an advanced

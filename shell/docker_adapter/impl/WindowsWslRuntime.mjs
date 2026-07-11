@@ -69,6 +69,11 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     };
   }
 
+  async assessDockerDesktop() {
+    if (await this.#isWindowsServer()) return null;
+    return await this.#dockerDesktopPath() ? this.#dockerDesktopStoppedAssessment() : null;
+  }
+
   async provision(options = {}) {
     const assessment = await this.assess();
     if (assessment?.mode === 'wsl_feature' && assessment.state === 'not_provisioned') {
@@ -101,6 +106,9 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
   }
 
   async start(options = {}) {
+    if (options.mode === 'docker_desktop') {
+      return await this.#startDockerDesktop(options);
+    }
     const assessment = await this.assess();
     if (assessment?.mode === 'wsl_engine') {
       options.onProgress?.('Starting WSL Docker Engine');

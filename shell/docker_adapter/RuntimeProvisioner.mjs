@@ -58,6 +58,9 @@ export class RuntimeProvisioner {
   /** @returns {Promise<AssessResult>} */
   async assess() { throw makeError('NOT_IMPLEMENTED', 'assess is abstract'); }
 
+  /** @returns {Promise<AssessResult|null>} */
+  async assessDockerDesktop() { return null; }
+
   async provision(_options = {}) { throw makeError('NOT_IMPLEMENTED', 'provision is abstract'); }
 
   async start(_options = {}) { throw makeError('NOT_IMPLEMENTED', 'start is abstract'); }

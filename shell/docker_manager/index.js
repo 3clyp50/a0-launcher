@@ -1375,7 +1375,31 @@ async function getRuntimeProvisioner() {
 
 async function assessRuntime(env = null) {
   if (env?.dockerAvailable) {
-    return runtimeReadyAssessment(env);
+    const runtime = runtimeReadyAssessment(env);
+    const candidates = runtime.runtimeCandidates;
+    const hasRunningDesktop = candidates.some((candidate) => candidate?.provider === 'docker_desktop' && candidate.available === true);
+    const hasRunningAlternative = candidates.some((candidate) => candidate?.provider !== 'docker_desktop' && candidate.available === true);
+    if (!hasRunningDesktop && hasRunningAlternative) {
+      try {
+        const provisioner = await getRuntimeProvisioner();
+        const assessment = provisioner ? await provisioner.assessDockerDesktop() : null;
+        if (assessment?.state === 'engine_stopped' && assessment?.mode === 'docker_desktop') {
+          const stopped = candidates.find((candidate) => (
+            candidate?.provider === 'docker_desktop' &&
+            candidate.available !== true &&
+            candidate.source === 'known_socket'
+          )) || candidates.find((candidate) => candidate?.provider === 'docker_desktop' && candidate.available !== true);
+          if (stopped) {
+            runtime.runtimeCandidates = candidates.map((candidate) => candidate === stopped
+              ? { ...candidate, startable: true, state: 'engine_stopped' }
+              : candidate);
+          }
+        }
+      } catch {
+        // Optional Docker Desktop discovery must not hide a ready fallback runtime.
+      }
+    }
+    return runtime;
   }
 
   const provisioner = await getRuntimeProvisioner();
@@ -4081,6 +4105,17 @@ async function selectRuntimeEndpoint(id) {
   const candidate = candidates.find((item) => item?.id === endpointId && item.available === true);
 
   if (!candidate) {
+    const stoppedDesktop = candidates.find((item) => (
+      item?.id === endpointId &&
+      item.provider === 'docker_desktop' &&
+      item.available !== true
+    ));
+    if (stoppedDesktop) {
+      return await provisionRuntime({ targetRuntimeEndpointId: endpointId, mode: 'docker_desktop' });
+    }
+  }
+
+  if (!candidate) {
     const err = new Error('Selected runtime is not available.');
     err.code = 'RUNTIME_ENDPOINT_UNAVAILABLE';
     throw err;
@@ -4097,16 +4132,26 @@ async function selectRuntimeEndpoint(id) {
   return preference;
 }
 
-async function rememberStartedRuntime(endpoint = null) {
+async function rememberStartedRuntime(endpoint = null, options = {}) {
   const dockerHost = String(endpoint?.dockerHost || '').trim();
-  if (!dockerHost) return false;
+  if (!dockerHost) {
+    const err = new Error('The started runtime did not report an endpoint.');
+    err.code = 'RUNTIME_START_FAILED';
+    if (options.required === true) throw err;
+    return false;
+  }
   try {
     resetDocker();
     const docker = await getManagedDocker(getBackendImageRepo(), { forceRefresh: true });
     const env = await docker.getEnvironment();
     const candidate = (Array.isArray(env?.runtimeCandidates) ? env.runtimeCandidates : [])
       .find((item) => item?.available === true && item?.dockerHost === dockerHost);
-    if (!candidate) return false;
+    if (!candidate) {
+      const err = new Error('The started runtime did not become reachable.');
+      err.code = 'RUNTIME_START_FAILED';
+      if (options.required === true) throw err;
+      return false;
+    }
     await stateStore.writeRuntimeEndpointPreference({
       id: candidate.id,
       dockerHost: candidate.dockerHost,
@@ -4114,14 +4159,15 @@ async function rememberStartedRuntime(endpoint = null) {
       provider: candidate.provider
     });
     return true;
-  } catch {
+  } catch (error) {
+    if (options.required === true) throw error;
     return false;
   } finally {
     resetDocker();
   }
 }
 
-async function provisionRuntime() {
+async function provisionRuntime(options = {}) {
   requireNoRunningOperation();
   const opId = beginOperation('runtime_setup', null);
   let runtimeAssessment = null;
@@ -4150,6 +4196,27 @@ async function provisionRuntime() {
       }
 
       updateOperationProgress(runtimeSetupProgressPatch(null, 'Checking runtime', null));
+      if (options.mode === 'docker_desktop' && options.targetRuntimeEndpointId) {
+        const assessment = await provisioner.assessDockerDesktop();
+        runtimeAssessment = assessment;
+        if (assessment?.state !== 'engine_stopped' || assessment?.mode !== 'docker_desktop') {
+          const err = new Error('Selected runtime is not available.');
+          err.code = 'RUNTIME_ENDPOINT_UNAVAILABLE';
+          throw err;
+        }
+        updateOperationProgress(runtimeSetupProgressPatch(assessment, assessment.detail, null));
+        const result = await provisioner.start({
+          mode: 'docker_desktop',
+          signal: controller.signal,
+          onProgress: reportRuntimeProgress
+        });
+        await rememberStartedRuntime(result?.endpoint, { required: true });
+        await clearRuntimeSetupResume();
+        updateOperationProgress(runtimeSetupProgressPatch(assessment, 'Runtime ready', 100, 'completed'));
+        finishOperation('completed', null);
+        return;
+      }
+
       const assessment = await provisioner.assess();
       runtimeAssessment = assessment;
       updateOperationProgress(runtimeSetupProgressPatch(assessment, assessment?.detail || 'Checking runtime', null));

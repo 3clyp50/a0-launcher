@@ -101,6 +101,10 @@ This scope owns:
   aliases for one daemon and reachable endpoints without a verified daemon ID
   must not trigger the selector. Hide it for zero or one verified daemon, and do
   not add a runtime picker to Settings or the global chrome.
+- An installed stopped Docker Desktop may be the second selector choice beside
+  a verified reachable daemon. Label it as stopped, change the primary action
+  to `Start Docker Desktop` while selected, and keep runtime startup progress or
+  failure in the blocking modal until Docker Desktop is verified.
 - Post-runtime image installs, activation, rollback, start, stop, and delete
   progress should use the centered operation modal rather than a top-page
   status strip. Updating an already-installed Version from Versions should keep

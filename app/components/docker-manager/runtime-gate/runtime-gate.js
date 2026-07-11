@@ -291,8 +291,9 @@ function runtimeEndpointOptions(state = {}) {
 
   for (const candidate of candidates) {
     const id = asText(candidate?.id);
-    if (!id || seen.has(id) || candidate?.available !== true) continue;
-    seen.add(id);
+    const daemonId = asText(candidate?.daemonId);
+    if (!id || !daemonId || seen.has(daemonId) || candidate?.available !== true) continue;
+    seen.add(daemonId);
     out.push({
       id,
       label: asText(candidate?.label) || "Container runtime",

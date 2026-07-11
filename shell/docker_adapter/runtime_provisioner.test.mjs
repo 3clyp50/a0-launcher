@@ -509,6 +509,39 @@ test('DockerInterface dedupes endpoints and selects the highest-priority reachab
   assert.equal(env.runtimeCandidates.find((candidate) => candidate.label === 'OrbStack')?.isSelected, true);
 });
 
+test('DockerInterface preserves endpoint aliases while exposing their shared daemon identity', async () => {
+  const desktopContext = '/Users/a0/.docker/context.sock';
+  const desktopSocket = '/Users/a0/.docker/run/docker.sock';
+  const orbStackSocket = '/Users/a0/.orbstack/run/docker.sock';
+  const unidentifiedSocket = '/Users/a0/.docker/unknown.sock';
+  const env = await DockerInterface.detectEnvironment({
+    platform: 'darwin',
+    homeDir: '/Users/a0',
+    discoverDockerContexts: false,
+    candidateHosts: [
+      { provider: 'docker_desktop', label: 'desktop-linux', dockerHost: `unix://${desktopContext}`, priority: 20 },
+      { provider: 'docker_desktop', label: 'Docker Desktop', dockerHost: `unix://${desktopSocket}`, priority: 50 },
+      { provider: 'orbstack', label: 'OrbStack', dockerHost: `unix://${orbStackSocket}`, priority: 60 },
+      { provider: 'docker_engine', label: 'Unknown runtime', dockerHost: `unix://${unidentifiedSocket}`, priority: 70 }
+    ],
+    dockerodeClass: fakeDockerodeClass(
+      [desktopContext, desktopSocket, orbStackSocket, unidentifiedSocket],
+      {
+        [desktopContext]: 'desktop-daemon',
+        [desktopSocket]: 'desktop-daemon',
+        [orbStackSocket]: 'orbstack-daemon',
+        [unidentifiedSocket]: null
+      }
+    )
+  });
+
+  assert.equal(env.runtimeCandidates.length, 4);
+  assert.equal(env.runtimeCandidates[0].daemonId, 'desktop-daemon');
+  assert.equal(env.runtimeCandidates[1].daemonId, 'desktop-daemon');
+  assert.equal(env.runtimeCandidates[2].daemonId, 'orbstack-daemon');
+  assert.equal(env.runtimeCandidates[3].daemonId, null);
+});
+
 test('DockerInterface falls back when a persisted runtime endpoint is stale', async () => {
   const env = await DockerInterface.detectEnvironment({
     platform: 'linux',
@@ -664,7 +697,7 @@ test('WindowsWslDockerProxy keepalive holds the selected WSL distro open', { ski
   assert.equal(calls[1].options.detached, true);
 });
 
-function fakeDockerodeClass(availableSocketPaths = []) {
+function fakeDockerodeClass(availableSocketPaths = [], daemonIds = {}) {
   const available = new Set(availableSocketPaths);
   return class FakeDockerode {
     constructor(options = {}) {
@@ -682,6 +715,12 @@ function fakeDockerodeClass(availableSocketPaths = []) {
 
     async version() {
       return { Version: 'test' };
+    }
+
+    async info() {
+      const endpoint = this.options.socketPath || (this.options.host ? `${this.options.host}:${this.options.port || 2375}` : '');
+      if (Object.prototype.hasOwnProperty.call(daemonIds, endpoint)) return { ID: daemonIds[endpoint] };
+      return { ID: `daemon-${availableSocketPaths.indexOf(endpoint) + 1}` };
     }
   };
 }
@@ -746,6 +785,38 @@ test('LinuxEngineRuntime start reports the endpoint selected by the user action'
     const result = await runtime.start();
 
     assert.equal(result.endpoint.dockerHost, 'unix:///var/run/docker.sock');
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('LinuxEngineRuntime starts installed Docker Desktop without privileged native Engine setup', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  const privilegedScripts = [];
+  const desktopSocket = `${os.homedir()}/.docker/desktop/docker.sock`;
+  try {
+    const runtime = new LinuxEngineRuntime({
+      managedDir,
+      isRoot: false,
+      probeNativeSocket: async (socketPath) => socketPath === desktopSocket ? 'OK' : 'ENOENT',
+      runCommand: fakeLinuxCommandRunner({
+        binaries: ['docker'],
+        dockerDesktopInstalled: true,
+        passwordlessSudo: true,
+        privilegedScripts,
+        calls
+      })
+    });
+
+    const assessment = await runtime.assess();
+    const result = await runtime.start();
+
+    assert.equal(assessment.state, 'engine_stopped');
+    assert.equal(assessment.mode, 'docker_desktop');
+    assert.equal(result.endpoint.dockerHost, `unix://${desktopSocket}`);
+    assert.ok(calls.some(({ cmd, args }) => cmd === 'systemctl' && args?.join(' ') === '--user start docker-desktop'));
+    assert.deepEqual(privilegedScripts, []);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -853,9 +924,17 @@ test('LinuxEngineRuntime assess reports relogin when docker group membership is 
   }
 });
 
-function fakeLinuxCommandRunner({ binaries = [], groups = [], passwordlessSudo = false, privilegedScripts = [] } = {}) {
+function fakeLinuxCommandRunner({
+  binaries = [],
+  groups = [],
+  passwordlessSudo = false,
+  privilegedScripts = [],
+  dockerDesktopInstalled = false,
+  calls = []
+} = {}) {
   const present = new Set(binaries);
   return async (cmd, args) => {
+    calls.push({ cmd, args: Array.isArray(args) ? [...args] : args });
     if (cmd === 'sh' && args?.[0] === '-c') {
       const match = String(args[1] || '').match(/^command -v ([A-Za-z0-9_.-]+)$/);
       if (match) {
@@ -876,6 +955,14 @@ function fakeLinuxCommandRunner({ binaries = [], groups = [], passwordlessSudo =
     }
     if (cmd === 'id' && args?.[0] === '-nG') {
       return { code: 0, stdout: `${groups.join(' ')}\n`, stderr: '' };
+    }
+    if (cmd === 'systemctl' && args?.[0] === '--user' && args?.[1] === 'show') {
+      return dockerDesktopInstalled
+        ? { code: 0, stdout: 'loaded\n', stderr: '' }
+        : { code: 1, stdout: 'not-found\n', stderr: '' };
+    }
+    if (cmd === 'systemctl' && args?.[0] === '--user' && args?.[1] === 'start') {
+      return { code: 0, stdout: '', stderr: '' };
     }
     return { code: 1, stdout: '', stderr: '' };
   };

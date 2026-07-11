@@ -496,7 +496,7 @@ test('completed runtime setup only continues when an instance already exists', (
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
 });
 
-test('runtime selector is hidden unless multiple available endpoints exist', () => {
+test('runtime selector is hidden unless multiple verified daemons exist', () => {
   let document = installDom();
   const base = {
     stateLoaded: true,
@@ -525,14 +525,14 @@ test('runtime selector is hidden unless multiple available endpoints exist', () 
       platform: 'linux',
       state: 'ready',
       runtimeCandidates: [
-        { id: 'runtime-one', label: 'Docker Engine', available: true, isSelected: true }
+        { id: 'runtime-one', label: 'Docker Engine', daemonId: 'daemon-one', available: true, isSelected: true }
       ]
     }
   }, {});
   assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
 });
 
-test('runtime selector appears for multiple endpoints and submits before image install', async () => {
+test('runtime selector appears for multiple daemons and submits before image install', async () => {
   const document = installDom();
   const state = {
     stateLoaded: true,
@@ -542,8 +542,8 @@ test('runtime selector appears for multiple endpoints and submits before image i
       state: 'ready',
       selectedRuntimeEndpointId: 'runtime-one',
       runtimeCandidates: [
-        { id: 'runtime-one', label: 'OrbStack', available: true, isSelected: true },
-        { id: 'runtime-two', label: 'Rancher Desktop', available: true, isSelected: false },
+        { id: 'runtime-one', label: 'OrbStack', daemonId: 'daemon-one', available: true, isSelected: true },
+        { id: 'runtime-two', label: 'Rancher Desktop', daemonId: 'daemon-two', available: true, isSelected: false },
         { id: 'runtime-three', label: 'Podman', available: false, isSelected: false }
       ]
     },
@@ -599,8 +599,8 @@ test('first launch asks once when multiple runtimes are already reachable', () =
     },
     environment: {
       runtimeCandidates: [
-        { id: 'runtime-docker', label: 'Docker Desktop', source: 'known_socket', available: true, isSelected: true },
-        { id: 'runtime-orbstack', label: 'OrbStack', source: 'known_socket', available: true, isSelected: false }
+        { id: 'runtime-docker', label: 'Docker Desktop', daemonId: 'daemon-docker', source: 'known_socket', available: true, isSelected: true },
+        { id: 'runtime-orbstack', label: 'OrbStack', daemonId: 'daemon-orbstack', source: 'known_socket', available: true, isSelected: false }
       ]
     },
     versions: [{ id: 'v2.0', displayVersion: '2.0', availability: 'installed' }]
@@ -623,6 +623,26 @@ test('first launch asks once when multiple runtimes are already reachable', () =
   };
   assert.equal(shouldShowRuntimeGate(preferred), false);
   assert.equal(renderRuntimeGate(preferred, {}), false);
+});
+
+test('runtime aliases and unidentified endpoints do not trigger onboarding', () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: true,
+    runtime: { platform: 'win32', state: 'ready' },
+    environment: {
+      runtimeCandidates: [
+        { id: 'desktop-context', label: 'desktop-linux', daemonId: 'desktop-daemon', available: true, isSelected: true },
+        { id: 'desktop-pipe', label: 'Docker Desktop', daemonId: 'desktop-daemon', available: true, isSelected: false },
+        { id: 'unknown-endpoint', label: 'Unknown runtime', daemonId: null, available: true, isSelected: false }
+      ]
+    }
+  };
+
+  assert.equal(shouldShowRuntimeGate(state), false);
+  assert.equal(renderRuntimeGate(state, {}), false);
+  assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
 });
 
 test('manual and relogin states stay blocked with recovery actions', () => {

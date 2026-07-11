@@ -104,6 +104,10 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
 - Backend release metadata defaults to `agent0ai/agent-zero`.
 - `A0_BACKEND_IMAGE_REPO` and `A0_BACKEND_GITHUB_REPO` may override those repos
   for testing.
+- Keep every reachable Docker endpoint available for preference and fallback,
+  but show the first-run runtime picker only when those endpoints identify two
+  or more distinct Docker daemons. Endpoint aliases and unidentified daemons
+  must not create a picker choice by themselves.
 - Launcher-managed local instances should mount isolated persistent workspace
   storage at `/a0/usr` by default. The default backing store is a per-instance
   host directory under `~/agent-zero`; named Docker volumes are an advanced

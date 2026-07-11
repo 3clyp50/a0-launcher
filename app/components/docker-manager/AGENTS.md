@@ -94,12 +94,13 @@ This scope owns:
 - Visible setup titles and transient progress states should use `Setup`, not
   `Set up`, `Set Up`, or `Setting up`; button labels that advance runtime setup
   should use `Continue`.
-- If two or more usable local runtime endpoints are detected during setup
-  completion, the same modal may show a compact `Run Agent Zero with` selector.
-  The same one-time selector should appear on first launch when multiple
-  endpoints are already reachable and no preference exists. Hide it for zero
-  or one usable endpoint, and do not add a runtime picker to Settings or the
-  global chrome.
+- If two or more distinct reachable local Docker daemon identities are detected
+  during setup completion, the same modal may show a compact `Run Agent Zero
+  with` selector. The same one-time selector should appear on first launch when
+  multiple daemons are already reachable and no preference exists. Endpoint
+  aliases for one daemon and reachable endpoints without a verified daemon ID
+  must not trigger the selector. Hide it for zero or one verified daemon, and do
+  not add a runtime picker to Settings or the global chrome.
 - Post-runtime image installs, activation, rollback, start, stop, and delete
   progress should use the centered operation modal rather than a top-page
   status strip. Updating an already-installed Version from Versions should keep

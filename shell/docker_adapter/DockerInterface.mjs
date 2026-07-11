@@ -51,6 +51,7 @@ const DOCKER_CONTEXT_TIMEOUT_MS = 1200;
  * @property {boolean} isSelected
  * @property {string|null} diagnosticCode
  * @property {string|null} diagnosticMessage
+ * @property {string|null} daemonId
  */
 
 /**
@@ -205,6 +206,7 @@ export class DockerInterface {
       ...candidate,
       available: false,
       daemonVersion: null,
+      daemonId: null,
       diagnosticCode: null,
       diagnosticMessage: null,
       diagnosticDetails: null
@@ -235,11 +237,16 @@ export class DockerInterface {
       await this.#withTimeout(Promise.resolve(docker.ping()), candidateTimeoutMs);
       result.available = true;
 
-      try {
-        const v = await this.#withTimeout(Promise.resolve(docker.version()), candidateTimeoutMs);
-        result.daemonVersion = typeof v?.Version === 'string' ? v.Version : null;
-      } catch {
-        // best-effort only
+      const [version, info] = await Promise.allSettled([
+        this.#withTimeout(Promise.resolve(docker.version()), candidateTimeoutMs),
+        this.#withTimeout(Promise.resolve(docker.info()), candidateTimeoutMs)
+      ]);
+      if (version.status === 'fulfilled' && typeof version.value?.Version === 'string') {
+        result.daemonVersion = version.value.Version;
+      }
+      if (info.status === 'fulfilled') {
+        const daemonId = typeof info.value?.ID === 'string' ? info.value.ID.trim() : '';
+        if (daemonId && daemonId.length <= 128 && /^[A-Za-z0-9:_.-]+$/.test(daemonId)) result.daemonId = daemonId;
       }
     } catch (error) {
       const normalized = this.#normalizeDockerodeError(error);
@@ -918,7 +925,8 @@ export class DockerInterface {
       available: candidate.available === true,
       isSelected: !!selectedId && candidate.id === selectedId,
       diagnosticCode: candidate.diagnosticCode || null,
-      diagnosticMessage: candidate.diagnosticMessage || null
+      diagnosticMessage: candidate.diagnosticMessage || null,
+      daemonId: candidate.daemonId || null
     }));
   }
 

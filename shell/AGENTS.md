@@ -134,6 +134,9 @@ This scope owns:
 - Runtime preferences are soft. Endpoint detection must fall back when the
   preferred endpoint is unavailable without deleting the preference; a runtime
   explicitly started by the user becomes the new preferred endpoint.
+- Runtime discovery may expose multiple endpoint aliases for fallback, but
+  renderer onboarding choices must be based on distinct verified Docker daemon
+  identities rather than endpoint count.
 - Docker Hub sign-in recovery is a named shell-owned intent. The renderer may
   request it, but `shell/main.js` must launch a visible wrapper around the real
   `docker login` flow instead of exposing generic command execution.

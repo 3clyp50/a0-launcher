@@ -39,8 +39,9 @@ This scope owns:
   affordance to add a remote Instance. Saved remote Instances must keep the
   launcher usable without local Docker setup. Docker mechanics stay in the
   shell.
-- When first launch finds multiple reachable local runtimes and no saved
-  preference, show the existing compact runtime selector once before continuing.
+- When first launch finds multiple distinct reachable local Docker daemons and
+  no saved preference, show the existing compact runtime selector once before
+  continuing. Multiple endpoint aliases for one daemon must remain one choice.
 - The setup capability slideshow is for the long Agent Zero image pull/extract
   wait, not for Docker runtime setup or short install preflight checks.
 - When runtime setup completes, the same modal shell owns the next step without

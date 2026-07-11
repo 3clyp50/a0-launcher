@@ -7,7 +7,10 @@
  */
 
 import os from 'node:os';
-import { RuntimeProvisioner, makeError, run } from '../RuntimeProvisioner.mjs';
+import { RuntimeProvisioner, makeError, pathExists, run } from '../RuntimeProvisioner.mjs';
+
+const DOCKER_DESKTOP_INSTALL_DIR = '/opt/docker-desktop';
+const DOCKER_DESKTOP_SOCKET = `${os.homedir()}/.docker/desktop/docker.sock`;
 
 const MANUAL_PACKAGES = Object.freeze(['docker', 'containerd', 'runc', 'iptables', 'docker-cli']);
 
@@ -75,11 +78,14 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
           detail: 'Docker is installed, but this desktop session cannot access it yet. Log out and back in once, then return here.'
         };
       }
+      if (await this.#dockerDesktopInstalled()) return this.#dockerDesktopStoppedAssessment();
       return {
         state: 'engine_stopped',
         detail: 'Docker is installed but the service is not running. The launcher can start it for you.'
       };
     }
+
+    if (await this.#dockerDesktopInstalled()) return this.#dockerDesktopStoppedAssessment();
 
     const pm = await this.#detectPackageManager();
     if (!pm) {
@@ -123,8 +129,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
     }
 
     if (assessment.state === 'engine_stopped') {
-      await this.start(options);
-      return { endpoint: this.endpoint() };
+      return await this.start(options);
     }
 
     if (assessment.state === 'needs_group_membership') {
@@ -209,6 +214,12 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
   }
 
   async start(options = {}) {
+    const assessment = await this.assess();
+    if (assessment.state === 'ready') return { endpoint: this.endpoint() };
+    if (assessment.mode === 'docker_desktop') {
+      return await this.#startDockerDesktop(options);
+    }
+
     options.onProgress?.('Requesting system authorization');
     options.onProgress?.('Starting Docker Engine');
     const started = await this.#runPrivileged(this.#startScript(), {
@@ -255,6 +266,58 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
       kind: 'unix',
       socketPath: '/var/run/docker.sock',
       dockerHost: 'unix:///var/run/docker.sock'
+    };
+  }
+
+  #dockerDesktopStoppedAssessment() {
+    return {
+      state: 'engine_stopped',
+      mode: 'docker_desktop',
+      detail: 'Docker Desktop is installed but not running. Start Docker Desktop to continue.'
+    };
+  }
+
+  async #dockerDesktopInstalled() {
+    try {
+      const service = await this._runCommand(
+        'systemctl',
+        ['--user', 'show', 'docker-desktop.service', '--property=LoadState', '--value'],
+        { timeoutMs: 5000 }
+      );
+      if (service.code === 0 && String(service.stdout || '').trim() === 'loaded') return true;
+    } catch {
+      // Fall through to Docker Desktop's documented installation directory.
+    }
+    return await pathExists(DOCKER_DESKTOP_INSTALL_DIR);
+  }
+
+  async #startDockerDesktop(options = {}) {
+    options.onProgress?.('Starting Docker Desktop');
+    const started = await this._runCommand(
+      'systemctl',
+      ['--user', 'start', 'docker-desktop'],
+      { timeoutMs: 120000, signal: options.signal }
+    );
+
+    if (started.code !== 0) {
+      throw makeError('RUNTIME_START_FAILED', 'Docker Desktop could not be started.', {
+        stderr: tail(started.stderr || started.stdout)
+      });
+    }
+
+    options.onProgress?.('Waiting for Docker Desktop');
+    const socket = await this.#waitForNativeSocket(options.signal, 120000, DOCKER_DESKTOP_SOCKET);
+    if (socket !== 'OK') {
+      throw makeError('RUNTIME_START_FAILED', 'Docker Desktop did not become reachable.');
+    }
+
+    options.onProgress?.('Runtime ready', 100);
+    return {
+      endpoint: {
+        kind: 'unix',
+        socketPath: DOCKER_DESKTOP_SOCKET,
+        dockerHost: `unix://${DOCKER_DESKTOP_SOCKET}`
+      }
     };
   }
 
@@ -311,13 +374,13 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
     );
   }
 
-  async #probeNativeSocket() {
+  async #probeNativeSocket(socketPath = '/var/run/docker.sock') {
     if (this._probeNativeSocket) {
-      return await this._probeNativeSocket();
+      return await this._probeNativeSocket(socketPath);
     }
     const net = await import('node:net');
     return await new Promise((resolve) => {
-      const socket = net.connect({ path: '/var/run/docker.sock' });
+      const socket = net.connect({ path: socketPath });
       const finish = (value) => {
         try {
           socket.destroy();
@@ -338,13 +401,13 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
     });
   }
 
-  async #waitForNativeSocket(signal, timeoutMs = 90000) {
+  async #waitForNativeSocket(signal, timeoutMs = 90000, socketPath = '/var/run/docker.sock') {
     const startedAt = Date.now();
     let last = 'ENOENT';
 
     while (Date.now() - startedAt < timeoutMs) {
       if (signal?.aborted) throw makeError('ABORTED', 'Runtime start aborted');
-      last = await this.#probeNativeSocket();
+      last = await this.#probeNativeSocket(socketPath);
       if (last === 'OK' || last === 'EACCES') return last;
       await sleep(1000);
     }

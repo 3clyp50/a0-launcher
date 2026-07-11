@@ -49,6 +49,10 @@ This scope owns:
   before provisioning. Include launcher preference, `DOCKER_HOST`, Docker
   contexts, and known Docker-compatible provider sockets as candidates, then
   mark a candidate usable only after a Docker API probe succeeds.
+- Reachable endpoint candidates should expose Docker's daemon ID when available.
+  Preserve endpoint aliases for preference and fallback; consumers may group
+  verified matching daemon IDs when deciding whether more than one runtime is
+  actually available. A missing daemon ID must not trigger a picker choice.
 - `DOCKER_HOST` parsing must preserve enough detail to diagnose Unix socket,
   named pipe, TCP, HTTP, HTTPS, and invalid host configurations.
 - Provider names such as Docker Desktop, Colima, OrbStack, Rancher Desktop, and
@@ -78,6 +82,9 @@ This scope owns:
   start it instead of offering a fresh download/setup path.
 - Linux automatic provisioning uses the host package manager and starts native
   Docker Engine; it must not manage container CPU, memory, or disk sizing.
+  Before native setup, recognize an installed stopped Docker Desktop through
+  its user service or `/opt/docker-desktop`, start it with the unprivileged user
+  service, and return its `~/.docker/desktop/docker.sock` endpoint.
 - Linux privileged setup prefers `pkexec` for desktop authentication and may use
   `sudo -n` only when `pkexec` is absent and passwordless sudo is already
   available.

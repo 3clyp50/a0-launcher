@@ -537,9 +537,8 @@ export class DockerodeDocker extends DockerInterface {
     }
   }
 
-  async listLocalImages(imageRepo) {
-    const repo = (imageRepo || this.imageRepo).trim();
-    if (!repo) throw makeDockerInterfaceError('INVALID_INPUT', 'imageRepo is required');
+  async listLocalImages(imageRepo = '') {
+    const repo = String(imageRepo || '').trim();
 
     try {
       const images = await Promise.resolve(this.docker.listImages({ all: true }));
@@ -554,10 +553,11 @@ export class DockerodeDocker extends DockerInterface {
 
         for (const rt of repoTags) {
           if (typeof rt !== 'string') continue;
-          if (!rt.startsWith(`${repo}:`)) continue;
+          if (repo && !imageRefMatchesRepo(rt, repo)) continue;
           results.push({
             imageRef: rt,
-            tag: rt.slice(repo.length + 1),
+            imageRepo: imageRepoFromRef(rt),
+            tag: tagFromRef(rt),
             imageId: id,
             sizeBytes,
             createdAt: createdAtMs,
@@ -568,7 +568,7 @@ export class DockerodeDocker extends DockerInterface {
 
       return results;
     } catch (error) {
-      throw normalizeDockerError(error, { op: 'listLocalImages', repo, env: this.#envSummary() });
+      throw normalizeDockerError(error, { op: 'listLocalImages', repo: repo || null, env: this.#envSummary() });
     }
   }
 
@@ -1008,6 +1008,7 @@ export class DockerodeDocker extends DockerInterface {
           instanceName: typeof labels['a0.launcher.instanceName'] === 'string' ? labels['a0.launcher.instanceName'] : null,
           imageRef: image,
           imageSummaryRef: summaryImage,
+          isBackendImage: isRepoImage,
           imageId,
           tag,
           versionTag: tag,

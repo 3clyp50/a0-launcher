@@ -96,6 +96,11 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
 - `A0_LAUNCHER_USE_LOCAL_CONTENT=true` can use the current working directory as
   local content when it contains `app/index.html` and `package.json`.
 - Docker images default to `agent0ai/agent-zero`.
+- Tagged user images discovered in the selected Docker runtime may also create
+  local Instances; retain their exact repository and tag as Instance identity.
+- A saved runtime endpoint is a preference, not a lock: use it while reachable,
+  temporarily fall back to another reachable endpoint, and return to it later.
+  Explicitly starting or selecting a runtime makes that endpoint preferred.
 - Backend release metadata defaults to `agent0ai/agent-zero`.
 - `A0_BACKEND_IMAGE_REPO` and `A0_BACKEND_GITHUB_REPO` may override those repos
   for testing.

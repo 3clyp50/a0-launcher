@@ -216,6 +216,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     return ipcRenderer.invoke('docker-manager:activate', {
       tag,
       dataLossAck,
+      imageRef: typeof opts.imageRef === 'string' ? opts.imageRef : '',
       instanceName: typeof opts.instanceName === 'string' ? opts.instanceName : '',
       portMappings: typeof opts.portMappings === 'string' ? opts.portMappings : '',
       envText: typeof opts.envText === 'string' ? opts.envText : '',

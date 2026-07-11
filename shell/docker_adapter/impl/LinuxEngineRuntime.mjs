@@ -238,6 +238,7 @@ export class LinuxEngineRuntime extends RuntimeProvisioner {
     }
 
     options.onProgress?.('Runtime ready', 100);
+    return { endpoint: this.endpoint() };
   }
 
   async status() {

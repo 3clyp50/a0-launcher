@@ -27,7 +27,8 @@ test('version choices pin channels, include installed versions and hide testing'
     images: [
       { tag: 'main', imageRef: 'agent0ai/agent-zero:main' },
       { imageRef: 'agent0ai/agent-zero:local' },
-      { tag: 'latest', imageRef: 'agent0ai/agent-zero:latest' }
+      { tag: 'latest', imageRef: 'agent0ai/agent-zero:latest' },
+      { tag: 'latest', imageRef: 'my-agent-zero:latest', imageRepo: 'my-agent-zero', isBackendImage: false }
     ]
   });
 
@@ -35,9 +36,11 @@ test('version choices pin channels, include installed versions and hide testing'
     'latest',
     'ready',
     'v1.20',
+    'latest',
     'local',
     'main'
   ]);
+  assert.equal(choices[3].imageRef, 'my-agent-zero:latest');
 });
 
 test('channel pull defaults only when missing or stale', () => {

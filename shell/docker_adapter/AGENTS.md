@@ -62,6 +62,8 @@ This scope owns:
   for platform setup phases such as authorization, component download, Docker
   Engine install/start, follow-up/relogin, and Docker Desktop waiting. Keep the
   messages stable enough for Docker Manager to normalize into modal steps.
+- Runtime start and provision results should report the Docker endpoint they
+  made reachable so the product layer can remember an explicit user choice.
 - Renderer-visible runtime assessment labels and details should use `Setup`,
   not `Set up`, `Set Up`, or `Setting up`; internal field names may remain
   `setup`.
@@ -161,6 +163,8 @@ This scope owns:
 - Docker image removal should default to non-forced deletion so callers preserve
   Docker's native protection for images still referenced by containers. Forced
   removal must be an explicit option.
+- Local image inventory may be repository-scoped or runtime-wide. Runtime-wide
+  discovery must preserve every tagged image's full repository and tag.
 - Container commit support is a low-level snapshot primitive for product-layer
   clone workflows. Keep clone naming, labels, and port-policy decisions in
   `shell/docker_manager`.

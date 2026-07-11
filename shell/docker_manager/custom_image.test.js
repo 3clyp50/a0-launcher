@@ -6,6 +6,7 @@ const dockerManager = require('./index');
 const {
   developerContainerName,
   defaultManagedInstanceName,
+  activationImageSpec,
   normalizeActivationOptions,
   normalizeCustomImageOptions
 } = dockerManager._test;
@@ -36,6 +37,15 @@ test('custom non-Agent-Zero image tags stay literal', () => {
 
   assert.equal(custom.tag, '2.0');
   assert.equal(custom.imageRef, 'example/widget:2.0');
+});
+
+test('activation retains the exact selected local image reference', () => {
+  assert.deepEqual(activationImageSpec('latest', 'my-agent-zero:latest'), {
+    imageRepo: 'my-agent-zero',
+    tag: 'latest',
+    imageRef: 'my-agent-zero:latest'
+  });
+  assert.equal(activationImageSpec('2.0', 'agent0ai/agent-zero:2.0').imageRef, 'agent0ai/agent-zero:2.0');
 });
 
 test('developer container name matches the requested Instance name', () => {

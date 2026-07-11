@@ -132,6 +132,7 @@ test('installed and differing version cards can expose remove control', () => {
   assert.equal(canRemoveEntry({ availability: 'available' }), false);
   assert.equal(canRemoveEntry({ availability: 'installing' }), false);
   assert.equal(canRemoveEntry({ availability: 'available', differsFromPublished: true }), true);
+  assert.equal(canRemoveEntry({ availability: 'installed', isBackendImage: false }), false);
 });
 
 test('installed filter keeps local or in-progress versions only', () => {

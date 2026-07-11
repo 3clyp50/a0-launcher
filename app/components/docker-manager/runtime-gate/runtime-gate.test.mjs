@@ -587,6 +587,44 @@ test('runtime selector appears for multiple endpoints and submits before image i
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
 });
 
+test('first launch asks once when multiple runtimes are already reachable', () => {
+  let document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: true,
+    runtime: {
+      platform: 'darwin',
+      state: 'ready',
+      selectedRuntimeEndpointId: 'runtime-docker'
+    },
+    environment: {
+      runtimeCandidates: [
+        { id: 'runtime-docker', label: 'Docker Desktop', source: 'known_socket', available: true, isSelected: true },
+        { id: 'runtime-orbstack', label: 'OrbStack', source: 'known_socket', available: true, isSelected: false }
+      ]
+    },
+    versions: [{ id: 'v2.0', displayVersion: '2.0', availability: 'installed' }]
+  };
+
+  assert.equal(shouldShowRuntimeGate(state), true);
+  renderRuntimeGate(state, {});
+  assert.ok(document.querySelector('#runtimeEndpointChoice'));
+
+  document = installDom();
+  const preferred = {
+    ...state,
+    environment: {
+      ...state.environment,
+      runtimeCandidates: state.environment.runtimeCandidates.map((candidate, index) => ({
+        ...candidate,
+        source: index === 0 ? 'preference' : candidate.source
+      }))
+    }
+  };
+  assert.equal(shouldShowRuntimeGate(preferred), false);
+  assert.equal(renderRuntimeGate(preferred, {}), false);
+});
+
 test('manual and relogin states stay blocked with recovery actions', () => {
   let document = installDom();
   const manual = {

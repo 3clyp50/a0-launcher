@@ -531,6 +531,40 @@ test('DockerInterface falls back when a persisted runtime endpoint is stale', as
   assert.equal(env.runtimeCandidates.find((candidate) => candidate.label === 'Docker Engine')?.isSelected, true);
 });
 
+test('DockerInterface falls back without forgetting the preferred runtime', async () => {
+  const options = {
+    platform: 'darwin',
+    runtimePreference: {
+      id: 'runtime-docker-desktop',
+      label: 'Docker Desktop',
+      provider: 'docker_desktop',
+      dockerHost: 'unix:///Users/a0/.docker/run/docker.sock'
+    },
+    discoverDockerContexts: false,
+    candidateHosts: [
+      { provider: 'docker_desktop', label: 'Docker Desktop', dockerHost: 'unix:///Users/a0/.docker/run/docker.sock' },
+      { provider: 'orbstack', label: 'OrbStack', dockerHost: 'unix:///Users/a0/.orbstack/run/docker.sock' }
+    ]
+  };
+
+  const fallback = await DockerInterface.detectEnvironment({
+    ...options,
+    dockerodeClass: fakeDockerodeClass(['/Users/a0/.orbstack/run/docker.sock'])
+  });
+  assert.equal(fallback.dockerFlavor, 'orbstack');
+  assert.equal(fallback.runtimeCandidates.find((candidate) => candidate.source === 'preference')?.available, false);
+
+  const recovered = await DockerInterface.detectEnvironment({
+    ...options,
+    dockerodeClass: fakeDockerodeClass([
+      '/Users/a0/.docker/run/docker.sock',
+      '/Users/a0/.orbstack/run/docker.sock'
+    ])
+  });
+  assert.equal(recovered.dockerFlavor, 'docker_desktop');
+  assert.equal(recovered.runtimeCandidates.find((candidate) => candidate.source === 'preference')?.isSelected, true);
+});
+
 test('DockerInterface parses Docker context endpoints into provider-labeled candidates', async () => {
   const env = await DockerInterface.detectEnvironment({
     platform: 'darwin',
@@ -694,6 +728,24 @@ test('LinuxEngineRuntime assess allows passwordless sudo when pkexec is absent',
 
     assert.equal(assessment.state, 'not_provisioned');
     assert.equal(assessment.packageManager, 'apt');
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('LinuxEngineRuntime start reports the endpoint selected by the user action', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  try {
+    const runtime = new LinuxEngineRuntime({
+      managedDir,
+      isRoot: false,
+      probeNativeSocket: async () => 'OK',
+      runCommand: fakeLinuxCommandRunner({ passwordlessSudo: true })
+    });
+
+    const result = await runtime.start();
+
+    assert.equal(result.endpoint.dockerHost, 'unix:///var/run/docker.sock');
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }

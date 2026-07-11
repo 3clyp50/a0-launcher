@@ -660,6 +660,19 @@ function assertCustomImageSpec(options = {}) {
   };
 }
 
+function activationImageSpec(tag, imageRef = '') {
+  const selected = String(imageRef || '').trim();
+  if (!selected) {
+    const imageRepo = getBackendImageRepo();
+    const safeTag = assertTagAllowedForActivate(tag);
+    return { imageRepo, tag: safeTag, imageRef: imageRefForTag(imageRepo, safeTag) };
+  }
+  const parts = splitImageAndTag(selected, '');
+  const imageRepo = assertCustomImageRepo(parts.image);
+  const safeTag = assertTagAllowedForActivate(assertCustomImageTag(parts.tag));
+  return { imageRepo, tag: safeTag, imageRef: imageRefForTag(imageRepo, safeTag) };
+}
+
 function normalizeCustomImageTag(imageRepo, tag) {
   const t = String(tag || '').trim();
   if ((imageRepo === DEFAULT_IMAGE_REPO || imageRepo === getBackendImageRepo()) && /^\d+\.\d+(?:\.\d+)?$/.test(t)) return `v${t}`;
@@ -4084,6 +4097,30 @@ async function selectRuntimeEndpoint(id) {
   return preference;
 }
 
+async function rememberStartedRuntime(endpoint = null) {
+  const dockerHost = String(endpoint?.dockerHost || '').trim();
+  if (!dockerHost) return false;
+  try {
+    resetDocker();
+    const docker = await getManagedDocker(getBackendImageRepo(), { forceRefresh: true });
+    const env = await docker.getEnvironment();
+    const candidate = (Array.isArray(env?.runtimeCandidates) ? env.runtimeCandidates : [])
+      .find((item) => item?.available === true && item?.dockerHost === dockerHost);
+    if (!candidate) return false;
+    await stateStore.writeRuntimeEndpointPreference({
+      id: candidate.id,
+      dockerHost: candidate.dockerHost,
+      label: candidate.label,
+      provider: candidate.provider
+    });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    resetDocker();
+  }
+}
+
 async function provisionRuntime() {
   requireNoRunningOperation();
   const opId = beginOperation('runtime_setup', null);
@@ -4131,12 +4168,14 @@ async function provisionRuntime() {
           onProgress: reportRuntimeProgress
         });
         if (await finishRuntimeFollowup(result, assessment)) return;
+        await rememberStartedRuntime(result?.endpoint);
       } else if (assessment?.state === 'not_provisioned' || assessment?.state === 'needs_group_membership') {
         const result = await provisioner.provision({
           signal: controller.signal,
           onProgress: reportRuntimeProgress
         });
         if (await finishRuntimeFollowup(result, assessment)) return;
+        await rememberStartedRuntime(result?.endpoint);
       } else if (assessment?.state === 'needs_relogin') {
         const err = new Error(assessment.detail || 'Log out and back in once, then return here.');
         err.code = 'RUNTIME_NEEDS_RELOGIN';
@@ -5662,8 +5701,7 @@ async function activateRetainedInstance(containerId, dataLossAck) {
 }
 
 async function activateTag(tag, dataLossAck, options = {}) {
-  const imageRepo = getBackendImageRepo();
-  const t = assertTagAllowedForActivate(tag);
+  const { imageRepo, tag: t, imageRef } = activationImageSpec(tag, options?.imageRef);
   const ack = dataLossAck ? assertDataLossAck(dataLossAck) : 'proceed_without_backup';
   const activationOptions = normalizeActivationOptions(options, t);
   const shouldRememberCredentials =
@@ -5688,7 +5726,7 @@ async function activateTag(tag, dataLossAck, options = {}) {
       }
 
       const localImages = await docker.listLocalImages(imageRepo);
-      const hasTag = (localImages || []).some((img) => img && typeof img.tag === 'string' && img.tag === t);
+      const hasTag = (localImages || []).some((img) => img?.imageRef === imageRef);
       if (!hasTag) {
         const err = new Error('Version is not installed');
         err.code = 'NOT_INSTALLED';
@@ -5888,11 +5926,14 @@ async function getDockerInventory() {
 
   try {
     const results = await Promise.all([
-      docker.listLocalImages(imageRepo),
+      docker.listLocalImages(),
       docker.listContainers(imageRepo),
       docker.listVolumes()
     ]);
-    images = Array.isArray(results[0]) ? results[0] : [];
+    images = (Array.isArray(results[0]) ? results[0] : []).map((image) => ({
+      ...image,
+      isBackendImage: String(image?.imageRepo || '').trim() === imageRepo
+    }));
     containers = applyLocalInstanceIdentity(
       await enrichContainersWithWorkspaceStorage(
         docker,
@@ -6115,6 +6156,7 @@ module.exports = {
     restoreAgentZeroBackupZip,
     defaultManagedInstanceName,
     normalizeActivationOptions,
+    activationImageSpec,
     normalizeCustomImageOptions,
     developerContainerName,
     localImageIdForTag,

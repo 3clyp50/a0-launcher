@@ -42,6 +42,9 @@ This scope owns:
   repositories and tags. Validate image names, tags, environment variables,
   port mappings, and mounts before Dockerode sees them; label created containers
   with `a0.launcher.role=developer` so the Instances tab can manage them.
+- Runtime-wide local image discovery feeds the Create local Instance picker.
+  Creating from a user image must carry its exact repository and tag into the
+  container configuration and launcher labels.
 - UI URLs should be derived from inspected port bindings and verified where
   practical before opening.
 - Containers may be enriched with bounded runtime source metadata from the
@@ -118,6 +121,9 @@ This scope owns:
   preference. It may be set from the setup modal when multiple usable endpoints
   are detected, and all Docker Manager operations should continue through the
   selected endpoint while it remains reachable.
+- If that preference is unavailable, use another reachable endpoint without
+  overwriting it. Explicitly selecting, starting, or provisioning an endpoint
+  replaces the preference after the endpoint is confirmed reachable.
 - Retention policy is stored as a retained-instance count.
 - Remote instances must normalize and validate URLs before persistence. Their
   optional saved `color` field uses the same bounded palette IDs as local

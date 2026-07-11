@@ -32,11 +32,11 @@ function parseReleaseTagParts(tag) {
 }
 
 function isLatestEntry(entry) {
-  return entry?.tag === "latest";
+  return entry?.isBackendImage !== false && entry?.tag === "latest";
 }
 
 function isReadyEntry(entry) {
-  return entry?.tag === "ready";
+  return entry?.isBackendImage !== false && entry?.tag === "ready";
 }
 
 function isPinnedChannelEntry(entry) {
@@ -44,7 +44,7 @@ function isPinnedChannelEntry(entry) {
 }
 
 function isTestingEntry(entry) {
-  return entry?.tag === "testing";
+  return entry?.isBackendImage !== false && entry?.tag === "testing";
 }
 
 function isHiddenEntry(entry) {
@@ -250,12 +250,15 @@ function normalizeVersionEntries(state) {
     const knownTags = new Set(entries.map((entry) => entry.tag));
     for (const img of images) {
       const tag = img?.tag || img?.imageRef || "";
-      if (!tag || knownTags.has(tag)) continue;
-      knownTags.add(tag);
+      const key = img?.isBackendImage === false ? img?.imageRef : tag;
+      if (!tag || !key || knownTags.has(key)) continue;
+      knownTags.add(key);
       entries.push({
         tag,
-        title: tag,
+        title: img?.isBackendImage === false ? img?.imageRef || tag : tag,
         imageRef: img?.imageRef || "",
+        imageRepo: img?.imageRepo || "",
+        isBackendImage: img?.isBackendImage !== false,
         category: "local_build",
         availability: "installed",
         isActive: !!img?.isActive,
@@ -271,8 +274,10 @@ function normalizeVersionEntries(state) {
 
   return images.map((img) => ({
     tag: img?.tag || img?.imageRef || "unknown",
-    title: img?.tag || img?.imageRef || "unknown",
+    title: img?.isBackendImage === false ? img?.imageRef || "unknown" : img?.tag || img?.imageRef || "unknown",
     imageRef: img?.imageRef || "",
+    imageRepo: img?.imageRepo || "",
+    isBackendImage: img?.isBackendImage !== false,
     availability: "installed",
     isActive: !!img?.isActive,
     publishedAt: img?.createdAt || null,
@@ -353,7 +358,7 @@ function actionsForEntry(entry, state, entries = []) {
 }
 
 function canRemoveEntry(entry) {
-  if (!entry || entry.availability === "installing") return false;
+  if (!entry || entry.isBackendImage === false || entry.availability === "installing") return false;
   return entry.availability === "installed" || entry.availability === "update_available" || !!entry.differsFromPublished;
 }
 

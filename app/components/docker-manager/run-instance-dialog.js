@@ -132,11 +132,11 @@ function tagFromImageRef(value) {
 }
 
 function isLatestEntry(entry) {
-  return entry?.tag === "latest";
+  return entry?.isBackendImage !== false && entry?.tag === "latest";
 }
 
 function isReadyEntry(entry) {
-  return entry?.tag === "ready";
+  return entry?.isBackendImage !== false && entry?.tag === "ready";
 }
 
 function isChannelVersionChoice(entry = {}) {
@@ -144,7 +144,7 @@ function isChannelVersionChoice(entry = {}) {
 }
 
 function isTestingEntry(entry) {
-  return entry?.tag === "testing";
+  return entry?.isBackendImage !== false && entry?.tag === "testing";
 }
 
 function releaseTagIsNewer(candidate, current) {
@@ -207,7 +207,9 @@ function normalizeVersionChoice(entry = {}) {
     publishedAt: entry.publishedAt || null,
     updatedAt: entry.updatedAt || null,
     createdAt: entry.createdAt || null,
-    imageRef: entry.imageRef || ""
+    imageRef: entry.imageRef || "",
+    imageRepo: entry.imageRepo || "",
+    isBackendImage: entry.isBackendImage !== false
   };
 }
 
@@ -216,14 +218,15 @@ function installedVersionChoices(state = {}) {
   const seen = new Set();
   const addChoice = (entry) => {
     const choice = normalizeVersionChoice(entry);
-    if (!choice || seen.has(choice.tag) || isTestingEntry(choice)) return;
+    const key = choice?.isBackendImage === false ? choice.imageRef : choice?.tag;
+    if (!choice || !key || seen.has(key) || isTestingEntry(choice)) return;
     if (choice.availability === "installing") return;
     if (isChannelVersionChoice(choice)) {
       if (choice.installability === "not_yet_available") return;
     } else if (!isInstalledRunEntry(choice)) {
       return;
     }
-    seen.add(choice.tag);
+    seen.add(key);
     choices.push(choice);
   };
 
@@ -249,11 +252,13 @@ function installedVersionChoices(state = {}) {
     const tag = String(image?.tag || tagFromImageRef(image?.imageRef) || "").trim();
     addChoice({
       tag,
-      title: tag || image?.imageRef || "",
+      title: image?.isBackendImage === false ? image?.imageRef || tag : tag || image?.imageRef || "",
       availability: "installed",
       category: image?.category || "local_build",
       isActive: !!image?.isActive,
       imageRef: image?.imageRef || "",
+      imageRepo: image?.imageRepo || "",
+      isBackendImage: image?.isBackendImage !== false,
       createdAt: image?.createdAt || null
     });
   }
@@ -288,10 +293,11 @@ function createLocalInstanceButtonModel(state = {}) {
 
 function versionOptionsHtml(choices, selectedTag) {
   return choices.map((choice) => {
+    const value = choice.isBackendImage === false ? choice.imageRef : choice.tag;
     const label = choice.imageRef && choice.category === "local_build"
       ? `${choice.title} - local`
       : choice.title;
-    return `<option value="${escapeAttribute(choice.tag)}"${choice.tag === selectedTag ? " selected" : ""}>${escapeHtml(label)}</option>`;
+    return `<option value="${escapeAttribute(value)}"${choice.tag === selectedTag || value === selectedTag ? " selected" : ""}>${escapeHtml(label)}</option>`;
   }).join("");
 }
 
@@ -299,7 +305,9 @@ function selectedChoiceFromDialog(dialog, fallbackEntry, choices = []) {
   const select = dialog?.querySelector?.("#activateInstanceVersion");
   const selectedTag = String(select?.value || "").trim();
   if (!selectedTag) return fallbackEntry || null;
-  const found = (Array.isArray(choices) ? choices : []).find((choice) => choice?.tag === selectedTag);
+  const found = (Array.isArray(choices) ? choices : []).find((choice) =>
+    (choice?.isBackendImage === false ? choice?.imageRef : choice?.tag) === selectedTag
+  );
   if (found) return found;
   return {
     ...(fallbackEntry || {}),
@@ -525,6 +533,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
     }
     const envText = mergeGeneratedEnvText(authEnvLinesFromValues({ username, password }), envResult.value || "");
     const options = {
+      imageRef: selectedEntry?.imageRef || "",
       instanceName: nameInput?.value || "",
       portMappings: portInput?.value || "0:80",
       envText,

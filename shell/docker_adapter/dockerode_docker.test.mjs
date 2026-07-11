@@ -178,6 +178,28 @@ test('listContainers includes legacy Agent Zero install-script containers by lab
   assert.equal(container.labels['ai.agent0.managed'], 'true');
 });
 
+test('listLocalImages can discover tagged images from every local repository', async () => {
+  const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
+  docker.docker = {
+    listImages: async () => [
+      {
+        Id: 'sha256:custom',
+        RepoTags: ['my-agent-zero:dev', 'registry.local:5000/team/agent:latest'],
+        RepoDigests: [],
+        Size: 123,
+        Created: 1781760000
+      }
+    ]
+  };
+
+  const images = await docker.listLocalImages();
+
+  assert.deepEqual(images.map(({ imageRef, imageRepo, tag }) => ({ imageRef, imageRepo, tag })), [
+    { imageRef: 'my-agent-zero:dev', imageRepo: 'my-agent-zero', tag: 'dev' },
+    { imageRef: 'registry.local:5000/team/agent:latest', imageRepo: 'registry.local:5000/team/agent', tag: 'latest' }
+  ]);
+});
+
 test('readContainerTextFile extracts text from a Docker archive', async () => {
   const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
   docker.docker = {

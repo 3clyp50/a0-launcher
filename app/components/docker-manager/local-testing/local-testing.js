@@ -145,6 +145,7 @@ function instanceUpdateModel(c, state = {}) {
 }
 
 function instanceVisualBadge(c) {
+  if (c?.isBackendImage === false) return imageTagForContainer(c);
   const sourceTag = releaseTagLabel(runtimeTag(c));
   if (sourceTag) return sourceTag;
 
@@ -158,6 +159,7 @@ function instanceVisualBadge(c) {
 }
 
 function dockerInstanceRuntimeSummary(c) {
+  if (c?.isBackendImage === false && c?.imageRef) return c.imageRef;
   const imageTag = imageTagForContainer(c);
   const branch = releaseTagLabel(runtimeTag(c)) || (isReleaseTag(imageTag) ? releaseTagLabel(imageTag) : runtimeBranch(c));
   const shortCommit = runtimeShortCommit(c);

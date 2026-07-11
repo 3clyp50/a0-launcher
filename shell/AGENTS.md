@@ -131,6 +131,9 @@ This scope owns:
 - Runtime setup IPC is a named Docker Manager intent. The renderer may request
   setup/start, but assessment and privileged mechanics stay in
   `shell/docker_manager` and `shell/docker_adapter`.
+- Runtime preferences are soft. Endpoint detection must fall back when the
+  preferred endpoint is unavailable without deleting the preference; a runtime
+  explicitly started by the user becomes the new preferred endpoint.
 - Docker Hub sign-in recovery is a named shell-owned intent. The renderer may
   request it, but `shell/main.js` must launch a visible wrapper around the real
   `docker login` flow instead of exposing generic command execution.
@@ -138,6 +141,9 @@ This scope owns:
   pass image, tag, environment, port, mount, and pull preferences, but shell code
   must keep validation and Docker execution behind `shell/docker_manager`; do not
   add generic shell or Docker command IPC.
+- Create local Instance may select any tagged image discovered in the active
+  Docker runtime. Preserve and validate the full image reference through IPC so
+  same-tag images from different repositories cannot collapse together.
 - Docker CLI discovery for that sign-in flow should honor explicit
   `A0_DOCKER_CLI_PATH` or `DOCKER_CLI_PATH` overrides, then `PATH`, then known
   Docker Desktop, Homebrew, Linux package, and Snap locations before failing.

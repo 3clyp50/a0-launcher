@@ -3002,6 +3002,7 @@ function sanitizeDockerManagerState(state) {
       if (instanceColor) out.instanceColor = instanceColor;
     }
     if (typeof c.imageRef === 'string') out.imageRef = c.imageRef;
+    if (typeof c.isBackendImage === 'boolean') out.isBackendImage = c.isBackendImage;
     if (typeof c.tag === 'string') out.tag = c.tag;
     if (typeof c.versionTag === 'string') out.versionTag = c.versionTag;
     {
@@ -3768,6 +3769,7 @@ ipcMain.handle('docker-manager:activate', async (_event, body) => {
     const tag = typeof body.tag === 'string' ? body.tag : '';
     const dataLossAck = typeof body.dataLossAck === 'string' ? body.dataLossAck : '';
     const options = {
+      imageRef: typeof body.imageRef === 'string' ? body.imageRef : '',
       instanceName: typeof body.instanceName === 'string' ? body.instanceName : '',
       portMappings: typeof body.portMappings === 'string' ? body.portMappings : '',
       envText: typeof body.envText === 'string' ? body.envText : '',

@@ -96,8 +96,10 @@ This scope owns:
   should use `Continue`.
 - If two or more usable local runtime endpoints are detected during setup
   completion, the same modal may show a compact `Run Agent Zero with` selector.
-  Hide that selector for zero or one usable endpoint, and do not add a runtime
-  picker to Settings or the global chrome.
+  The same one-time selector should appear on first launch when multiple
+  endpoints are already reachable and no preference exists. Hide it for zero
+  or one usable endpoint, and do not add a runtime picker to Settings or the
+  global chrome.
 - Post-runtime image installs, activation, rollback, start, stop, and delete
   progress should use the centered operation modal rather than a top-page
   status strip. Updating an already-installed Version from Versions should keep
@@ -188,6 +190,9 @@ This scope owns:
   renderer-inferred runtime guesses.
 - The Instances tab owns both local Docker containers and saved remote
   instances. Visible copy must say `Instances`, not `Sessions`.
+  Runtime-wide tagged images, including images created in Docker Desktop or
+  another selected Docker runtime, may be chosen by their full repository and
+  tag; that identity must remain visible on the resulting Instance card.
   When the first inventory has loaded and there are no local or saved remote
   Instances, show a centered Create local Instance action that opens the normal
   creation dialog.

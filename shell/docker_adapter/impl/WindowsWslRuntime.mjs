@@ -79,24 +79,23 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     }
     if (assessment?.mode === 'wsl_engine' && assessment.state === 'not_provisioned') {
       await this.#installAndStartWslDocker(assessment.distro, options);
-      return;
+      return { endpoint: this.endpoint() };
     }
     if (assessment?.mode === 'wsl_bridge_dependency' && assessment.state === 'not_provisioned') {
       await this.#installWslBridgeDependencies(assessment.distro, options);
       await this.#configureAndStartWslDocker(assessment.distro);
       await this._ensureProxy({ distro: assessment.distro });
-      return;
+      return { endpoint: this.endpoint() };
     }
     if (assessment?.mode === 'wsl_engine' && assessment.state === 'engine_stopped') {
       options.onProgress?.('Starting WSL Docker Engine');
       await this.#configureAndStartWslDocker(assessment.distro);
       await this._ensureProxy({ distro: assessment.distro });
-      return;
+      return { endpoint: this.endpoint() };
     }
     if (assessment?.mode === 'docker_desktop' && assessment.state === 'engine_stopped') {
       options.onProgress?.('Starting Docker Desktop');
-      await this.#startDockerDesktop(options);
-      return;
+      return await this.#startDockerDesktop(options);
     }
     throw makeError('RUNTIME_UNSUPPORTED', assessment.detail, this.#manualDetails(assessment));
   }
@@ -107,12 +106,11 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       options.onProgress?.('Starting WSL Docker Engine');
       await this.#configureAndStartWslDocker(assessment.distro);
       await this._ensureProxy({ distro: assessment.distro });
-      return;
+      return { endpoint: this.endpoint() };
     }
     if (assessment?.mode === 'docker_desktop') {
       options.onProgress?.('Starting Docker Desktop');
-      await this.#startDockerDesktop(options);
-      return;
+      return await this.#startDockerDesktop(options);
     }
     throw makeError('RUNTIME_UNSUPPORTED', assessment.detail, this.#manualDetails(assessment));
   }
@@ -513,6 +511,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     if (!ready) {
       throw makeError('RUNTIME_START_FAILED', 'Docker Desktop started, but Docker did not become reachable.');
     }
+    return { endpoint: { kind: 'npipe', dockerHost: 'npipe:////./pipe/docker_engine' } };
   }
 
   async #waitForDockerDesktopPipe(signal, timeoutMs = 120000) {

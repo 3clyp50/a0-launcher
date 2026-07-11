@@ -39,6 +39,8 @@ This scope owns:
   affordance to add a remote Instance. Saved remote Instances must keep the
   launcher usable without local Docker setup. Docker mechanics stay in the
   shell.
+- When first launch finds multiple reachable local runtimes and no saved
+  preference, show the existing compact runtime selector once before continuing.
 - The setup capability slideshow is for the long Agent Zero image pull/extract
   wait, not for Docker runtime setup or short install preflight checks.
 - When runtime setup completes, the same modal shell owns the next step without
@@ -47,6 +49,8 @@ This scope owns:
   continue if an Instance already exists.
 - First Instance launch settings belong in the normal Create local Instance
   dialog, including model, storage, port, environment, and credential options.
+  Its image picker may include any tagged image from the active Docker runtime
+  and must submit the exact repository and tag selected by the user.
   The first Agent Zero image pull operation modal should stay focused on
   progress and setup showcase content instead of adding a second launch form.
 - Long-running non-runtime Docker operations should use the same centered modal

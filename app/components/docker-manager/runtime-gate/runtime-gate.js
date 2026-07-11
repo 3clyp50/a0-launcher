@@ -324,9 +324,19 @@ function shouldShowRuntimeSuccess(state = {}) {
   return acknowledgedRuntimeSetupKey !== runtimeSetupKey(state.progress);
 }
 
+function shouldChooseRuntime(state = {}) {
+  const candidates = Array.isArray(state?.runtime?.runtimeCandidates)
+    ? state.runtime.runtimeCandidates
+    : Array.isArray(state?.environment?.runtimeCandidates) ? state.environment.runtimeCandidates : [];
+  return isRuntimeReady(state) &&
+    runtimeEndpointOptions(state).length >= 2 &&
+    !candidates.some((candidate) => candidate?.source === "preference");
+}
+
 function shouldShowRuntimeGate(state = {}) {
   if (!state?.stateLoaded) return false;
   if (hasRemoteInstances(state)) return false;
+  if (shouldChooseRuntime(state)) return true;
   if (shouldShowRuntimeSuccess(state)) return true;
   return !isRuntimeReady(state);
 }
@@ -335,7 +345,7 @@ function normalizedRuntimeGate(state = {}) {
   const runtime = state?.runtime || null;
   const progress = state?.progress?.type === "runtime_setup" ? state.progress : null;
   const kind = runtimeKind(runtime);
-  const success = shouldShowRuntimeSuccess(state);
+  const success = shouldShowRuntimeSuccess(state) || shouldChooseRuntime(state);
   const rawStatus = asText(progress?.status) || "idle";
   const completedButStillBlocked = rawStatus === "completed" && !success && !isRuntimeReady(state);
   const status = completedButStillBlocked ? "idle" : rawStatus;

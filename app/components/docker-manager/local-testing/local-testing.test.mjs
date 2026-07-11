@@ -88,6 +88,19 @@ test('instance chips prefer Git release tags over channel labels', () => {
   );
 });
 
+test('custom image identity remains visible after an in-container update', () => {
+  const instance = {
+    imageRef: 'my-agent-zero:dev',
+    versionTag: 'dev',
+    isBackendImage: false,
+    runtimeTag: 'v2.0',
+    runtimeShortCommit: 'abcdef123456'
+  };
+
+  assert.equal(instanceVisualBadge(instance), 'dev');
+  assert.equal(dockerInstanceRuntimeSummary(instance), 'my-agent-zero:dev');
+});
+
 test('channel instance chips show matched concrete release without channel text', () => {
   assert.equal(
     instanceVisualBadge({

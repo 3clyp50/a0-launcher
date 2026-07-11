@@ -375,11 +375,11 @@ export class DockerInterface {
   }
 
   /**
-   * List local images for an image repo (DI-007).
-   * @param {string} imageRepo
+   * List local images, optionally limited to one image repo (DI-007).
+   * @param {string=} imageRepo
    * @returns {Promise<Object[]>}
    */
-  async listLocalImages(_imageRepo) {
+  async listLocalImages(_imageRepo = '') {
     throw new Error('DockerInterface.listLocalImages is abstract');
   }
 

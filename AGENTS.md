@@ -58,6 +58,10 @@ Architecture contracts:
 - `shell/docker_adapter/` is the generic Docker and Docker Hub abstraction.
 - Renderer code requests intent; shell code owns privilege; Docker adapter code
   owns Docker mechanics.
+- Launcher Host access is an outbound, tab-leased `a0 gateway` child supervised
+  by the Electron shell. It is not an inbound app server or background daemon:
+  close, detach, destroyed web contents, and app cleanup end the lease, while
+  Launcher-home selection and in-tab reload keep it alive.
 
 Runtime and release contracts:
 
@@ -178,6 +182,11 @@ Security and boundaries:
   surface.
 - Keep Electron windows secure: `contextIsolation: true`, `nodeIntegration:
   false`, and `sandbox: true` unless there is a documented reason.
+- Host gateway credentials remain shell-owned and may reach the CLI only as
+  ephemeral environment variables. Gateway processes use the existing
+  authenticated Agent Zero connector protocol and are capability-gated; do not
+  add generic renderer execution IPC, inbound listeners, or a second host-tool
+  protocol.
 
 ## Work Guidance
 

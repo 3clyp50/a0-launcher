@@ -1,0 +1,132 @@
+const DEFAULT_HOST_ACCESS_SCOPES = Object.freeze({
+  files: true,
+  code_execution: true,
+  browser: true,
+  computer_use: true
+});
+
+function normalizeHostAccessScopes(value, fallback = DEFAULT_HOST_ACCESS_SCOPES) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const base = fallback && typeof fallback === 'object' ? fallback : DEFAULT_HOST_ACCESS_SCOPES;
+  const scopes = {
+    files: typeof source.files === 'boolean' ? source.files : Boolean(base.files),
+    code_execution: typeof source.code_execution === 'boolean'
+      ? source.code_execution
+      : Boolean(base.code_execution),
+    browser: typeof source.browser === 'boolean' ? source.browser : Boolean(base.browser),
+    computer_use: typeof source.computer_use === 'boolean'
+      ? source.computer_use
+      : Boolean(base.computer_use)
+  };
+  if (!scopes.files) scopes.code_execution = false;
+  return scopes;
+}
+
+function normalizeHostFolder(value) {
+  const folder = String(value || '').trim();
+  if (!folder || folder.includes('\u0000') || /[\r\n]/.test(folder)) return '';
+  return folder.slice(0, 4096);
+}
+
+function normalizeBrowserSelection(value) {
+  return String(value || '').trim().replace(/[\r\n\0]/g, '').slice(0, 512);
+}
+
+function normalizeInstallationId(value) {
+  const id = String(value || '').trim().slice(0, 128);
+  return /^[A-Za-z0-9._:-]+$/.test(id) ? id : '';
+}
+
+function hostAccessInstanceKey(kind, id) {
+  const type = kind === 'remote' ? 'remote' : 'local';
+  const cleanId = String(id || '').trim().slice(0, 256);
+  if (!cleanId || !/^[A-Za-z0-9._:-]+$/.test(cleanId)) return '';
+  return `${type}:${cleanId}`;
+}
+
+function normalizeHostAccessDefaults(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    configured: typeof source.configured === 'boolean' ? source.configured : true,
+    masterEnabled: typeof source.masterEnabled === 'boolean' ? source.masterEnabled : true,
+    folder: normalizeHostFolder(source.folder),
+    scopes: normalizeHostAccessScopes(source.scopes),
+    browserSelection: normalizeBrowserSelection(source.browserSelection)
+  };
+}
+
+function normalizeHostAccessInstance(value, { kind = 'local', defaults = null } = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const fallback = normalizeHostAccessDefaults(defaults);
+  const local = kind !== 'remote';
+  return {
+    configured: typeof source.configured === 'boolean'
+      ? source.configured
+      : local && fallback.configured,
+    masterEnabled: typeof source.masterEnabled === 'boolean'
+      ? source.masterEnabled
+      : fallback.masterEnabled,
+    folder: normalizeHostFolder(source.folder || (local ? fallback.folder : '')),
+    scopes: normalizeHostAccessScopes(source.scopes, fallback.scopes),
+    browserSelection: normalizeBrowserSelection(
+      source.browserSelection || (local ? fallback.browserSelection : '')
+    )
+  };
+}
+
+function normalizeHostAccessSettings(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const defaults = normalizeHostAccessDefaults(source.defaults);
+  const instances = {};
+  const rawInstances = source.instances && typeof source.instances === 'object' && !Array.isArray(source.instances)
+    ? source.instances
+    : {};
+  for (const [key, config] of Object.entries(rawInstances)) {
+    const separator = key.indexOf(':');
+    if (separator <= 0) continue;
+    const kind = key.slice(0, separator);
+    const id = key.slice(separator + 1);
+    const normalizedKey = hostAccessInstanceKey(kind, id);
+    if (!normalizedKey) continue;
+    instances[normalizedKey] = normalizeHostAccessInstance(config, {
+      kind: kind === 'remote' ? 'remote' : 'local',
+      defaults
+    });
+    if (Object.keys(instances).length >= 512) break;
+  }
+  return {
+    version: 1,
+    onboardingComplete: source.onboardingComplete === true,
+    installationId: normalizeInstallationId(source.installationId),
+    defaults,
+    instances
+  };
+}
+
+function resolveInstanceHostAccess(settings, { kind = 'local', id = '', folder = '' } = {}) {
+  const normalized = normalizeHostAccessSettings(settings);
+  const key = hostAccessInstanceKey(kind, id);
+  const saved = key ? normalized.instances[key] : null;
+  const config = normalizeHostAccessInstance(saved, { kind, defaults: normalized.defaults });
+  const resolvedFolder = normalizeHostFolder(folder) || config.folder;
+  return {
+    key,
+    kind: kind === 'remote' ? 'remote' : 'local',
+    ...config,
+    folder: resolvedFolder,
+    folderSource: normalizeHostFolder(folder) ? 'instance_workspace' : config.folder ? 'configured' : ''
+  };
+}
+
+module.exports = {
+  DEFAULT_HOST_ACCESS_SCOPES,
+  normalizeHostAccessScopes,
+  normalizeHostFolder,
+  normalizeBrowserSelection,
+  normalizeInstallationId,
+  hostAccessInstanceKey,
+  normalizeHostAccessDefaults,
+  normalizeHostAccessInstance,
+  normalizeHostAccessSettings,
+  resolveInstanceHostAccess
+};

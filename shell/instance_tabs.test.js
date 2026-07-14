@@ -196,7 +196,8 @@ test('makeTabsSnapshot exposes only sanitized tab fields', () => {
       instanceId: '',
       active: true,
       loading: false,
-      canReload: true
+      canReload: true,
+      hostAccess: { state: 'disconnected', connected: false }
     }],
     activeTabId: 'tab-1'
   });
@@ -224,7 +225,8 @@ test('makeTabsSnapshot supports launcher home with no active instance tab', () =
       instanceId: '',
       active: false,
       loading: false,
-      canReload: true
+      canReload: true,
+      hostAccess: { state: 'disconnected', connected: false }
     }],
     activeTabId: ''
   });

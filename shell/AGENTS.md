@@ -15,6 +15,10 @@ This scope owns:
   protocol, main windows, IPC handlers, shell actions, and Docker Manager event
   forwarding.
 - `shell/preload.js`: safe renderer bridge exposed through `contextBridge`.
+- `shell/host_access.js`: normalized Launcher Host access defaults, per-Instance
+  configuration, scope dependencies, and stable Instance keys.
+- `shell/host_gateway.js`: supervised, newline-delimited JSON bridge to the
+  installed `a0 gateway` child process.
 - `shell/loading.html`: loading/error shell while content initializes.
 - `shell/launcher_update.js`: launcher update version formatting and legacy
   platform release-asset selection helpers.
@@ -85,6 +89,26 @@ This scope owns:
   the user's external browser. Embedded and detached Agent Zero UI web contents
   should attach the same shell-owned edit context menu so selected text and
   editable fields keep normal copy/paste behavior.
+- Each eligible embedded Instance tab may own exactly one outbound `a0 gateway`
+  child. Start it only after the tab opens, keep it alive across Launcher-home
+  selection and in-tab reloads, and stop it on close, detach, destroyed web
+  contents, or application cleanup. A detached window never inherits ownership.
+  Graceful shutdown must be allowed to finish before Electron exits so remote
+  shell groups, browser sessions, Computer Use sessions, and the WebSocket are
+  not orphaned.
+- Launcher gateway supervision must use the installed CLI contract and JSONL
+  stdin/stdout; it must not open an inbound port or expose a generic process
+  surface through preload. Pass credentials only as ephemeral environment
+  variables, never arguments or renderer state. Capability-gate startup on both
+  `launcher_gateway` HTTP support and `launcher_gateway_control` WebSocket
+  support. Contract, authentication, and runtime exits stay stopped until an
+  explicit Retry; an emergency disconnect is suppressed until that tab closes.
+  Keep gateway identity stable for the Launcher installation across tabs,
+  preserve saved reverse-proxy base paths, reject URL credentials, and bound
+  JSONL input before it enters renderer state.
+- Embedded and detached Launcher-owned Agent Zero web contents must append
+  `A0-Launcher/<version>` to the user agent. This tag identifies the shell-owned
+  browsing surface; it does not grant authentication or gateway authority.
 - Local development content is selected by `A0_LAUNCHER_LOCAL_REPO`,
   `A0_LAUNCHER_USE_LOCAL_CONTENT`, a repo-shaped default-app current working
   directory, a repo-shaped unpackaged-app current working directory, or the
@@ -211,6 +235,7 @@ node --check shell/preload.js
 node --test shell/launcher_update.test.js
 node --test shell/launcher_updater_debug_release.test.js
 node --test shell/instance_tabs.test.js
+node --test shell/host_access.test.js shell/host_gateway.test.js
 git diff --check
 ```
 

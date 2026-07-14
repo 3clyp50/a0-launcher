@@ -177,7 +177,10 @@ function makeTabsSnapshot(tabs, activeTabId) {
         instanceId: typeof safeTab.instanceId === 'string' ? safeTab.instanceId : '',
         active: safeTab.id === activeTabId,
         loading: Boolean(safeTab.loading),
-        canReload: Boolean(safeTab.canReload)
+        canReload: Boolean(safeTab.canReload),
+        hostAccess: safeTab.hostAccess && typeof safeTab.hostAccess === 'object'
+          ? safeTab.hostAccess
+          : { state: 'disconnected', connected: false }
       };
     }),
     activeTabId: typeof activeTabId === 'string' ? activeTabId : ''

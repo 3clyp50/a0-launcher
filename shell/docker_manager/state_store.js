@@ -1,6 +1,13 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const { randomUUID } = require('node:crypto');
 const { app, safeStorage } = require('electron');
+const {
+  hostAccessInstanceKey,
+  normalizeHostAccessDefaults,
+  normalizeHostAccessInstance,
+  normalizeHostAccessSettings
+} = require('../host_access');
 
 function baseDir() {
   return path.join(app.getPath('userData'), 'docker_manager');
@@ -228,6 +235,80 @@ async function writeInstanceDefaults(instanceDefaults) {
   const state = await readJson(stateFile(), {});
   await writeJson(stateFile(), { ...state, instanceDefaults: defaults, updatedAt: new Date().toISOString() });
   return defaults;
+}
+
+async function readHostAccessSettings() {
+  const state = await readJson(stateFile(), {});
+  const settings = normalizeHostAccessSettings(state?.hostAccess);
+  if (settings.installationId) return settings;
+  settings.installationId = randomUUID();
+  await writeJson(stateFile(), {
+    ...state,
+    hostAccess: settings,
+    updatedAt: new Date().toISOString()
+  });
+  return settings;
+}
+
+async function writeHostAccessSettings(value = {}) {
+  const state = await readJson(stateFile(), {});
+  const current = normalizeHostAccessSettings(state?.hostAccess);
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const next = normalizeHostAccessSettings({
+    ...current,
+    onboardingComplete: typeof source.onboardingComplete === 'boolean'
+      ? source.onboardingComplete
+      : current.onboardingComplete,
+    installationId: current.installationId || randomUUID(),
+    defaults: Object.prototype.hasOwnProperty.call(source, 'defaults')
+      ? normalizeHostAccessDefaults({
+          ...current.defaults,
+          ...source.defaults,
+          scopes: {
+            ...current.defaults.scopes,
+            ...(source.defaults?.scopes || {})
+          }
+        })
+      : current.defaults,
+    instances: current.instances
+  });
+  await writeJson(stateFile(), {
+    ...state,
+    hostAccess: next,
+    updatedAt: new Date().toISOString()
+  });
+  return next;
+}
+
+async function writeInstanceHostAccess(kind, id, value = {}) {
+  const key = hostAccessInstanceKey(kind, id);
+  if (!key) {
+    const error = new Error('Invalid Host access Instance');
+    error.code = 'INVALID_HOST_ACCESS_INSTANCE';
+    throw error;
+  }
+  const state = await readJson(stateFile(), {});
+  const current = normalizeHostAccessSettings(state?.hostAccess);
+  if (!current.installationId) current.installationId = randomUUID();
+  const normalizedKind = kind === 'remote' ? 'remote' : 'local';
+  const existing = current.instances[key] || {};
+  current.instances[key] = normalizeHostAccessInstance({
+    ...existing,
+    ...(value && typeof value === 'object' ? value : {}),
+    scopes: {
+      ...(existing.scopes || {}),
+      ...(value?.scopes || {})
+    }
+  }, {
+    kind: normalizedKind,
+    defaults: current.defaults
+  });
+  await writeJson(stateFile(), {
+    ...state,
+    hostAccess: current,
+    updatedAt: new Date().toISOString()
+  });
+  return { key, ...current.instances[key] };
 }
 
 function normalizeRuntimeSetupResume(value) {
@@ -830,6 +911,11 @@ module.exports = {
   // Instance defaults
   readInstanceDefaults,
   writeInstanceDefaults,
+
+  // Launcher host access
+  readHostAccessSettings,
+  writeHostAccessSettings,
+  writeInstanceHostAccess,
 
   // Remote instances
   readRemoteInstances,

@@ -24,6 +24,9 @@ This scope owns:
   progress, recovery actions, and non-dismissable gating.
 - `remote-instance-dialog.js`: shared remote Instance URL and optional saved
   credential dialog used by the startup runtime gate and the Instances tab.
+- `host-access-dialog.js`: one-time Host access onboarding, existing-Instance
+  settings, scope dependency UI, folder selection, browser-profile selection,
+  diagnostics, Retry, and emergency disconnect.
 - `first-instance-setup/`: retired first image-pull defaults panel retained for
   compatibility while normal creation owns first Instance launch choices.
 - `setup-showcase/`: Agent Zero capability slideshow helper shown during the
@@ -43,8 +46,8 @@ This scope owns:
   Compose composer, diagnostics, and storage-volume maintenance.
 - `settings/`: port preferences and saved Instance provider/model defaults.
 - `instance-tabs/`: browser-style tab chrome, Launcher tab, active-tab
-  controls, empty state, and viewport bounds reporting for shell-owned Agent
-  Zero UI views.
+  controls, Host access status/settings affordances, empty state, and viewport
+  bounds reporting for shell-owned Agent Zero UI views.
 
 ## Local Contracts
 
@@ -308,6 +311,15 @@ This scope owns:
   view and leaves the launcher surface usable below the tab strip.
   Connected instance tabs should display only the tab/instance name, not the
   URL, so short names stay compact in the tab strip.
+- Each Instance tab shows a noninteractive Host access state glyph and a
+  separately accessible settings button. Supported states are Connecting,
+  Connected, Paused, Needs action, Error, and Disconnected; the controls must
+  remain usable at compact widths.
+- Files is read/write or off. Code execution depends on Files and turns off
+  with it. Copy must explain that the selected folder bounds file operations
+  but is only the initial command directory: commands run as the Launcher user
+  and are not sandboxed to that folder. Browser preparation and Computer Use
+  permission failures are Needs action states, not silent relaunches or grants.
 
 ## Work Guidance
 

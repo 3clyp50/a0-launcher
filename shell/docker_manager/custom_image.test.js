@@ -16,6 +16,22 @@ test('empty activation names get generated friendly defaults', () => {
   assert.equal(normalizeActivationOptions({ instanceName: '' }, 'latest', () => 0).instanceName, 'brave-ada');
 });
 
+test('managed activation carries per-Instance Host access settings', () => {
+  const options = normalizeActivationOptions({
+    hostAccess: {
+      configured: true,
+      masterEnabled: false,
+      folder: '/home/user/a0',
+      scopes: { files: false, code_execution: true, browser: true, computer_use: false }
+    }
+  }, 'latest', () => 0);
+
+  assert.equal(options.hostAccess.configured, true);
+  assert.equal(options.hostAccess.masterEnabled, false);
+  assert.equal(options.hostAccess.scopes.files, false);
+  assert.equal(options.hostAccess.scopes.code_execution, false);
+});
+
 test('custom Agent Zero image tags accept shorthand release numbers', () => {
   const custom = normalizeCustomImageOptions({
     image: 'agent0ai/agent-zero',

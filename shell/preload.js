@@ -161,6 +161,31 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
       models: d.models && typeof d.models === 'object' ? d.models : {}
     });
   },
+  setHostAccessSettings: (settings) => {
+    const value = settings && typeof settings === 'object' ? settings : {};
+    return ipcRenderer.invoke('docker-manager:setHostAccessSettings', {
+      onboardingComplete: value.onboardingComplete === true,
+      defaults: value.defaults && typeof value.defaults === 'object' ? value.defaults : {}
+    });
+  },
+  setInstanceHostAccess: (target, config) => {
+    const value = target && typeof target === 'object' ? target : {};
+    const settings = config && typeof config === 'object' ? config : {};
+    return ipcRenderer.invoke('docker-manager:setInstanceHostAccess', {
+      tabId: typeof value.tabId === 'string' ? value.tabId : '',
+      kind: typeof value.kind === 'string' ? value.kind : '',
+      id: typeof value.id === 'string' ? value.id : '',
+      config: settings
+    });
+  },
+  chooseHostAccessFolder: (defaultPath = '') => ipcRenderer.invoke('docker-manager:chooseHostAccessFolder', {
+    defaultPath: typeof defaultPath === 'string' ? defaultPath : ''
+  }),
+  retryHostGateway: (tabId) => ipcRenderer.invoke('docker-manager:retryHostGateway', { tabId }),
+  hostGatewayCommand: (tabId, action) => ipcRenderer.invoke('docker-manager:hostGatewayCommand', {
+    tabId,
+    action
+  }),
   provisionRuntime: () => ipcRenderer.invoke('docker-manager:provisionRuntime'),
   selectRuntimeEndpoint: (id) => ipcRenderer.invoke('docker-manager:selectRuntimeEndpoint', {
     id: typeof id === 'string' ? id : ''
@@ -230,7 +255,8 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
             password: typeof opts.credentials.password === 'string' ? opts.credentials.password : '',
             remember: opts.credentials.remember === true
           }
-        : null
+        : null,
+      hostAccess: opts.hostAccess && typeof opts.hostAccess === 'object' ? opts.hostAccess : null
     });
   },
   runCustomImage: (options) => {

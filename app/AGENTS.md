@@ -33,6 +33,14 @@ This scope owns:
   each call the Docker APIs independently.
 - Components invoke behavior through `window.dockerManagerActions`, not through
   raw IPC names.
+- Host access UI renders only shell-sanitized configuration and transient
+  status. The renderer may choose folders through the named native-picker
+  action and send bounded settings or gateway commands; it never sees child
+  process handles, decrypted credentials, or a generic execution primitive.
+- First-use Host access onboarding is skippable and precedes gateway startup.
+  Local setup defaults on with all four scopes; saved remote setup defaults to
+  the remote machine and requires an explicit choice to connect this computer
+  while the tab is open.
 - Runtime setup state is part of the canonical renderer snapshot. If the
   runtime is not ready after initial state loads and no saved remote Instances
   exist, the renderer must show the startup runtime modal with a first-step

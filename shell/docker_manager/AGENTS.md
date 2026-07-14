@@ -19,7 +19,8 @@ This scope owns:
   and progress operations.
 - `state_store.js`: persisted launcher state under Electron `userData`,
   including preferences, remote instances, local instance display names, and
-  local instance color overrides.
+  local instance color overrides, plus Launcher Host access defaults and
+  per-Instance configuration.
 - `releases_client.js`: GitHub release discovery for Agent Zero backend
   versions.
 - `release_tags.js`: shared validation and ordering for Agent Zero release tags.
@@ -86,6 +87,16 @@ This scope owns:
   inspection rather than renderer guesses.
 - Persist user preferences and remote instances through `state_store.js`; do not
   invent parallel files.
+- Host access persistence lives in `state_store.js`: one-time onboarding,
+  local defaults, optional default folder, per-Instance configured/master
+  state, four scopes, personal-browser selection, and the stable Launcher
+  installation ID. Child PIDs and connection status are runtime-only. Local
+  records use container IDs and remote records use saved remote Instance IDs.
+- A local bind mount backing `/a0/usr` is the authoritative Host access folder.
+  Named-volume, ephemeral, and remote Instances require an explicit native host
+  folder, prefilled from the Launcher default when available. Remote Instances
+  otherwise default to their remote machine and do not acquire Launcher host
+  access implicitly.
 - Local instance display-name and color overrides are persisted through
   `state_store.js` because Docker labels on existing containers cannot be
   mutated safely. Local colors are stored as a container-id keyed

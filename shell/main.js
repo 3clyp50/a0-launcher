@@ -24,6 +24,19 @@ const {
 } = require('./instance_tabs');
 const { formatLauncherVersion } = require('./launcher_update');
 const {
+  normalizeHostAccessSettings,
+  resolveInstanceHostAccess
+} = require('./host_access');
+const {
+  HostGatewaySupervisor,
+  coreCapabilitiesSupportLauncher,
+  gatewayHelpSupportsLauncher,
+  gatewayHostUrl,
+  launcherGatewayId,
+  launcherUserAgent,
+  publicGatewayStatus
+} = require('./host_gateway');
+const {
   cleanupLauncherUpdaterArtifacts,
   writeLauncherUpdaterInstallMarker
 } = require('./launcher_updater_artifacts');
@@ -179,6 +192,23 @@ let launcherUpdateState = {
 };
 let mainWindowMode = '';
 let mainWindowCreatedAt = 0;
+let hostGatewayQuitPending = false;
+
+const hostGatewaySupervisor = new HostGatewaySupervisor({
+  onStatus(leaseKey, status) {
+    const tab = instanceTabForGatewayLease(leaseKey);
+    if (!tab) return;
+    tab.hostAccess = {
+      ...(tab.hostAccess || {}),
+      ...status,
+      config: tab.hostAccessConfig || null
+    };
+    sendInstanceTabsEvent();
+  },
+  onConfig(leaseKey, gateway) {
+    void persistGatewayConfigForTab(leaseKey, gateway);
+  }
+});
 
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -1414,6 +1444,287 @@ async function openPublicResourceLink(id) {
   return { opened: true };
 }
 
+function tagLauncherWebContents(webContents) {
+  if (!webContents || typeof webContents.getUserAgent !== 'function' || typeof webContents.setUserAgent !== 'function') {
+    return;
+  }
+  const current = String(webContents.getUserAgent() || '').trim();
+  webContents.setUserAgent(launcherUserAgent(current, app.getVersion()));
+}
+
+function hostAccessIdentity(tab) {
+  if (tab?.kind === 'remote') {
+    const id = String(tab.instanceId || '').trim();
+    return id ? { kind: 'remote', id } : null;
+  }
+  const id = String(tab?.containerId || '').trim();
+  return id ? { kind: 'local', id } : null;
+}
+
+function hostGatewayLeaseKey(tab) {
+  const identity = hostAccessIdentity(tab);
+  return identity ? `${identity.kind}:${identity.id}` : String(tab?.key || tab?.id || '');
+}
+
+function instanceTabForGatewayLease(leaseKey) {
+  const key = String(leaseKey || '');
+  for (const tab of instanceTabs.values()) {
+    if (hostGatewayLeaseKey(tab) === key) return tab;
+  }
+  return null;
+}
+
+function hostAccessStatus(state, options = {}) {
+  return publicGatewayStatus({
+    state,
+    hostLabel: options.hostLabel || os.hostname(),
+    message: options.message || '',
+    code: options.code || '',
+    retryable: options.retryable === true,
+    suppressed: options.suppressed === true
+  });
+}
+
+function setTabHostAccess(tab, status, config = tab?.hostAccessConfig || null) {
+  if (!tab || !instanceTabs.has(tab.id)) return;
+  tab.hostAccessConfig = config;
+  tab.hostAccess = {
+    ...status,
+    config
+  };
+  sendInstanceTabsEvent();
+}
+
+function publicHostAccessSettings(value) {
+  const settings = normalizeHostAccessSettings(value);
+  return {
+    version: 1,
+    onboardingComplete: settings.onboardingComplete,
+    defaults: settings.defaults,
+    instances: settings.instances
+  };
+}
+
+function gatewayIdForTab(settings, tab) {
+  const identity = hostAccessIdentity(tab);
+  return identity ? launcherGatewayId(settings?.installationId) : '';
+}
+
+function gatewayHostForTab(tab) {
+  return gatewayHostUrl(tab?.gatewayHost || tab?.url);
+}
+
+function a0CliSupportsGateway(cli) {
+  const binary = existingFilePath(cli);
+  if (!binary) return false;
+  try {
+    const result = childProcess.spawnSync(binary, ['gateway', '--help'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      env: { ...process.env, TERM: 'dumb', NO_COLOR: '1' },
+      windowsHide: true
+    });
+    return gatewayHelpSupportsLauncher(result);
+  } catch {
+    return false;
+  }
+}
+
+async function coreSupportsLauncherGateway(host) {
+  let endpoint;
+  try {
+    endpoint = new URL(`${String(host || '').replace(/\/+$/, '')}/api/plugins/_a0_connector/v1/capabilities`).href;
+  } catch {
+    return false;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  timer.unref?.();
+  try {
+    const response = await net.fetch(endpoint, {
+      headers: { accept: 'application/json', 'user-agent': `A0-Launcher/${app.getVersion()}` },
+      signal: controller.signal
+    });
+    if (!response.ok) return false;
+    return coreCapabilitiesSupportLauncher(await response.json());
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function resolveTabHostWorkspace(tab, config) {
+  if (tab?.kind === 'local' && tab.containerId) {
+    try {
+      const storage = await dockerManager.getLocalInstanceStorageFolder(tab.containerId);
+      const mountedFolder = existingDirectoryPath(storage?.path);
+      if (mountedFolder) {
+        return { path: mountedFolder, source: 'instance_workspace' };
+      }
+    } catch (error) {
+      if (error?.code !== 'WORKSPACE_FOLDER_UNAVAILABLE') throw error;
+    }
+  }
+  const configuredFolder = existingDirectoryPath(config?.folder);
+  return configuredFolder
+    ? { path: configuredFolder, source: 'configured' }
+    : { path: '', source: '' };
+}
+
+async function persistGatewayConfigForTab(leaseKey, gateway) {
+  const tab = instanceTabForGatewayLease(leaseKey);
+  const identity = hostAccessIdentity(tab);
+  if (!tab || !identity || !gateway || typeof gateway !== 'object') return;
+  const current = tab.hostAccessConfig || {};
+  const next = {
+    ...current,
+    masterEnabled: gateway.master_enabled !== false,
+    scopes: gateway.scopes && typeof gateway.scopes === 'object'
+      ? gateway.scopes
+      : current.scopes
+  };
+  const unchanged = current.masterEnabled === next.masterEnabled &&
+    JSON.stringify(current.scopes || {}) === JSON.stringify(next.scopes || {});
+  tab.hostAccessConfig = next;
+  if (tab.hostAccess) tab.hostAccess.config = next;
+  if (unchanged) return;
+  try {
+    await dockerManager.setInstanceHostAccess(identity.kind, identity.id, next);
+  } catch (error) {
+    console.error('[host-gateway] unable to persist gateway scope state', error);
+  }
+}
+
+async function startHostGatewayForTab(tab, { force = false } = {}) {
+  if (!tab || !instanceTabs.has(tab.id)) return null;
+  const identity = hostAccessIdentity(tab);
+  if (!identity) {
+    setTabHostAccess(tab, hostAccessStatus('error', {
+      code: 'INSTANCE_NOT_FOUND',
+      message: 'This tab has no stable Instance identity.'
+    }), null);
+    return null;
+  }
+
+  const settings = await dockerManager.getHostAccessSettings();
+  const config = resolveInstanceHostAccess(settings, identity);
+  tab.hostAccessConfig = config;
+  if (!settings.onboardingComplete) {
+    setTabHostAccess(tab, hostAccessStatus('needs_action', {
+      code: 'ONBOARDING_REQUIRED',
+      message: 'Choose the Launcher Host access default before connecting.'
+    }), config);
+    return null;
+  }
+  if (!config.configured) {
+    setTabHostAccess(tab, hostAccessStatus('disconnected', {
+      message: identity.kind === 'remote' ? 'Using the remote machine.' : 'Launcher Host access is off.'
+    }), config);
+    return null;
+  }
+
+  let workspace;
+  try {
+    workspace = await resolveTabHostWorkspace(tab, config);
+  } catch (error) {
+    setTabHostAccess(tab, hostAccessStatus('error', {
+      code: error?.code || 'WORKSPACE_LOOKUP_FAILED',
+      message: error?.message || 'Unable to resolve the host workspace.',
+      retryable: true
+    }), config);
+    return null;
+  }
+  if (!workspace.path) {
+    setTabHostAccess(tab, hostAccessStatus('needs_action', {
+      code: 'HOST_FOLDER_REQUIRED',
+      message: 'Choose a folder on this computer for Host access.'
+    }), config);
+    return null;
+  }
+
+  let cli;
+  try {
+    cli = findA0CliBinary();
+  } catch {
+    cli = '';
+  }
+  if (!cli || !a0CliSupportsGateway(cli)) {
+    setTabHostAccess(tab, hostAccessStatus('needs_action', {
+      code: 'CLI_UPDATE_REQUIRED',
+      message: 'Install or update A0 CLI to version 2.5 or newer.'
+    }), config);
+    return null;
+  }
+
+  const host = gatewayHostForTab(tab);
+  try {
+    if (!host || !await coreSupportsLauncherGateway(host)) {
+      setTabHostAccess(tab, hostAccessStatus('needs_action', {
+        code: 'CORE_UPDATE_REQUIRED',
+        message: 'This Agent Zero Instance needs Launcher gateway support.'
+      }), config);
+      return null;
+    }
+  } catch (error) {
+    setTabHostAccess(tab, hostAccessStatus('error', {
+      code: 'CORE_UNREACHABLE',
+      message: error?.message || 'Unable to check Agent Zero gateway support.',
+      retryable: true
+    }), config);
+    return null;
+  }
+
+  if (!instanceTabs.has(tab.id)) return null;
+  let credentials;
+  try {
+    credentials = await instanceCredentialsForCliTarget(tab);
+  } catch (error) {
+    setTabHostAccess(tab, hostAccessStatus('needs_action', {
+      code: error?.code || 'CREDENTIALS_UNREADABLE',
+      message: error?.message || 'Saved Instance credentials could not be read.'
+    }), config);
+    return null;
+  }
+  const launch = {
+    cli,
+    host,
+    workspace: workspace.path,
+    gatewayId: gatewayIdForTab(settings, tab),
+    hostLabel: os.hostname() || 'Launcher host',
+    masterEnabled: config.masterEnabled,
+    scopes: config.scopes,
+    browserSelection: config.browserSelection,
+    env: a0CliLaunchEnv(host, credentials)
+  };
+  config.folder = workspace.path;
+  config.folderSource = workspace.source;
+  tab.hostAccessConfig = config;
+  const status = hostGatewaySupervisor.start(hostGatewayLeaseKey(tab), launch, { force });
+  setTabHostAccess(tab, status, config);
+  return status;
+}
+
+async function restartHostGatewayForTab(tab) {
+  if (!tab || !instanceTabs.has(tab.id)) return null;
+  const leaseKey = hostGatewayLeaseKey(tab);
+  if (hostGatewaySupervisor.isSuppressed(leaseKey)) {
+    const settings = await dockerManager.getHostAccessSettings();
+    const identity = hostAccessIdentity(tab);
+    const config = identity ? resolveInstanceHostAccess(settings, identity) : tab.hostAccessConfig;
+    const status = {
+      ...hostGatewaySupervisor.statusFor(leaseKey),
+      message: 'Emergency disconnected for this tab. Close and reopen the tab to reconnect.',
+      suppressed: true
+    };
+    setTabHostAccess(tab, status, config);
+    return status;
+  }
+  hostGatewaySupervisor.stop(leaseKey, 'settings_changed');
+  setTabHostAccess(tab, hostAccessStatus('connecting', {
+    message: 'Applying Host access settings…'
+  }), tab.hostAccessConfig || null);
+  return await startHostGatewayForTab(tab, { force: true });
+}
+
 async function openAgentZeroUiWindow(url, title = 'Agent Zero', target = null) {
   const iconPath = path.join(__dirname, 'assets',
     process.platform === 'win32' ? 'icon.ico' : 'icon.png'
@@ -1429,6 +1740,7 @@ async function openAgentZeroUiWindow(url, title = 'Agent Zero', target = null) {
       sandbox: true
     }
   });
+  tagLauncherWebContents(uiWindow.webContents);
   attachInstanceContextMenu(uiWindow.webContents);
   await loginInstanceWebUiSession(target, uiWindow.webContents);
   await uiWindow.loadURL(url);
@@ -1537,8 +1849,9 @@ function applyActiveInstanceTabBounds() {
   }
 }
 
-function destroyInstanceTab(tab) {
+function destroyInstanceTab(tab, reason = 'destroyed') {
   if (!tab) return;
+  hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), reason);
 
   try {
     if (mainWindow && !mainWindow.isDestroyed() && mainWindow.contentView && typeof mainWindow.contentView.removeChildView === 'function') {
@@ -1558,7 +1871,7 @@ function destroyInstanceTab(tab) {
 
 function cleanupInstanceTabs() {
   for (const tab of instanceTabs.values()) {
-    destroyInstanceTab(tab);
+    destroyInstanceTab(tab, 'app_cleanup');
   }
   instanceTabs = new Map();
   activeInstanceTabId = '';
@@ -1759,6 +2072,7 @@ function attachInstanceTabEvents(tab) {
     }
   });
   wc.once('destroyed', () => {
+    hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), 'web_contents_destroyed');
     if (!instanceTabs.has(tab.id)) return;
     instanceTabs.delete(tab.id);
     if (activeInstanceTabId === tab.id) {
@@ -1791,6 +2105,7 @@ async function openInstanceTab(target) {
     existing.titleLocked = Boolean(target.title) || existing.titleLocked;
     existing.containerId = target.containerId || existing.containerId || '';
     existing.instanceId = target.instanceId || existing.instanceId || '';
+    existing.gatewayHost = gatewayHostUrl(target.url) || existing.gatewayHost || '';
     const nextUrl = normalizeHttpUrl(target.url);
     const didLogin = await loginInstanceWebUiSession(target, existing.view?.webContents);
     const existingUrl = normalizeHttpUrl(existing.url);
@@ -1818,6 +2133,7 @@ async function openInstanceTab(target) {
 
   const previousActiveTabId = activeInstanceTabId;
   const view = new WebContentsView({ webPreferences: createInstanceWebPreferences() });
+  tagLauncherWebContents(view.webContents);
   view.setBackgroundColor('#131313');
   const tab = {
     id: nextInstanceTabId(),
@@ -1828,8 +2144,11 @@ async function openInstanceTab(target) {
     url: target.url,
     containerId: target.containerId || '',
     instanceId: target.instanceId || '',
+    gatewayHost: gatewayHostUrl(target.url),
     loading: true,
     canReload: true,
+    hostAccess: hostAccessStatus('connecting', { message: 'Preparing Launcher Host access…' }),
+    hostAccessConfig: null,
     view
   };
 
@@ -1844,9 +2163,10 @@ async function openInstanceTab(target) {
     await loginInstanceWebUiSession(target, view.webContents);
     await view.webContents.loadURL(target.url);
     await applyInstanceUiSection(tab, target.section);
+    void startHostGatewayForTab(tab);
   } catch (error) {
     instanceTabs.delete(tab.id);
-    destroyInstanceTab(tab);
+    destroyInstanceTab(tab, 'open_failed');
     if (activeInstanceTabId === tab.id) {
       activeInstanceTabId = instanceTabs.has(previousActiveTabId)
         ? previousActiveTabId
@@ -1868,7 +2188,7 @@ function closeInstanceTab(id) {
   }
 
   instanceTabs.delete(tabId);
-  destroyInstanceTab(tab);
+  destroyInstanceTab(tab, 'tab_closed');
   if (activeInstanceTabId === tabId) {
     activeInstanceTabId = instanceTabs.keys().next().value || '';
   }
@@ -1897,7 +2217,7 @@ function detachInstanceTab(id) {
 
   openAgentZeroUiWindow(tab.url, tab.title);
   instanceTabs.delete(tabId);
-  destroyInstanceTab(tab);
+  destroyInstanceTab(tab, 'tab_detached');
   if (activeInstanceTabId === tabId) {
     activeInstanceTabId = instanceTabs.keys().next().value || '';
   }
@@ -2876,6 +3196,7 @@ function sanitizeDockerManagerState(state) {
   const portsIn = isPlainObject(state?.portPreferences) ? state.portPreferences : {};
   const storagePrefsIn = isPlainObject(state?.storagePreferences) ? state.storagePreferences : {};
   const defaultsIn = isPlainObject(state?.instanceDefaults) ? state.instanceDefaults : {};
+  const hostAccessIn = normalizeHostAccessSettings(state?.hostAccess);
 
   const allowedCategory = new Set(['official_release', 'local_build']);
   const allowedAvailability = new Set(['available', 'installed', 'update_available', 'installing', 'error']);
@@ -3160,7 +3481,13 @@ function sanitizeDockerManagerState(state) {
     backgroundOperations,
     retentionPolicy,
     cli: getA0CliStatus(),
-    instanceDefaults
+    instanceDefaults,
+    hostAccess: {
+      version: 1,
+      onboardingComplete: hostAccessIn.onboardingComplete,
+      defaults: hostAccessIn.defaults,
+      instances: hostAccessIn.instances
+    }
   };
 
   {
@@ -3402,6 +3729,102 @@ ipcMain.handle('docker-manager:refresh', async () => {
   try {
     const state = await dockerManager.refreshDockerManager({ forceRefresh: true });
     return sanitizeDockerManagerState(state);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:setHostAccessSettings', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid Host access settings' });
+    }
+    const saved = await dockerManager.setHostAccessSettings({
+      onboardingComplete: body.onboardingComplete === true,
+      defaults: isPlainObject(body.defaults) ? body.defaults : undefined
+    });
+    for (const tab of instanceTabs.values()) void restartHostGatewayForTab(tab);
+    return publicHostAccessSettings(saved);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:setInstanceHostAccess', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid Host access settings' });
+    }
+    const tab = typeof body.tabId === 'string' ? instanceTabs.get(body.tabId) : null;
+    const identity = hostAccessIdentity(tab) || {
+      kind: body.kind === 'remote' ? 'remote' : 'local',
+      id: typeof body.id === 'string' ? body.id : ''
+    };
+    const config = isPlainObject(body.config) ? body.config : {};
+    const saved = await dockerManager.setInstanceHostAccess(identity.kind, identity.id, config);
+    for (const candidate of instanceTabs.values()) {
+      const candidateIdentity = hostAccessIdentity(candidate);
+      if (candidateIdentity?.kind === identity.kind && candidateIdentity.id === identity.id) {
+        void restartHostGatewayForTab(candidate);
+      }
+    }
+    return saved;
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:chooseHostAccessFolder', async (event, body) => {
+  try {
+    const requested = isPlainObject(body) ? existingDirectoryPath(body.defaultPath) : '';
+    const options = {
+      title: 'Choose Host access folder',
+      buttonLabel: 'Use this folder',
+      defaultPath: requested || os.homedir(),
+      properties: ['openDirectory', 'createDirectory']
+    };
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+    const result = ownerWindow && !ownerWindow.isDestroyed()
+      ? await dialog.showOpenDialog(ownerWindow, options)
+      : await dialog.showOpenDialog(options);
+    if (result?.canceled) return { canceled: true, path: '' };
+    const folder = existingDirectoryPath(result?.filePaths?.[0]);
+    if (!folder) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Choose an existing folder.' });
+    }
+    return { canceled: false, path: folder };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:retryHostGateway', async (_event, body) => {
+  try {
+    const tab = isPlainObject(body) ? instanceTabs.get(String(body.tabId || '')) : null;
+    if (!tab) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
+    const status = await restartHostGatewayForTab(tab);
+    return status || tab.hostAccess;
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:hostGatewayCommand', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid Host access command' });
+    }
+    const tabId = String(body.tabId || '');
+    if (!instanceTabs.has(tabId)) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
+    const action = String(body.action || '');
+    if (!['prepare_browser', 'rearm_computer_use'].includes(action)) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Unsupported Host access command' });
+    }
+    const tab = instanceTabs.get(tabId);
+    if (!hostGatewaySupervisor.send(hostGatewayLeaseKey(tab), { action })) {
+      return dockerManager.toErrorResponse({ code: 'GATEWAY_NOT_RUNNING', message: 'Host gateway is not running.' });
+    }
+    return { accepted: true };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }
@@ -3809,7 +4232,8 @@ ipcMain.handle('docker-manager:activate', async (_event, body) => {
             password: typeof body.credentials.password === 'string' ? body.credentials.password : '',
             remember: body.credentials.remember === true
           }
-        : null
+        : null,
+      hostAccess: isPlainObject(body.hostAccess) ? body.hostAccess : null
     };
     const accepted = await dockerManager.activateTag(tag, dataLossAck, options);
     if (!accepted || typeof accepted.opId !== 'string') {
@@ -3875,7 +4299,11 @@ ipcMain.handle('docker-manager:cancel', async (_event, body) => {
 
 ipcMain.handle('docker-manager:getInventory', async () => {
   try {
-    return await dockerManager.getDockerInventory();
+    const inventory = await dockerManager.getDockerInventory();
+    return {
+      ...inventory,
+      hostAccess: publicHostAccessSettings(inventory?.hostAccess)
+    };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }
@@ -4143,6 +4571,15 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+app.on('before-quit', (event) => {
+  if (hostGatewayQuitPending) return;
+  hostGatewaySupervisor.stopAll('app_quit');
+  if (!hostGatewaySupervisor.pendingStopCount()) return;
+  hostGatewayQuitPending = true;
+  event.preventDefault();
+  void hostGatewaySupervisor.waitForStopped(8500).finally(() => app.quit());
 });
 
 app.on('activate', async () => {

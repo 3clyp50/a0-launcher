@@ -1,0 +1,413 @@
+const childProcess = require('node:child_process');
+
+const GATEWAY_STATES = new Set([
+  'connecting',
+  'connected',
+  'paused',
+  'needs_action',
+  'error',
+  'disconnected'
+]);
+const MAX_GATEWAY_JSONL_LENGTH = 1024 * 1024;
+
+function boundedGatewayValue(value, depth = 0) {
+  if (typeof value === 'string') return value.slice(0, 2048);
+  if (typeof value === 'boolean' || typeof value === 'number' || value === null) return value;
+  if (depth >= 6) return null;
+  if (Array.isArray(value)) {
+    return value.slice(0, 64).map((item) => boundedGatewayValue(item, depth + 1));
+  }
+  if (!value || typeof value !== 'object') return String(value || '').slice(0, 2048);
+  const result = {};
+  for (const [rawKey, item] of Object.entries(value).slice(0, 64)) {
+    const key = String(rawKey).slice(0, 80);
+    if (['__proto__', 'constructor', 'prototype'].includes(key)) continue;
+    result[key] = boundedGatewayValue(item, depth + 1);
+  }
+  return result;
+}
+
+function sanitizeGatewayMetadata(value = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const state = GATEWAY_STATES.has(source.state) ? source.state : 'connected';
+  const scopes = source.scopes && typeof source.scopes === 'object' ? source.scopes : {};
+  const files = scopes.files === true;
+  return {
+    version: Number(source.version) === 1 ? 1 : 0,
+    kind: source.kind === 'launcher' ? 'launcher' : '',
+    id: String(source.id || '').slice(0, 128),
+    host_label: String(source.host_label || '').slice(0, 128),
+    state,
+    master_enabled: source.master_enabled !== false,
+    scopes: {
+      files,
+      code_execution: files && scopes.code_execution === true,
+      browser: scopes.browser === true,
+      computer_use: scopes.computer_use === true
+    },
+    status: boundedGatewayValue(source.status && typeof source.status === 'object' ? source.status : {})
+  };
+}
+
+function gatewayScopeArgument(scopes = {}) {
+  const filesEnabled = scopes?.files === true;
+  return ['files', 'code_execution', 'browser', 'computer_use']
+    .filter((key) => scopes?.[key] === true && (key !== 'code_execution' || filesEnabled))
+    .join(',');
+}
+
+function gatewayErrorState(code) {
+  return [
+    'AUTH_REQUIRED',
+    'CONTRACT_MISMATCH',
+    'INVALID_WORKSPACE',
+    'PLUGIN_MISSING',
+    'CLI_UPDATE_REQUIRED',
+    'CORE_UPDATE_REQUIRED'
+  ].includes(String(code || '').trim())
+    ? 'needs_action'
+    : 'error';
+}
+
+function gatewayHelpSupportsLauncher(result = {}) {
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  return result.status === 0 && output.includes('--gateway-id') && output.includes('--scopes');
+}
+
+function coreCapabilitiesSupportLauncher(value) {
+  return Array.isArray(value?.features) && value.features.includes('launcher_gateway');
+}
+
+function launcherUserAgent(value, version) {
+  const current = String(value || '').trim();
+  if (current.includes('A0-Launcher/')) return current;
+  const cleanVersion = String(version || '').trim().replace(/\s+/g, '') || '0';
+  return `${current} A0-Launcher/${cleanVersion}`.trim();
+}
+
+function launcherGatewayId(value) {
+  const installationId = String(value || '').trim();
+  if (!/^[A-Za-z0-9._:-]+$/.test(installationId)) return '';
+  return `launcher-${installationId}`.slice(0, 128);
+}
+
+function gatewayHostUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return '';
+    url.search = '';
+    url.hash = '';
+    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+    return url.href.replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+function publicGatewayStatus(value = {}) {
+  const state = GATEWAY_STATES.has(value.state) ? value.state : 'disconnected';
+  const out = {
+    state,
+    connected: state === 'connected' || state === 'paused' || state === 'needs_action',
+    hostLabel: typeof value.hostLabel === 'string' ? value.hostLabel : '',
+    message: typeof value.message === 'string' ? value.message : '',
+    code: typeof value.code === 'string' ? value.code : '',
+    retryable: value.retryable === true,
+    suppressed: value.suppressed === true
+  };
+  if (value.gateway && typeof value.gateway === 'object') out.gateway = sanitizeGatewayMetadata(value.gateway);
+  return out;
+}
+
+class HostGatewaySupervisor {
+  constructor(options = {}) {
+    this.spawn = options.spawn || childProcess.spawn;
+    this.onStatus = typeof options.onStatus === 'function' ? options.onStatus : () => {};
+    this.onConfig = typeof options.onConfig === 'function' ? options.onConfig : () => {};
+    this.records = new Map();
+    this.closingChildren = new Set();
+  }
+
+  start(tabId, launch = {}, options = {}) {
+    const id = String(tabId || '').trim();
+    if (!id) throw new Error('tabId is required');
+    const existing = this.records.get(id);
+    if (existing?.child && existing.child.exitCode === null) return publicGatewayStatus(existing.status);
+    if (existing?.suppressed && options.force !== true) return publicGatewayStatus(existing.status);
+
+    const status = {
+      state: 'connecting',
+      connected: false,
+      hostLabel: String(launch.hostLabel || ''),
+      message: 'Connecting Launcher host…',
+      code: '',
+      retryable: false,
+      suppressed: false
+    };
+    const record = {
+      tabId: id,
+      child: null,
+      status,
+      buffer: '',
+      stderr: '',
+      intentional: false,
+      suppressed: false,
+      removed: false,
+      launch: { ...launch }
+    };
+    this.records.set(id, record);
+    this._publish(record);
+
+    const args = [
+      'gateway',
+      '--host', String(launch.host || ''),
+      '--workspace', String(launch.workspace || ''),
+      '--gateway-id', String(launch.gatewayId || ''),
+      '--host-label', String(launch.hostLabel || ''),
+      launch.masterEnabled === false ? '--no-master' : '--master',
+      '--scopes', gatewayScopeArgument(launch.scopes)
+    ];
+    if (launch.browserSelection) {
+      args.push('--browser-selection', String(launch.browserSelection));
+    }
+
+    let child;
+    try {
+      child = this.spawn(String(launch.cli || ''), args, {
+        cwd: String(launch.workspace || ''),
+        env: launch.env && typeof launch.env === 'object' ? launch.env : process.env,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+        detached: false
+      });
+    } catch (error) {
+      this._fail(record, 'GATEWAY_START_FAILED', error?.message || 'Unable to start A0 gateway.');
+      return publicGatewayStatus(record.status);
+    }
+    record.child = child;
+    child.stdout?.setEncoding?.('utf8');
+    child.stderr?.setEncoding?.('utf8');
+    child.stdout?.on?.('data', (chunk) => this._readStdout(record, chunk));
+    child.stderr?.on?.('data', (chunk) => {
+      record.stderr = `${record.stderr}${String(chunk || '')}`.slice(-4000);
+    });
+    child.once?.('error', (error) => {
+      this._fail(record, 'GATEWAY_START_FAILED', error?.message || 'Unable to start A0 gateway.');
+    });
+    child.once?.('exit', (code, signal) => this._handleExit(record, code, signal));
+    return publicGatewayStatus(record.status);
+  }
+
+  retry(tabId) {
+    const record = this.records.get(String(tabId || '').trim());
+    if (!record) return null;
+    if (record.suppressed) return publicGatewayStatus(record.status);
+    return this.start(record.tabId, record.launch, { force: true });
+  }
+
+  send(tabId, payload) {
+    const record = this.records.get(String(tabId || '').trim());
+    const child = record?.child;
+    if (!child?.stdin || child.stdin.destroyed || child.exitCode !== null) return false;
+    try {
+      child.stdin.write(`${JSON.stringify(payload || {})}\n`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  stop(tabId, reason = 'closed') {
+    const id = String(tabId || '').trim();
+    const record = this.records.get(id);
+    if (!record) return false;
+    record.intentional = true;
+    record.removed = true;
+    this.records.delete(id);
+    const child = record.child;
+    if (child && child.exitCode === null) {
+      this.closingChildren.add(child);
+      try {
+        child.stdin?.write?.(`${JSON.stringify({ action: 'shutdown', reason })}\n`);
+      } catch {
+        // ignore
+      }
+      const terminate = setTimeout(() => {
+        if (child.exitCode === null) {
+          try { child.kill('SIGTERM'); } catch { /* ignore */ }
+        }
+      }, 500);
+      terminate.unref?.();
+      const force = setTimeout(() => {
+        if (child.exitCode === null) {
+          try { child.kill('SIGKILL'); } catch { /* ignore */ }
+        }
+      }, 8000);
+      force.unref?.();
+    }
+    return true;
+  }
+
+  stopAll(reason = 'app_quit') {
+    const tabIds = [...this.records.keys()];
+    for (const tabId of tabIds) this.stop(tabId, reason);
+    return tabIds.length;
+  }
+
+  pendingStopCount() {
+    return this.closingChildren.size;
+  }
+
+  async waitForStopped(timeoutMs = 8500) {
+    const deadline = Date.now() + Math.max(0, Number(timeoutMs) || 0);
+    while (this.closingChildren.size && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+
+  statusFor(tabId) {
+    const record = this.records.get(String(tabId || '').trim());
+    return publicGatewayStatus(record?.status || {});
+  }
+
+  isSuppressed(tabId) {
+    return this.records.get(String(tabId || '').trim())?.suppressed === true;
+  }
+
+  _readStdout(record, chunk) {
+    record.buffer += String(chunk || '');
+    if (record.buffer.length > MAX_GATEWAY_JSONL_LENGTH && !record.buffer.includes('\n')) {
+      record.buffer = '';
+      this._fail(record, 'GATEWAY_CONTRACT_ERROR', 'A0 gateway emitted an oversized JSONL message.');
+      try { record.child?.kill?.('SIGTERM'); } catch { /* ignore */ }
+      return;
+    }
+    while (record.buffer.includes('\n')) {
+      const newline = record.buffer.indexOf('\n');
+      const line = record.buffer.slice(0, newline).trim();
+      record.buffer = record.buffer.slice(newline + 1);
+      if (!line) continue;
+      if (line.length > MAX_GATEWAY_JSONL_LENGTH) {
+        this._fail(record, 'GATEWAY_CONTRACT_ERROR', 'A0 gateway emitted an oversized JSONL message.');
+        try { record.child?.kill?.('SIGTERM'); } catch { /* ignore */ }
+        return;
+      }
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      this._handleEvent(record, event);
+    }
+  }
+
+  _handleEvent(record, event = {}) {
+    if (record.removed) return;
+    if (event.type === 'status' && event.gateway && typeof event.gateway === 'object') {
+      const gateway = sanitizeGatewayMetadata(event.gateway);
+      const state = gateway.state;
+      if (state === 'disconnected') record.suppressed = true;
+      record.status = {
+        state,
+        connected: state !== 'disconnected' && state !== 'error',
+        hostLabel: String(gateway.host_label || record.launch.hostLabel || ''),
+        message: '',
+        code: '',
+        retryable: false,
+        suppressed: record.suppressed,
+        gateway
+      };
+      this._publish(record);
+      this.onConfig(record.tabId, gateway);
+      return;
+    }
+    if (event.type === 'error') {
+      const code = String(event.code || 'GATEWAY_ERROR');
+      record.status = {
+        ...record.status,
+        state: gatewayErrorState(code),
+        connected: false,
+        code,
+        message: String(event.message || 'Host gateway failed.'),
+        retryable: event.fatal === true,
+        suppressed: record.suppressed
+      };
+      this._publish(record);
+      return;
+    }
+    if (event.type === 'result' && event.ok === false) {
+      record.status = {
+        ...record.status,
+        state: 'needs_action',
+        code: 'GATEWAY_COMMAND_FAILED',
+        message: String(event.error || 'Host access needs attention.'),
+        retryable: false
+      };
+      this._publish(record);
+      return;
+    }
+    if (event.type === 'stage') {
+      const stage = String(event.stage || '');
+      record.status = {
+        ...record.status,
+        state: stage === 'ready' ? 'connected' : 'connecting',
+        message: String(event.message || ''),
+        connected: stage === 'ready'
+      };
+      this._publish(record);
+    }
+  }
+
+  _handleExit(record, code, signal) {
+    if (record.child) this.closingChildren.delete(record.child);
+    record.child = null;
+    if (record.removed) return;
+    const expected = record.intentional || record.suppressed;
+    const preserveFailure = !expected &&
+      ['error', 'needs_action'].includes(record.status.state) &&
+      Boolean(record.status.code);
+    record.status = {
+      ...record.status,
+      state: expected ? 'disconnected' : preserveFailure ? record.status.state : 'error',
+      connected: false,
+      code: expected ? '' : preserveFailure ? record.status.code : 'GATEWAY_EXITED',
+      message: expected
+        ? ''
+        : (record.status.message || record.stderr.trim() || `A0 gateway exited (${code ?? signal ?? 'unknown'}).`),
+      retryable: !expected,
+      suppressed: record.suppressed
+    };
+    this._publish(record);
+  }
+
+  _fail(record, code, message) {
+    record.status = {
+      ...record.status,
+      state: gatewayErrorState(code),
+      connected: false,
+      code,
+      message,
+      retryable: true
+    };
+    this._publish(record);
+  }
+
+  _publish(record) {
+    if (!record.removed) this.onStatus(record.tabId, publicGatewayStatus(record.status));
+  }
+}
+
+module.exports = {
+  GATEWAY_STATES,
+  coreCapabilitiesSupportLauncher,
+  gatewayScopeArgument,
+  gatewayErrorState,
+  gatewayHelpSupportsLauncher,
+  gatewayHostUrl,
+  launcherGatewayId,
+  launcherUserAgent,
+  publicGatewayStatus,
+  sanitizeGatewayMetadata,
+  HostGatewaySupervisor
+};

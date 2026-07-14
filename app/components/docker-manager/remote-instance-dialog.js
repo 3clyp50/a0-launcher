@@ -1,3 +1,10 @@
+import {
+  bindScopeDependency,
+  normalizeConfig as normalizeHostAccessConfig,
+  readScopes as readHostAccessScopes,
+  scopeFieldsHtml as hostAccessScopeFieldsHtml
+} from "./host-access-dialog.js";
+
 function closeDialog(dialog) {
   if (dialog && dialog.parentNode) dialog.parentNode.removeChild(dialog);
 }
@@ -65,6 +72,8 @@ function openAddRemoteInstanceDialog(options = {}) {
   let completed = false;
   const title = optionText(options.title, "Add remote Instance");
   const submitLabel = optionText(options.submitLabel, "Add Instance");
+  const hostDefaults = normalizeHostAccessConfig(window.__dmLastState?.hostAccess?.defaults, {}, "remote");
+  const launcherDefaultFolder = String(window.__dmLastState?.hostAccess?.defaults?.folder || "");
   const dialog = document.createElement("div");
   dialog.id = "remoteInstanceDialog";
   dialog.className = `dm-dialog-backdrop${options.backdropClass ? ` ${options.backdropClass}` : ""}`;
@@ -99,6 +108,25 @@ function openAddRemoteInstanceDialog(options = {}) {
             <span>Save credentials</span>
           </label>
         </div>
+        <fieldset class="dm-field dm-host-access-setup">
+          <legend class="dm-field-label">Host access</legend>
+          <label class="dm-radio-line">
+            <input name="remoteHostAccess" type="radio" value="remote" checked>
+            <span><strong>Use the remote machine</strong><small>Agent Zero tools stay on the server where this Instance runs.</small></span>
+          </label>
+          <label class="dm-radio-line">
+            <input name="remoteHostAccess" type="radio" value="launcher">
+            <span><strong>Connect this computer while this tab is open</strong><small>Closing or detaching the Launcher tab disconnects it.</small></span>
+          </label>
+          <div data-launcher-host-options hidden>
+            ${hostAccessScopeFieldsHtml("remoteHostAccess", hostDefaults.scopes, { compact: true })}
+            <div class="dm-host-folder-row">
+              <input id="remoteHostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeHtml(launcherDefaultFolder)}" placeholder="Choose a folder on this computer">
+              <button class="button" type="button" data-host-folder>Choose</button>
+            </div>
+            <div class="dm-field-hint">File operations stay in this folder. Commands start here but run as the Launcher user and are not sandboxed to it.</div>
+          </div>
+        </fieldset>
       </div>
       <div class="dm-dialog-footer">
         <button class="button" type="button" data-dialog-close>Cancel</button>
@@ -113,6 +141,8 @@ function openAddRemoteInstanceDialog(options = {}) {
   const usernameInput = dialog.querySelector("#remoteAuthLogin");
   const passwordInput = dialog.querySelector("#remoteAuthPassword");
   const rememberInput = dialog.querySelector("#remoteRememberCredentials");
+  const hostOptions = dialog.querySelector("[data-launcher-host-options]");
+  const hostFolder = dialog.querySelector("#remoteHostAccessFolder");
 
   const cancel = () => {
     closeDialog(dialog);
@@ -126,6 +156,17 @@ function openAddRemoteInstanceDialog(options = {}) {
   nameInput?.addEventListener("input", () => {
     nameInput.dataset.dirty = "1";
   });
+  bindScopeDependency(dialog.querySelector(".dm-host-access-setup"));
+  const syncHostChoice = () => {
+    const connectLauncher = dialog.querySelector('input[name="remoteHostAccess"]:checked')?.value === "launcher";
+    if (hostOptions) hostOptions.hidden = !connectLauncher;
+  };
+  dialog.querySelectorAll('input[name="remoteHostAccess"]').forEach((input) => input.addEventListener("change", syncHostChoice));
+  dialog.querySelector("[data-host-folder]")?.addEventListener("click", async () => {
+    const result = await window.dockerManagerActions?.chooseHostAccessFolder?.(hostFolder?.value || launcherDefaultFolder);
+    if (result?.path && hostFolder) hostFolder.value = result.path;
+  });
+  syncHostChoice();
 
   dialog.querySelectorAll("[data-dialog-close]").forEach((btn) => {
     btn.addEventListener("click", cancel);
@@ -149,6 +190,11 @@ function openAddRemoteInstanceDialog(options = {}) {
       window.toastFrontendError?.(credentialResult.message, "Agent Zero");
       return;
     }
+    const connectLauncher = dialog.querySelector('input[name="remoteHostAccess"]:checked')?.value === "launcher";
+    if (connectLauncher && !hostFolder?.value) {
+      window.toastFrontendError?.("Choose a folder on this computer for Host access.", "Agent Zero");
+      return;
+    }
     const result = await window.dockerManagerActions?.addRemoteInstance?.({
       url,
       name: nameInput?.value || ""
@@ -161,6 +207,18 @@ function openAddRemoteInstanceDialog(options = {}) {
       );
       if (saved === false) return;
     }
+    const hostAccessSaved = await window.dockerManagerActions?.setInstanceHostAccess?.({
+      kind: "remote",
+      id: result.id || "",
+      instanceId: result.id || ""
+    }, {
+      configured: connectLauncher,
+      masterEnabled: true,
+      folder: connectLauncher ? hostFolder?.value || "" : "",
+      scopes: readHostAccessScopes(dialog.querySelector(".dm-host-access-setup")),
+      browserSelection: ""
+    });
+    if (hostAccessSaved === false) return;
     completed = true;
     closeDialog(dialog);
     await options.onAdded?.(result);

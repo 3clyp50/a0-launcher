@@ -153,3 +153,9 @@ test('advanced options are collapsed by default', async () => {
   assert.match(source, /<details class="dm-advanced">/);
   assert.doesNotMatch(source, /<details class="dm-advanced" open>/);
 });
+
+test('local Instance setup repeats Host access and its command boundary', async () => {
+  const source = await readFile(new URL('./run-instance-dialog.js', import.meta.url), 'utf8');
+  assert.match(source, /Connect this computer while the Instance tab is open/);
+  assert.match(source, /not sandboxed to the folder/);
+});

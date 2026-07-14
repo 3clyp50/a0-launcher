@@ -2838,6 +2838,41 @@ body.dm-instance-home-active .dm-page {
   flex: 0 0 auto;
 }
 
+.dm-host-status-dot {
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: #707070;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #707070 18%, transparent);
+}
+
+.dm-host-status-dot.connecting {
+  background: #e6b85c;
+  animation: dm-host-status-pulse 1.4s ease-in-out infinite;
+}
+
+.dm-host-status-dot.connected {
+  background: #5fcf8c;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #5fcf8c 20%, transparent);
+}
+
+.dm-host-status-dot.paused {
+  background: #74a7dc;
+}
+
+.dm-host-status-dot.needs_action {
+  background: #e6b85c;
+}
+
+.dm-host-status-dot.error {
+  background: #e66c6c;
+}
+
+@keyframes dm-host-status-pulse {
+  50% { opacity: 0.42; }
+}
+
 .dm-instance-tab-controls {
   display: inline-flex;
   align-items: center;
@@ -2847,6 +2882,171 @@ body.dm-instance-home-active .dm-page {
   right: 0;
   background: var(--color-background);
   padding-left: 0.35rem;
+}
+
+.dm-host-access-button:not(:disabled) .material-symbols-outlined {
+  color: var(--color-highlight);
+}
+
+.dm-host-access-dialog {
+  width: min(44rem, calc(100vw - 2rem));
+  max-height: min(48rem, calc(100vh - 2rem));
+}
+
+#hostAccessDialog,
+.dm-host-access-onboarding {
+  z-index: 4300;
+}
+
+.dm-host-access-kicker {
+  color: var(--color-highlight);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.2rem;
+  text-transform: uppercase;
+}
+
+.dm-host-access-scopes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.dm-host-access-scope {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  border: 1px solid var(--dm-line-soft);
+  border-radius: var(--dm-radius-max);
+  padding: 0.65rem;
+  cursor: pointer;
+}
+
+.dm-host-access-scope strong,
+.dm-host-access-scope small {
+  display: block;
+}
+
+.dm-host-access-scopes.compact .dm-host-access-scope {
+  align-items: center;
+  min-height: 2.35rem;
+  padding: 0.48rem 0.58rem;
+}
+
+.dm-host-access-setup .dm-radio-line {
+  align-items: flex-start;
+}
+
+.dm-host-access-setup .dm-radio-line strong,
+.dm-host-access-setup .dm-radio-line small {
+  display: block;
+}
+
+fieldset.dm-host-access-setup {
+  border: 1px solid var(--dm-line-soft);
+  border-radius: var(--dm-radius-max);
+  margin: 0;
+  padding: 0.7rem;
+}
+
+fieldset.dm-host-access-setup > legend {
+  padding: 0 0.25rem;
+}
+
+.dm-host-access-setup .dm-radio-line small {
+  color: var(--color-text-muted);
+  line-height: 1.35;
+  margin-top: 0.12rem;
+}
+
+.dm-host-access-scope strong {
+  color: var(--color-text);
+  font-size: 0.82rem;
+}
+
+.dm-host-access-scope small {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  margin-top: 0.18rem;
+}
+
+.dm-host-folder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem;
+}
+
+.dm-host-access-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.dm-host-access-summary .dm-host-status-dot {
+  width: 0.68rem;
+  height: 0.68rem;
+}
+
+.dm-host-access-summary strong,
+.dm-host-access-summary small {
+  display: block;
+}
+
+.dm-host-access-summary small {
+  color: var(--color-text-muted);
+  margin-top: 0.1rem;
+}
+
+.dm-host-access-notice {
+  border-left: 2px solid #e6b85c;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  padding: 0.45rem 0.65rem;
+}
+
+.dm-host-access-notice.error {
+  border-left-color: #e66c6c;
+}
+
+.dm-host-master-line {
+  margin-top: 0.15rem;
+}
+
+.dm-host-access-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.dm-host-access-diagnostics div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.dm-host-access-diagnostics strong {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.dm-host-access-footer {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+@media (max-width: 620px) {
+  .dm-host-access-scopes,
+  .dm-host-access-diagnostics {
+    grid-template-columns: 1fr;
+  }
+
+  .dm-host-access-footer {
+    align-items: stretch;
+  }
 }
 
 .dm-instance-tab-viewport {

@@ -7,6 +7,7 @@ import {
 import { renderOperationDialog } from "./components/docker-manager/operation-modal/operation-modal.js";
 import { progressMetaText } from "./components/docker-manager/progress-eta.js";
 import { renderRuntimeGate } from "./components/docker-manager/runtime-gate/runtime-gate.js";
+import { maybeOpenHostAccessOnboarding } from "./components/docker-manager/host-access-dialog.js";
 
 function isErrorResponse(obj) {
   return !!obj && typeof obj === "object" && typeof obj.message === "string";
@@ -236,6 +237,7 @@ function snapshot() {
     progress: store.progress || null,
     portPreferences: store.portPreferences || null,
     instanceDefaults: normalizeInstanceDefaults(store.instanceDefaults),
+    hostAccess: store.hostAccess || null,
     cli: store.cli || { installed: false, command: "" },
     retentionPolicy: store.retentionPolicy || null,
     instanceTabs: store.instanceTabs || { tabs: [], activeTabId: "" }
@@ -474,6 +476,7 @@ function emitState() {
   renderBackgroundProgressToast(next.progress);
   renderRuntimeGate(next, window.dockerManagerActions || {});
   renderOperationDialog(next, window.dockerManagerActions || {});
+  maybeOpenHostAccessOnboarding(next);
 }
 
 function applyInstanceTabsSnapshot(snap) {
@@ -585,6 +588,7 @@ async function refresh() {
       store.portPreferences = state?.portPreferences || null;
       store.storagePreferences = state?.storagePreferences || null;
       store.instanceDefaults = state?.instanceDefaults || null;
+      store.hostAccess = state?.hostAccess || null;
       store.cli = state?.cli || { installed: false, command: "" };
       store.retentionPolicy = state?.retentionPolicy || null;
       if (!store.error) setBanner("", "");
@@ -598,6 +602,7 @@ async function refresh() {
     if (!Array.isArray(state?.containers) && Array.isArray(inventory?.containers)) store.containers = inventory.containers;
     if (!Array.isArray(state?.remoteInstances) && Array.isArray(inventory?.remoteInstances)) store.remoteInstances = inventory.remoteInstances;
     if (!Array.isArray(state?.backgroundOperations) && Array.isArray(inventory?.backgroundOperations)) store.backgroundOperations = inventory.backgroundOperations;
+    if (!state?.hostAccess && inventory?.hostAccess) store.hostAccess = inventory.hostAccess;
     store.volumes = Array.isArray(inventory?.volumes) ? inventory.volumes : [];
   } catch (e) {
     store.error = e?.message || "Failed to load Docker inventory.";
@@ -1045,6 +1050,92 @@ async function setInstanceDefaults(instanceDefaults, options = {}) {
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Failed to save Instance defaults");
+    return false;
+  }
+}
+
+async function setHostAccessSettings(settings = {}) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.setHostAccessSettings !== "function") return false;
+  try {
+    const res = await api.setHostAccessSettings(settings);
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    store.hostAccess = res;
+    emitState();
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to save Host access defaults");
+    return false;
+  }
+}
+
+async function setInstanceHostAccess(target = {}, config = {}) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.setInstanceHostAccess !== "function") return false;
+  const kind = target?.kind === "remote" ? "remote" : "local";
+  const id = kind === "remote" ? target?.instanceId || target?.id : target?.containerId || target?.id;
+  try {
+    const res = await api.setInstanceHostAccess({ tabId: target?.id || target?.tabId || "", kind, id }, config);
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    setBanner("info", "Host access settings saved.");
+    await refresh();
+    return res || true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to save Host access settings");
+    return false;
+  }
+}
+
+async function chooseHostAccessFolder(defaultPath = "") {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.chooseHostAccessFolder !== "function") return false;
+  try {
+    const res = await api.chooseHostAccessFolder(defaultPath);
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    return res;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to choose a Host access folder");
+    return false;
+  }
+}
+
+async function retryHostGateway(tabId) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.retryHostGateway !== "function") return false;
+  try {
+    const res = await api.retryHostGateway(tabId);
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to retry Host access");
+    return false;
+  }
+}
+
+async function hostGatewayCommand(tabId, action) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.hostGatewayCommand !== "function") return false;
+  try {
+    const res = await api.hostGatewayCommand(tabId, action);
+    if (isErrorResponse(res)) {
+      setBanner("error", res.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    setBanner("error", e?.message || "Unable to update Host access");
     return false;
   }
 }
@@ -1762,6 +1853,11 @@ window.dockerManagerActions = {
   detachInstanceTab,
   syncInstanceTabBounds,
   setInstanceDefaults,
+  setHostAccessSettings,
+  setInstanceHostAccess,
+  chooseHostAccessFolder,
+  retryHostGateway,
+  hostGatewayCommand,
   async setPortPreferences(prefs, options = {}) {
     const api = window.dockerManagerAPI;
     if (!api || typeof api.setPortPreferences !== "function") return false;
@@ -1811,6 +1907,7 @@ function initSubscriptions() {
         store.runtimeDiagnostics = state?.runtimeDiagnostics || store.runtimeDiagnostics || null;
         store.portPreferences = state?.portPreferences || null;
         store.instanceDefaults = state?.instanceDefaults || null;
+        store.hostAccess = state?.hostAccess || null;
         store.cli = state?.cli || { installed: false, command: "" };
         store.retentionPolicy = state?.retentionPolicy || null;
         emitState();

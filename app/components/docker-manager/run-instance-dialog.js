@@ -8,6 +8,12 @@ import {
   normalizeInstanceDefaults,
   readInstanceDefaultsFromForm
 } from "./instance-defaults.js";
+import {
+  bindScopeDependency,
+  normalizeConfig as normalizeHostAccessConfig,
+  readScopes as readHostAccessScopes,
+  scopeFieldsHtml as hostAccessScopeFieldsHtml
+} from "./host-access-dialog.js";
 
 function closeDialog(dialog) {
   if (dialog && dialog.parentNode) dialog.parentNode.removeChild(dialog);
@@ -341,6 +347,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   }
 
   const instanceDefaults = normalizeInstanceDefaults(state?.instanceDefaults);
+  const hostAccessDefaults = normalizeHostAccessConfig(state?.hostAccess?.defaults, {}, "local");
   const dialog = document.createElement("div");
   dialog.id = "activateInstanceDialog";
   dialog.className = "dm-dialog-backdrop";
@@ -385,6 +392,19 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
             <input id="activateRememberCredentials" type="checkbox">
             <span>Save credentials</span>
           </label>
+        </div>
+        <div class="dm-field dm-host-access-setup">
+          <div class="dm-field-label">Host access</div>
+          <label class="dm-checkbox-line">
+            <input id="activateHostAccessConfigured" type="checkbox"${hostAccessDefaults.configured ? " checked" : ""}>
+            <span>Connect this computer while the Instance tab is open</span>
+          </label>
+          ${hostAccessScopeFieldsHtml("activateHostAccess", hostAccessDefaults.scopes, { compact: true })}
+          <div class="dm-host-folder-row">
+            <input id="activateHostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeAttribute(hostAccessDefaults.folder)}" placeholder="Fallback folder for named-volume Instances">
+            <button class="button" type="button" data-host-folder>Choose</button>
+          </div>
+          <div class="dm-field-hint">Bind-mounted Instances use the host directory backing <strong>/a0/usr</strong>. Commands run as the Launcher user and are not sandboxed to the folder.</div>
         </div>
         <details class="dm-advanced">
           <summary>Advanced</summary>
@@ -444,12 +464,19 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   const storageHostRootInput = dialog.querySelector("#activateStorageHostRoot");
   const storageVolumeNameInput = dialog.querySelector("#activateStorageVolumeName");
   const envInput = dialog.querySelector("#activateEnvVars");
+  const hostAccessConfiguredInput = dialog.querySelector("#activateHostAccessConfigured");
+  const hostAccessFolderInput = dialog.querySelector("#activateHostAccessFolder");
   let nameDirty = false;
   let storageHostDirty = false;
   const defaultHostRoot = state?.storagePreferences?.hostRoot || "~/agent-zero";
   let lastChannelPullTag = "";
 
   bindInstanceDefaultProviderPlaceholderSync(dialog, "activate");
+  bindScopeDependency(dialog.querySelector(".dm-host-access-setup"));
+  dialog.querySelector("[data-host-folder]")?.addEventListener("click", async () => {
+    const selected = await window.dockerManagerActions?.chooseHostAccessFolder?.(hostAccessFolderInput?.value || "");
+    if (selected?.path && hostAccessFolderInput) hostAccessFolderInput.value = selected.path;
+  });
   if (nameInput) nameInput.value = defaultInstanceName(initialTag, state);
   if (portInput) portInput.value = "0:80";
   if (storageHostRootInput) storageHostRootInput.value = directWorkspaceFolder(defaultHostRoot, nameInput?.value || "");
@@ -539,6 +566,13 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
       envText,
       dataLossAck: "proceed_without_backup"
     };
+    options.hostAccess = {
+      configured: hostAccessConfiguredInput?.checked === true,
+      masterEnabled: true,
+      folder: hostAccessFolderInput?.value || "",
+      scopes: readHostAccessScopes(dialog.querySelector(".dm-host-access-setup")),
+      browserSelection: hostAccessDefaults.browserSelection
+    };
     if (rememberCredentials) {
       options.credentials = { username, password, remember: true };
     }
@@ -548,6 +582,10 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
       if (storageOverride.hostPathMode) options.hostPathMode = storageOverride.hostPathMode;
       options.hostRoot = storageModeInput?.value === "host_directory_exact" ? storageHostRootInput?.value || "" : "";
       options.volumeName = storageModeInput?.value === "named_volume" ? storageVolumeNameInput?.value || "" : "";
+    }
+    if (options.hostAccess.configured && options.storageMode === "named_volume" && !options.hostAccess.folder) {
+      window.toastFrontendError?.("Choose a host folder for Host access with a named Docker volume.", "Agent Zero");
+      return;
     }
     const defaultsSaved = await window.dockerManagerActions?.setInstanceDefaults?.(instanceDefaults, { quiet: true });
     if (defaultsSaved === false) return;

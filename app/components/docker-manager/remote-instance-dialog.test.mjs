@@ -41,3 +41,10 @@ test('remote dialog labels the friendly name as Instance name', async () => {
   assert.match(source, /<label for="remoteInstanceName">Instance name<\/label>/);
   assert.doesNotMatch(source, /<label for="remoteInstanceName">Display name<\/label>/);
 });
+
+test('remote setup stays on the remote machine unless Launcher host access is selected', async () => {
+  const source = await readFile(new URL('./remote-instance-dialog.js', import.meta.url), 'utf8');
+  assert.match(source, /Use the remote machine/);
+  assert.match(source, /Connect this computer while this tab is open/);
+  assert.match(source, /value="remote" checked/);
+});

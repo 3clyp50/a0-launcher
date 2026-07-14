@@ -1543,6 +1543,7 @@ async function coreSupportsLauncherGateway(host) {
   timer.unref?.();
   try {
     const response = await net.fetch(endpoint, {
+      method: 'POST',
       headers: { accept: 'application/json', 'user-agent': `A0-Launcher/${app.getVersion()}` },
       signal: controller.signal
     });
@@ -1644,14 +1645,14 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
 
   let cli;
   try {
-    cli = findA0CliBinary();
+    cli = findA0CliBinary({ requireGateway: true });
   } catch {
     cli = '';
   }
-  if (!cli || !a0CliSupportsGateway(cli)) {
+  if (!cli) {
     setTabHostAccess(tab, hostAccessStatus('needs_action', {
       code: 'CLI_UPDATE_REQUIRED',
-      message: 'Install or update A0 CLI to version 2.5 or newer.'
+      message: 'Install or select an A0 CLI with Launcher gateway support.'
     }), config);
     return null;
   }
@@ -2361,21 +2362,19 @@ function getA0CliStatus() {
   };
 }
 
-function findA0CliBinary() {
-  const override = existingFilePath(process.env.A0_CLI_PATH);
-  if (override) return override;
-
-  const commandBinary = findA0CliCommandBinary();
-  if (commandBinary) return commandBinary;
-
+function findA0CliBinary({ requireGateway = false } = {}) {
   const repoRoot = path.resolve(__dirname, '..');
   const siblingConnector = path.resolve(repoRoot, '..', 'a0-connector');
   const candidates = process.platform === 'win32'
     ? [
+        process.env.A0_CLI_PATH,
+        findA0CliCommandBinary(),
         path.join(siblingConnector, '.venv', 'Scripts', 'a0.exe'),
         path.join(os.homedir(), '.local', 'bin', 'a0.exe')
       ]
     : [
+        process.env.A0_CLI_PATH,
+        findA0CliCommandBinary(),
         path.join(siblingConnector, '.venv', 'bin', 'a0'),
         '/home/eclypso/a0/a0-connector/.venv/bin/a0',
         '/opt/homebrew/bin/a0',
@@ -2385,14 +2384,13 @@ function findA0CliBinary() {
 
   for (const candidate of candidates) {
     const existing = existingFilePath(candidate);
-    if (existing) return existing;
+    if (existing && (!requireGateway || a0CliSupportsGateway(existing))) return existing;
   }
 
-  const pathCommand = findCommandOnPath('a0');
-  if (pathCommand) return pathCommand;
-
-  const err = new Error('A0 CLI was not found. Install a0-connector or add the a0 command to PATH.');
-  err.code = 'TERMINAL_UNAVAILABLE';
+  const err = new Error(requireGateway
+    ? 'A0 CLI with Launcher gateway support was not found.'
+    : 'A0 CLI was not found. Install a0-connector or add the a0 command to PATH.');
+  err.code = requireGateway ? 'CLI_UPDATE_REQUIRED' : 'TERMINAL_UNAVAILABLE';
   throw err;
 }
 

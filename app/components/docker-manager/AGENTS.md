@@ -320,6 +320,8 @@ This scope owns:
   but is only the initial command directory: commands run as the Launcher user
   and are not sandboxed to that folder. Browser preparation and Computer Use
   permission failures are Needs action states, not silent relaunches or grants.
+  Compatibility copy must name advertised Launcher gateway support rather than
+  assume a specific A0 CLI release number.
 
 ## Work Guidance
 

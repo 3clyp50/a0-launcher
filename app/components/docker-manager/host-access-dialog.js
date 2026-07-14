@@ -202,7 +202,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const isRemote = tab.kind === "remote";
   const stateName = String(runtime.state || "disconnected");
   const compatibility = runtime.code === "CLI_UPDATE_REQUIRED"
-    ? "A0 CLI 2.5 or newer required"
+    ? "A0 CLI Launcher gateway support required"
     : ["CORE_UPDATE_REQUIRED", "CONTRACT_MISMATCH", "PLUGIN_MISSING"].includes(runtime.code)
       ? "Agent Zero or A0 CLI update required"
       : runtime.code === "AUTH_REQUIRED"

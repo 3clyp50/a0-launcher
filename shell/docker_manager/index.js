@@ -1224,8 +1224,15 @@ function workspaceStorageFromInspect(inspect) {
 function workspaceHostPathFromInspect(inspect) {
   const storage = workspaceStorageFromInspect(inspect);
   const hostPath = typeof storage?.hostPath === 'string' ? storage.hostPath.trim() : '';
-  if (!storage?.persistent || !hostPath) return '';
-  return path.resolve(hostPath);
+  if (storage?.persistent) return hostPath ? path.resolve(hostPath) : '';
+
+  const mounts = Array.isArray(inspect?.Mounts) ? inspect.Mounts : [];
+  const runtimeMount = mounts.find((item) =>
+    String(item?.Type || '').toLowerCase() === 'bind' &&
+    String(item?.Destination || '').trim().replace(/\/+$/, '') === '/a0'
+  );
+  const runtimePath = String(runtimeMount?.Source || '').trim();
+  return runtimePath ? path.resolve(runtimePath, 'usr') : '';
 }
 
 function isWindowsAbsolutePath(value) {

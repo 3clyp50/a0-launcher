@@ -556,14 +556,27 @@ test('workspace host folder resolver only returns persistent bind paths', () => 
     Config: { Labels: {} },
     Mounts: [{ Type: 'bind', Source: '/tmp/a0/usr', Destination: WORKSPACE_MOUNT_TARGET }]
   };
+  const runtimeBindInspect = {
+    Config: { Labels: {} },
+    Mounts: [{ Type: 'bind', Source: '/tmp/agent-zero', Destination: '/a0' }]
+  };
   const volumeInspect = {
     Config: { Labels: {} },
     Mounts: [{ Type: 'volume', Name: 'a0-volume', Source: '/var/lib/docker/volumes/a0-volume/_data', Destination: WORKSPACE_MOUNT_TARGET }]
   };
+  const nestedVolumeInspect = {
+    Config: { Labels: {} },
+    Mounts: [
+      { Type: 'bind', Source: '/tmp/agent-zero', Destination: '/a0' },
+      { Type: 'volume', Name: 'a0-volume', Source: '/var/lib/docker/volumes/a0-volume/_data', Destination: WORKSPACE_MOUNT_TARGET }
+    ]
+  };
   const ephemeralInspect = { Config: { Labels: {} }, Mounts: [] };
 
   assert.equal(workspaceHostPathFromInspect(bindInspect), path.resolve('/tmp/a0/usr'));
+  assert.equal(workspaceHostPathFromInspect(runtimeBindInspect), path.resolve('/tmp/agent-zero/usr'));
   assert.equal(workspaceHostPathFromInspect(volumeInspect), '');
+  assert.equal(workspaceHostPathFromInspect(nestedVolumeInspect), '');
   assert.equal(workspaceHostPathFromInspect(ephemeralInspect), '');
 });
 

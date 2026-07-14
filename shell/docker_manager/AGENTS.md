@@ -93,10 +93,12 @@ This scope owns:
   installation ID. Child PIDs and connection status are runtime-only. Local
   records use container IDs and remote records use saved remote Instance IDs.
 - A local bind mount backing `/a0/usr` is the authoritative Host access folder.
-  Named-volume, ephemeral, and remote Instances require an explicit native host
-  folder, prefilled from the Launcher default when available. Remote Instances
-  otherwise default to their remote machine and do not acquire Launcher host
-  access implicitly.
+  This includes development containers that bind the whole `/a0` runtime: map
+  their host source's `usr` child unless a more specific `/a0/usr` mount masks
+  it. Named-volume, ephemeral, and remote Instances require an explicit native
+  host folder, prefilled from the Launcher default when available. Remote
+  Instances otherwise default to their remote machine and do not acquire
+  Launcher host access implicitly.
 - Local instance display-name and color overrides are persisted through
   `state_store.js` because Docker labels on existing containers cannot be
   mutated safely. Local colors are stored as a container-id keyed

@@ -50,6 +50,8 @@ test('Host access UI states the tab lease and unsandboxed command boundary', asy
   const source = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
   assert.match(source, /closing or detaching the tab disconnects it/i);
   assert.match(source, /not sandboxed to/);
+  assert.match(source, /A0 CLI Launcher gateway support required/);
+  assert.doesNotMatch(source, /2\.5 or newer/);
   assert.match(source, /candidate\?\.browser_id \|\| candidate\?\.id/);
   assert.match(source, /candidate\?\.browser_label \|\| candidate\?\.label/);
 });

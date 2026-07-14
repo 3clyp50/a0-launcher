@@ -70,7 +70,9 @@ function configForTarget(state = {}, target = {}) {
   const key = instanceKey(target);
   const saved = key ? hostAccess?.instances?.[key] : null;
   const runtimeConfig = target?.hostAccess?.config;
-  return normalizeConfig(runtimeConfig || saved, defaults, target?.kind);
+  const config = normalizeConfig(runtimeConfig || saved, defaults, target?.kind);
+  if (target?.kind === "remote" && !config.folder) config.folder = defaults.folder;
+  return config;
 }
 
 function scopeFieldsHtml(prefix, scopes, { compact = false } = {}) {

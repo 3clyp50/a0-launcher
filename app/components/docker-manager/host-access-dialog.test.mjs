@@ -15,7 +15,7 @@ test('scope dependency binding tolerates non-parsing test and fallback DOMs', ()
   assert.doesNotThrow(() => bindScopeDependency(null));
 });
 
-test('local Host access inherits defaults while remote Host access stays off', () => {
+test('local Host access inherits defaults while remote Host access stays off with a folder prefill', () => {
   const state = {
     hostAccess: {
       defaults: {
@@ -30,7 +30,7 @@ test('local Host access inherits defaults while remote Host access stays off', (
 
   assert.equal(configForTarget(state, { kind: 'local', containerId: 'abc' }).configured, true);
   assert.equal(configForTarget(state, { kind: 'remote', instanceId: 'vps' }).configured, false);
-  assert.equal(configForTarget(state, { kind: 'remote', instanceId: 'vps' }).folder, '');
+  assert.equal(configForTarget(state, { kind: 'remote', instanceId: 'vps' }).folder, '/home/user/agent-zero');
 });
 
 test('Files off disables Code execution in rendered configuration', () => {

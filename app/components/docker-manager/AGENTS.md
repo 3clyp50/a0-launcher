@@ -314,7 +314,9 @@ This scope owns:
 - Each Instance tab shows a noninteractive Host access state glyph and a
   separately accessible settings button. Supported states are Connecting,
   Connected, Paused, Needs action, Error, and Disconnected; the controls must
-  remain usable at compact widths.
+  remain usable at compact widths. Remote Instances stay configured off by
+  default, but an unset folder in their Host access dialog is prefilled from
+  the Launcher default for a first opt-in.
 - Files is read/write or off. Code execution depends on Files and turns off
   with it. Copy must explain that the selected folder bounds file operations
   but is only the initial command directory: commands run as the Launcher user

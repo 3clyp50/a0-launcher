@@ -9,6 +9,7 @@ const GATEWAY_STATES = new Set([
   'disconnected'
 ]);
 const MAX_GATEWAY_JSONL_LENGTH = 1024 * 1024;
+const GATEWAY_STARTUP_TIMEOUT_MS = 30000;
 
 function boundedGatewayValue(value, depth = 0) {
   if (typeof value === 'string') return value.slice(0, 2048);
@@ -124,6 +125,10 @@ class HostGatewaySupervisor {
     this.spawn = options.spawn || childProcess.spawn;
     this.onStatus = typeof options.onStatus === 'function' ? options.onStatus : () => {};
     this.onConfig = typeof options.onConfig === 'function' ? options.onConfig : () => {};
+    const startupTimeoutMs = Number(options.startupTimeoutMs);
+    this.startupTimeoutMs = Number.isFinite(startupTimeoutMs)
+      ? Math.max(1, startupTimeoutMs)
+      : GATEWAY_STARTUP_TIMEOUT_MS;
     this.records = new Map();
     this.closingChildren = new Set();
   }
@@ -153,6 +158,7 @@ class HostGatewaySupervisor {
       intentional: false,
       suppressed: false,
       removed: false,
+      startupTimer: null,
       launch: { ...launch }
     };
     this.records.set(id, record);
@@ -192,9 +198,18 @@ class HostGatewaySupervisor {
       record.stderr = `${record.stderr}${String(chunk || '')}`.slice(-4000);
     });
     child.once?.('error', (error) => {
+      this._clearStartupTimer(record);
       this._fail(record, 'GATEWAY_START_FAILED', error?.message || 'Unable to start A0 gateway.');
     });
     child.once?.('exit', (code, signal) => this._handleExit(record, code, signal));
+    record.startupTimer = setTimeout(() => {
+      this._terminateWithError(
+        record,
+        'GATEWAY_START_TIMEOUT',
+        'A0 gateway did not publish a valid status before the startup deadline.'
+      );
+    }, this.startupTimeoutMs);
+    record.startupTimer.unref?.();
     return publicGatewayStatus(record.status);
   }
 
@@ -223,6 +238,7 @@ class HostGatewaySupervisor {
     if (!record) return false;
     record.intentional = true;
     record.removed = true;
+    this._clearStartupTimer(record);
     this.records.delete(id);
     const child = record.child;
     if (child && child.exitCode === null) {
@@ -278,8 +294,7 @@ class HostGatewaySupervisor {
     record.buffer += String(chunk || '');
     if (record.buffer.length > MAX_GATEWAY_JSONL_LENGTH && !record.buffer.includes('\n')) {
       record.buffer = '';
-      this._fail(record, 'GATEWAY_CONTRACT_ERROR', 'A0 gateway emitted an oversized JSONL message.');
-      try { record.child?.kill?.('SIGTERM'); } catch { /* ignore */ }
+      this._terminateWithError(record, 'GATEWAY_CONTRACT_ERROR', 'A0 gateway emitted an oversized JSONL message.');
       return;
     }
     while (record.buffer.includes('\n')) {
@@ -288,15 +303,19 @@ class HostGatewaySupervisor {
       record.buffer = record.buffer.slice(newline + 1);
       if (!line) continue;
       if (line.length > MAX_GATEWAY_JSONL_LENGTH) {
-        this._fail(record, 'GATEWAY_CONTRACT_ERROR', 'A0 gateway emitted an oversized JSONL message.');
-        try { record.child?.kill?.('SIGTERM'); } catch { /* ignore */ }
+        this._terminateWithError(record, 'GATEWAY_CONTRACT_ERROR', 'A0 gateway emitted an oversized JSONL message.');
         return;
       }
       let event;
       try {
         event = JSON.parse(line);
       } catch {
-        continue;
+        this._terminateWithError(record, 'GATEWAY_CONTRACT_ERROR', 'A0 gateway emitted invalid JSONL output.');
+        return;
+      }
+      if (!event || typeof event !== 'object' || Array.isArray(event)) {
+        this._terminateWithError(record, 'GATEWAY_CONTRACT_ERROR', 'A0 gateway emitted a non-object JSONL message.');
+        return;
       }
       this._handleEvent(record, event);
     }
@@ -306,6 +325,20 @@ class HostGatewaySupervisor {
     if (record.removed) return;
     if (event.type === 'status' && event.gateway && typeof event.gateway === 'object') {
       const gateway = sanitizeGatewayMetadata(event.gateway);
+      if (
+        gateway.version !== 1 ||
+        gateway.kind !== 'launcher' ||
+        !gateway.id ||
+        gateway.id !== String(record.launch.gatewayId || '')
+      ) {
+        this._terminateWithError(
+          record,
+          'GATEWAY_CONTRACT_ERROR',
+          'A0 gateway status did not match the requested Launcher gateway identity.'
+        );
+        return;
+      }
+      this._clearStartupTimer(record);
       const state = gateway.state;
       if (state === 'disconnected') record.suppressed = true;
       record.status = {
@@ -351,15 +384,16 @@ class HostGatewaySupervisor {
       const stage = String(event.stage || '');
       record.status = {
         ...record.status,
-        state: stage === 'ready' ? 'connected' : 'connecting',
+        state: 'connecting',
         message: String(event.message || ''),
-        connected: stage === 'ready'
+        connected: false
       };
       this._publish(record);
     }
   }
 
   _handleExit(record, code, signal) {
+    this._clearStartupTimer(record);
     if (record.child) this.closingChildren.delete(record.child);
     record.child = null;
     if (record.removed) return;
@@ -391,6 +425,19 @@ class HostGatewaySupervisor {
       retryable: true
     };
     this._publish(record);
+  }
+
+  _terminateWithError(record, code, message) {
+    if (record.removed) return;
+    this._clearStartupTimer(record);
+    this._fail(record, code, message);
+    try { record.child?.kill?.('SIGTERM'); } catch { /* ignore */ }
+  }
+
+  _clearStartupTimer(record) {
+    if (!record.startupTimer) return;
+    clearTimeout(record.startupTimer);
+    record.startupTimer = null;
   }
 
   _publish(record) {

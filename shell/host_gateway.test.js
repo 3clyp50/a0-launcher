@@ -162,6 +162,55 @@ test('JSONL status is published and Core scope changes flow back to persistence'
   assert.match(statuses.at(-1).message, /Close Chromium/);
 });
 
+test('gateway status must match the requested versioned Launcher identity', () => {
+  const child = fakeChild();
+  const supervisor = new HostGatewaySupervisor({ spawn: () => child });
+  supervisor.start('tab-1', launch());
+
+  child.stdout.write(`${JSON.stringify({
+    type: 'status',
+    gateway: {
+      version: 1,
+      kind: 'launcher',
+      id: 'launcher-other',
+      state: 'connected'
+    }
+  })}\n`);
+
+  const status = supervisor.statusFor('tab-1');
+  assert.equal(status.state, 'error');
+  assert.equal(status.code, 'GATEWAY_CONTRACT_ERROR');
+  assert.equal(child.killedWith, 'SIGTERM');
+});
+
+test('gateway stdout rejects non-object JSONL messages', () => {
+  const child = fakeChild();
+  const supervisor = new HostGatewaySupervisor({ spawn: () => child });
+  supervisor.start('tab-1', launch());
+
+  child.stdout.write('null\n');
+
+  const status = supervisor.statusFor('tab-1');
+  assert.equal(status.code, 'GATEWAY_CONTRACT_ERROR');
+  assert.equal(child.killedWith, 'SIGTERM');
+});
+
+test('gateway startup is bounded until a valid status arrives', async () => {
+  const child = fakeChild();
+  const supervisor = new HostGatewaySupervisor({
+    spawn: () => child,
+    startupTimeoutMs: 5
+  });
+  supervisor.start('tab-1', launch());
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const status = supervisor.statusFor('tab-1');
+  assert.equal(status.state, 'error');
+  assert.equal(status.code, 'GATEWAY_START_TIMEOUT');
+  assert.equal(child.killedWith, 'SIGTERM');
+});
+
 test('close sends shutdown and removes the lease without restarting it', () => {
   const child = fakeChild();
   let spawns = 0;
@@ -210,7 +259,13 @@ test('Emergency disconnect suppresses the current lease until tab reopen', () =>
   supervisor.start('tab-1', launch());
   children[0].stdout.write(`${JSON.stringify({
     type: 'status',
-    gateway: { state: 'disconnected', host_label: 'My computer' }
+    gateway: {
+      version: 1,
+      kind: 'launcher',
+      id: 'launcher-1',
+      state: 'disconnected',
+      host_label: 'My computer'
+    }
   })}\n`);
   children[0].exitCode = 0;
   children[0].emit('exit', 0, null);

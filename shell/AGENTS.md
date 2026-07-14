@@ -110,7 +110,10 @@ This scope owns:
   until that tab closes.
   Keep gateway identity stable for the Launcher installation across tabs,
   preserve saved reverse-proxy base paths, reject URL credentials, and bound
-  JSONL input before it enters renderer state.
+  JSONL input before it enters renderer state. Treat stdout as a strict JSONL
+  contract, require versioned status to match the requested gateway identity,
+  and terminate children that do not publish valid status within the bounded
+  startup window.
 - Embedded and detached Launcher-owned Agent Zero web contents must append
   `A0-Launcher/<version>` to the user agent. This tag identifies the shell-owned
   browsing surface; it does not grant authentication or gateway authority.

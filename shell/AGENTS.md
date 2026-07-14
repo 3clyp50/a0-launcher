@@ -88,7 +88,9 @@ This scope owns:
   and callbacks; safe off-origin `http:` and `https:` URLs should open through
   the user's external browser. Embedded and detached Agent Zero UI web contents
   should attach the same shell-owned edit context menu so selected text and
-  editable fields keep normal copy/paste behavior.
+  editable fields keep normal copy/paste behavior. Instance-tab refreshes must
+  bypass the HTTP cache so an Agent Zero restart cannot strand aborted UI assets
+  in the embedded view.
 - Each eligible embedded Instance tab may own exactly one outbound `a0 gateway`
   child. Start it only after the tab opens, keep it alive across Launcher-home
   selection and in-tab reloads, and stop it on close, detach, destroyed web

@@ -12,7 +12,8 @@ const {
   webUiLoginRequestForTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
-  instanceContextMenuActions
+  instanceContextMenuActions,
+  reloadInstanceWebContents
 } = require('./instance_tabs');
 
 test('local URLs allow only localhost-style HTTP URLs without credentials', () => {
@@ -261,4 +262,16 @@ test('instance context menu exposes editable text actions from Electron flags', 
 
 test('instance context menu stays quiet when no edit action applies', () => {
   assert.deepEqual(instanceContextMenuActions({ editFlags: {} }), []);
+});
+
+test('instance reload bypasses stale HTTP cache', () => {
+  let reloads = 0;
+  const webContents = {
+    isDestroyed: () => false,
+    reloadIgnoringCache: () => { reloads += 1; }
+  };
+
+  assert.equal(reloadInstanceWebContents(webContents), true);
+  assert.equal(reloads, 1);
+  assert.equal(reloadInstanceWebContents({ isDestroyed: () => true }), false);
 });

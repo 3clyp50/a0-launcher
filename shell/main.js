@@ -20,7 +20,8 @@ const {
   webUiLoginRequestForTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
-  instanceContextMenuActions
+  instanceContextMenuActions,
+  reloadInstanceWebContents
 } = require('./instance_tabs');
 const { formatLauncherVersion } = require('./launcher_update');
 const {
@@ -2204,7 +2205,7 @@ function reloadInstanceTab(id) {
     throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
   }
   const wc = tab.view?.webContents;
-  if (wc && !wc.isDestroyed()) wc.reload();
+  reloadInstanceWebContents(wc);
   return { reloaded: true, tabId };
 }
 

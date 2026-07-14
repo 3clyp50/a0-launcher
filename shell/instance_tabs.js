@@ -210,6 +210,12 @@ function instanceContextMenuActions(params) {
   return actions;
 }
 
+function reloadInstanceWebContents(webContents) {
+  if (!webContents || webContents.isDestroyed?.()) return false;
+  webContents.reloadIgnoringCache();
+  return true;
+}
+
 module.exports = {
   normalizeHttpUrl,
   instanceUiSectionUrl,
@@ -221,5 +227,6 @@ module.exports = {
   webUiLoginRequestForTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
-  instanceContextMenuActions
+  instanceContextMenuActions,
+  reloadInstanceWebContents
 };

@@ -4,6 +4,8 @@ import { test } from 'node:test';
 
 const {
   bindScopeDependency,
+  capabilityStatusLabel,
+  computerUseNeedsArm,
   configForTarget,
   normalizeConfig,
   normalizeScopes
@@ -44,6 +46,15 @@ test('Files off disables Code execution in rendered configuration', () => {
     computer_use: true
   });
   assert.equal(normalizeConfig({}, {}, 'remote').configured, false);
+});
+
+test('Host capability statuses are human labels and arm only when actionable', () => {
+  assert.equal(capabilityStatusLabel('ready', 'Unknown'), 'Ready');
+  assert.equal(capabilityStatusLabel('persistent', 'Unknown'), 'Permission prompt');
+  assert.equal(computerUseNeedsArm('persistent'), false);
+  assert.equal(computerUseNeedsArm('rearm required'), true);
+  assert.equal(computerUseNeedsArm('approval_required'), true);
+  assert.equal(computerUseNeedsArm('unsupported'), false);
 });
 
 test('Host access UI states the tab lease and unsandboxed command boundary', async () => {

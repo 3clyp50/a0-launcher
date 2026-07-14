@@ -5,6 +5,23 @@ const SCOPE_FIELDS = Object.freeze([
   { key: "computer_use", label: "Computer Use", hint: "Control this computer after its platform permission is armed." }
 ]);
 
+const CAPABILITY_STATUS_LABELS = Object.freeze({
+  ready: "Ready",
+  active: "Active",
+  disabled: "Disabled",
+  unsupported: "Unavailable",
+  "relaunch required": "Relaunch required",
+  interactive: "Permission prompt",
+  persistent: "Permission prompt",
+  allow: "Allowed",
+  arming: "Arming",
+  "approval required": "Approval required",
+  "rearm required": "Rearm required",
+  error: "Needs attention"
+});
+
+const ARMABLE_COMPUTER_USE_STATUSES = new Set(["approval required", "rearm required", "error"]);
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -110,6 +127,18 @@ function statusLabel(value) {
   }[state] || "Disconnected";
 }
 
+function normalizeCapabilityStatus(value) {
+  return String(value || "").trim().toLowerCase().replaceAll("_", " ");
+}
+
+function capabilityStatusLabel(value, fallback) {
+  return CAPABILITY_STATUS_LABELS[normalizeCapabilityStatus(value)] || fallback;
+}
+
+function computerUseNeedsArm(value) {
+  return ARMABLE_COMPUTER_USE_STATUSES.has(normalizeCapabilityStatus(value));
+}
+
 function browserOptions(browser = {}, selected = "") {
   const options = [{ value: "", label: "Automatic detection" }];
   for (const candidate of Array.isArray(browser?.available_browsers) ? browser.available_browsers : []) {
@@ -199,6 +228,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const details = gateway.status || {};
   const browser = details.browser || {};
   const computer = details.computer_use || {};
+  const canArmComputer = computerUseNeedsArm(computer.status);
   const isRemote = tab.kind === "remote";
   const stateName = String(runtime.state || "disconnected");
   const compatibility = runtime.code === "CLI_UPDATE_REQUIRED"
@@ -251,11 +281,11 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
         <div class="dm-field">
           <label for="hostAccessBrowser">Personal Chromium profile</label>
           <select id="hostAccessBrowser" class="dm-select">${browserOptions(browser, config.browserSelection)}</select>
-          <div class="dm-field-hint">${escapeHtml(browser.support_reason || browser.status || "Detected when the gateway connects.")}</div>
+          <div class="dm-field-hint">${escapeHtml(browser.support_reason || capabilityStatusLabel(browser.status, "Detected when the gateway connects."))}</div>
         </div>
         <div class="dm-host-access-diagnostics">
           <div><span>Compatibility</span><strong>${escapeHtml(compatibility)}</strong></div>
-          <div><span>Computer Use</span><strong>${escapeHtml(computer.status || "Permission checked when connected")}</strong></div>
+          <div><span>Computer Use</span><strong>${escapeHtml(capabilityStatusLabel(computer.status, "Permission checked when connected"))}</strong></div>
         </div>
       </div>
       <div class="dm-dialog-footer dm-host-access-footer">
@@ -263,7 +293,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
           ${runtime.code === "CLI_UPDATE_REQUIRED" ? '<button class="button" type="button" data-install-cli>Install / Update CLI</button>' : ""}
           ${runtime.retryable || ["error", "needs_action"].includes(stateName) ? '<button class="button" type="button" data-retry>Retry</button>' : ""}
           ${browser.can_prepare ? '<button class="button" type="button" data-prepare-browser>Prepare browser</button>' : ""}
-          ${computer.status && computer.status !== "active" ? '<button class="button" type="button" data-rearm>Arm Computer Use</button>' : ""}
+          ${canArmComputer ? '<button class="button" type="button" data-rearm>Arm Computer Use</button>' : ""}
         </div>
         <div class="dm-dialog-footer-group">
           <button class="button" type="button" data-close>Cancel</button>
@@ -300,6 +330,8 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
 
 export {
   configForTarget,
+  capabilityStatusLabel,
+  computerUseNeedsArm,
   maybeOpenHostAccessOnboarding,
   normalizeConfig,
   normalizeScopes,

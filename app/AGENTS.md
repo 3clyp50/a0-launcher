@@ -38,10 +38,11 @@ This scope owns:
   action and send bounded settings or gateway commands; it never sees child
   process handles, decrypted credentials, or a generic execution primitive.
 - First-use Host access onboarding is skippable and precedes gateway startup.
-  Local setup defaults on with file read, file write, and Code execution;
-  browser and Computer Use are opt-in. Saved remote setup defaults to
-  the remote machine and requires an explicit choice to connect this computer
-  while the tab is open.
+  Local and saved remote setup default to no Launcher Host access. Onboarding
+  and Settings expose the local default master switch; file read, file write,
+  and Code execution remain preselected while browser and Computer Use are
+  opt-in. Remote setup requires an explicit choice to connect this computer
+  while its Launcher tab or detached window is open.
 - Runtime setup state is part of the canonical renderer snapshot. If the
   runtime is not ready after initial state loads and no saved remote Instances
   exist, the renderer must show the startup runtime modal with a first-step

@@ -178,6 +178,7 @@ function makeTabsSnapshot(tabs, activeTabId) {
         active: safeTab.id === activeTabId,
         loading: Boolean(safeTab.loading),
         canReload: Boolean(safeTab.canReload),
+        ...(safeTab.detached === true ? { detached: true } : {}),
         hostAccess: safeTab.hostAccess && typeof safeTab.hostAccess === 'object'
           ? safeTab.hostAccess
           : { state: 'disconnected', connected: false }

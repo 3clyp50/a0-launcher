@@ -10,10 +10,20 @@ import {
   normalizeInstanceDefaults,
   readInstanceDefaultsFromForm
 } from "../instance-defaults.js";
+import {
+  bindHostAccessState,
+  bindScopeDependency,
+  normalizeConfig as normalizeHostAccessConfig,
+  readScopes as readHostAccessScopes,
+  scopeFieldsHtml as hostAccessScopeFieldsHtml,
+  switchLineHtml as hostAccessSwitchLineHtml
+} from "../host-access-dialog.js";
 
 const SETTINGS_TAB_KEY = "dm-settings-active-tab";
 const SETTINGS_TABS = ["ports", "workspace", "defaults"];
+const HOST_ACCESS_SCOPE_KEYS = ["files", "file_write", "code_execution", "browser", "computer_use"];
 let settingsSaveInProgress = false;
+let syncHostAccessDefaults = null;
 
 function byId(id) { return document.getElementById(id); }
 
@@ -124,6 +134,73 @@ function renderModelFields() {
   bindInstanceDefaultProviderPlaceholderSync(document, "settings");
 }
 
+function renderHostAccessFields(state = window.__dmLastState || {}) {
+  const root = byId("settingsHostAccessDefaults");
+  if (!root || root.dataset.rendered) return;
+  const defaults = normalizeHostAccessConfig(state?.hostAccess?.defaults, {}, "local");
+  const enabled = defaults.configured && defaults.masterEnabled;
+  root.innerHTML = `
+    <div class="dm-field-label">Host access</div>
+    <div class="dm-field-hint">Used when you create a local Instance. You can still change Host access for each Instance.</div>
+    ${hostAccessSwitchLineHtml(
+      "settingsHostAccessConfigured",
+      "Allow new Instances to use this computer",
+      "New Instances can use this computer while open with the Launcher, either in a tab or detached window.",
+      enabled
+    )}
+    ${hostAccessScopeFieldsHtml("settingsHostAccess", defaults.scopes, {
+      compact: true,
+      detailsContent: `<div class="dm-field">
+        <label for="settingsHostAccessFolder">Default folder for files and commands <span class="dm-optional">optional</span></label>
+        <div class="dm-host-folder-row">
+          <input id="settingsHostAccessFolder" class="dm-text-input" type="text" readonly placeholder="Choose a fallback folder" data-host-config-control>
+          <button class="button" type="button" data-host-folder data-host-config-control>Choose</button>
+        </div>
+        <div class="dm-field-hint">Used when an Instance has no workspace on this computer. Agent Zero reads and writes files here. Commands start here but can reach other folders.</div>
+      </div>`
+    })}`;
+  root.dataset.rendered = "1";
+  const folder = byId("settingsHostAccessFolder");
+  if (folder) folder.value = defaults.folder;
+  bindScopeDependency(root);
+  syncHostAccessDefaults = bindHostAccessState(root, {
+    configuredSelector: "#settingsHostAccessConfigured"
+  });
+  root.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("input", () => { input.dataset.dirty = "1"; });
+    input.addEventListener("change", () => { input.dataset.dirty = "1"; });
+  });
+  root.querySelector("[data-host-folder]")?.addEventListener("click", async () => {
+    const result = await window.dockerManagerActions?.chooseHostAccessFolder?.(folder?.value || "");
+    if (result?.path && folder) {
+      folder.value = result.path;
+      folder.dataset.dirty = "1";
+    }
+  });
+}
+
+function populateHostAccessFields(state = {}) {
+  renderHostAccessFields(state);
+  const root = byId("settingsHostAccessDefaults");
+  if (!root) return;
+  const defaults = normalizeHostAccessConfig(state?.hostAccess?.defaults, {}, "local");
+  const configured = byId("settingsHostAccessConfigured");
+  const folder = byId("settingsHostAccessFolder");
+  if (configured && !configured.dataset.dirty) {
+    configured.checked = defaults.configured && defaults.masterEnabled;
+  }
+  for (const key of HOST_ACCESS_SCOPE_KEYS) {
+    const input = root.querySelector(`[data-host-scope="${key}"]`);
+    if (input && !input.dataset.dirty) input.checked = defaults.scopes[key] === true;
+  }
+  if (folder && !folder.dataset.dirty) folder.value = defaults.folder;
+  syncHostAccessDefaults?.();
+}
+
+function hostAccessInputs() {
+  return Array.from(byId("settingsHostAccessDefaults")?.querySelectorAll("input") || []);
+}
+
 function storageInputs() {
   return [
     byId("workspaceStorageMode"),
@@ -149,6 +226,19 @@ function readStoragePreferences() {
   };
 }
 
+function readHostAccessDefaults() {
+  const root = byId("settingsHostAccessDefaults");
+  const enabled = byId("settingsHostAccessConfigured")?.checked === true;
+  const current = normalizeHostAccessConfig(window.__dmLastState?.hostAccess?.defaults, {}, "local");
+  return {
+    configured: enabled,
+    masterEnabled: enabled,
+    folder: byId("settingsHostAccessFolder")?.value || "",
+    scopes: readHostAccessScopes(root),
+    browserSelection: current.browserSelection
+  };
+}
+
 function clearPortDirty() {
   delete byId("uiPortInput")?.dataset.dirty;
   delete byId("sshPortInput")?.dataset.dirty;
@@ -163,7 +253,9 @@ async function saveAllSettings() {
   if (settingsSaveInProgress) return;
   const actions = window.dockerManagerActions || {};
   const storageFields = storageInputs();
+  const hostFields = hostAccessInputs();
   const instanceDefaults = readInstanceDefaultsFromForm(document, "settings");
+  const hostAccessDefaults = readHostAccessDefaults();
   const envResult = buildInstanceEnvText(instanceDefaults);
 
   settingsSaveInProgress = true;
@@ -171,6 +263,10 @@ async function saveAllSettings() {
   try {
     const portsOk = (await actions.setPortPreferences?.(readPortPreferences(), { quiet: true })) === true;
     const storageOk = Boolean(await actions.setStoragePreferences?.(readStoragePreferences(), { quiet: true }));
+    const hostAccessOk = await actions.setHostAccessSettings?.({
+      onboardingComplete: true,
+      defaults: hostAccessDefaults
+    }) === true;
     let defaultsOk = false;
 
     if (envResult.ok) {
@@ -181,9 +277,10 @@ async function saveAllSettings() {
 
     if (portsOk) clearPortDirty();
     if (storageOk) storageFields.forEach((input) => { delete input.dataset.dirty; });
+    if (hostAccessOk) hostFields.forEach((input) => { delete input.dataset.dirty; });
     if (defaultsOk) clearInstanceDefaultDirty(document, "settings");
 
-    if (portsOk && storageOk && defaultsOk) {
+    if (portsOk && storageOk && hostAccessOk && defaultsOk) {
       window.toastFrontendSuccess?.("Settings saved.", "Agent Zero");
     } else {
       window.toastFrontendWarning?.("Some settings could not be saved.", "Agent Zero");
@@ -220,12 +317,14 @@ function populateFromState(state) {
   if (volumePrefix && !volumePrefix.dataset.dirty) volumePrefix.value = storagePrefs.volumePrefix;
   if (saveSettingsBtn) saveSettingsBtn.disabled = settingsSaveInProgress || state?.progress?.status === "running";
   syncStoragePreferenceFields();
+  populateHostAccessFields(state);
   applyInstanceDefaultsToForm(document, "settings", instanceDefaults, { respectDirty: true });
 }
 
 function bindActions() {
   bindSettingsTabs();
   renderModelFields();
+  renderHostAccessFields();
   const saveSettingsBtn = byId("saveSettingsBtn");
   const uiInput = byId("uiPortInput");
   const sshInput = byId("sshPortInput");

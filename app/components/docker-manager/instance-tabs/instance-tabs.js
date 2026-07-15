@@ -5,8 +5,12 @@ function byId(id) {
 }
 
 function activeTab(snapshot) {
-  const tabs = Array.isArray(snapshot?.tabs) ? snapshot.tabs : [];
+  const tabs = embeddedTabs(snapshot);
   return tabs.find((tab) => tab?.active) || tabs.find((tab) => tab?.id === snapshot?.activeTabId) || null;
+}
+
+function embeddedTabs(snapshot) {
+  return (Array.isArray(snapshot?.tabs) ? snapshot.tabs : []).filter((tab) => tab?.detached !== true);
 }
 
 function instanceTabsFromState(state) {
@@ -33,7 +37,7 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
   const viewport = byId("dmInstanceTabViewport");
   if (!strip || !viewport) return;
 
-  const tabs = Array.isArray(snapshot?.tabs) ? snapshot.tabs : [];
+  const tabs = embeddedTabs(snapshot);
   const selected = activeTab(snapshot);
   const homeActive = !selected;
   strip.innerHTML = "";

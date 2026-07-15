@@ -388,7 +388,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
           ${hostAccessSwitchLineHtml(
             "activateHostAccessConfigured",
             "Allow this Instance to use this computer",
-            "Access ends when you close or detach its tab.",
+            "Access stays on with the Launcher while this Instance is open, either in a tab or detached window.",
             hostAccessDefaults.configured && hostAccessDefaults.masterEnabled
           )}
           ${hostAccessScopeFieldsHtml("activateHostAccess", hostAccessDefaults.scopes, {

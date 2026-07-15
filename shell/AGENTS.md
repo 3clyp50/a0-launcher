@@ -91,13 +91,16 @@ This scope owns:
   editable fields keep normal copy/paste behavior. Instance-tab refreshes must
   bypass the HTTP cache so an Agent Zero restart cannot strand aborted UI assets
   in the embedded view.
-- Each eligible embedded Instance tab may own exactly one outbound `a0 gateway`
-  child. Start it only after the tab opens, keep it alive across Launcher-home
-  selection and in-tab reloads, and stop it on close, detach, destroyed web
-  contents, or application cleanup. A detached window never inherits ownership.
-  Graceful shutdown must be allowed to finish before Electron exits so remote
-  shell groups, browser sessions, Computer Use sessions, and the WebSocket are
-  not orphaned.
+- Each eligible Launcher-owned Instance surface may own exactly one outbound
+  `a0 gateway` child. Start it only after an embedded tab opens, keep it alive
+  across Launcher-home selection and in-tab reloads, and transfer that same
+  lease when the tab moves into a detached window. Stop it when the owning tab
+  or detached window closes, its current web contents are destroyed, or the app
+  cleans up. Graceful shutdown must be allowed to finish before Electron exits
+  so remote shell groups, browser sessions, Computer Use sessions, and the
+  WebSocket are not orphaned.
+- Missing Host access preferences normalize with the local master state off.
+  Preserve explicit saved choices; local onboarding and Settings own opt-in.
 - Launcher gateway supervision must use the installed CLI contract and JSONL
   stdin/stdout; it must not open an inbound port or expose a generic process
   surface through preload. Pass credentials only as ephemeral environment

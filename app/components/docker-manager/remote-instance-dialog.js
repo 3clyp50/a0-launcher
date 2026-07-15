@@ -114,7 +114,7 @@ function openAddRemoteInstanceDialog(options = {}) {
           ${hostAccessSwitchLineHtml(
             "remoteHostAccessConfigured",
             "Allow this Instance to use this computer",
-            "Leave off for no access to this computer. Closing or detaching its tab ends access, not the remote Instance.",
+            "Leave off for no access to this computer. Access works only while this Instance is open with the Launcher, either in a tab or detached window.",
             false
           )}
           <div data-launcher-host-options hidden>

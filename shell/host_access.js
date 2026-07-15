@@ -53,9 +53,12 @@ function hostAccessInstanceKey(kind, id) {
 
 function normalizeHostAccessDefaults(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const configured = typeof source.configured === 'boolean'
+    ? source.configured
+    : source.masterEnabled === true;
   return {
-    configured: typeof source.configured === 'boolean' ? source.configured : true,
-    masterEnabled: typeof source.masterEnabled === 'boolean' ? source.masterEnabled : true,
+    configured,
+    masterEnabled: typeof source.masterEnabled === 'boolean' ? source.masterEnabled : configured,
     folder: normalizeHostFolder(source.folder),
     scopes: normalizeHostAccessScopes(source.scopes),
     browserSelection: normalizeBrowserSelection(source.browserSelection)

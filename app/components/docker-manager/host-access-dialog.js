@@ -47,13 +47,16 @@ function normalizeScopes(value = {}) {
 
 function normalizeConfig(value = {}, fallback = {}, kind = "local") {
   const local = kind !== "remote";
+  const configured = typeof value?.configured === "boolean"
+    ? value.configured
+    : local && fallback?.configured === true;
   return {
-    configured: typeof value?.configured === "boolean"
-      ? value.configured
-      : local && fallback?.configured !== false,
+    configured,
     masterEnabled: typeof value?.masterEnabled === "boolean"
       ? value.masterEnabled
-      : fallback?.masterEnabled !== false,
+      : typeof fallback?.masterEnabled === "boolean"
+        ? fallback.masterEnabled
+        : configured,
     folder: String(value?.folder || (local ? fallback?.folder : "") || ""),
     folderSource: String(value?.folderSource || ""),
     scopes: normalizeScopes(value?.scopes || fallback?.scopes),
@@ -87,10 +90,10 @@ function scopeFieldsHtml(prefix, scopes, { compact = false, onboarding = false, 
             <strong>${escapeHtml(label)}</strong>
             <small>${escapeHtml(hint)}</small>
           </span>
-          ${onboarding ? `<span class="dm-host-access-switch">
+          <span class="dm-host-access-switch">
             <input id="${prefix}-${key}" data-host-scope="${key}" type="checkbox"${scopes[key] ? " checked" : ""}>
             <span class="dm-host-access-toggler" aria-hidden="true"></span>
-          </span>` : `<input id="${prefix}-${key}" data-host-scope="${key}" type="checkbox"${scopes[key] ? " checked" : ""}>`}
+          </span>
         </label>
       `).join("")}
     </fieldset>`;
@@ -158,6 +161,7 @@ function bindHostAccessState(root, { configuredSelector = "" } = {}) {
   };
   configured?.addEventListener("change", sync);
   sync();
+  return sync;
 }
 
 function switchLineHtml(id, label, hint, checked) {
@@ -243,25 +247,35 @@ function openHostAccessOnboarding(state = {}) {
         </div>
       </div>
       <div class="dm-dialog-body">
-        <p class="dm-dialog-copy">Agent Zero can help with files, apps, and tasks on this computer while the current Instance tab is open in the Launcher. Close or detach that tab, and access stops.</p>
+        <p class="dm-dialog-copy">Agent Zero can help with files, apps, and tasks on this computer while the current Instance is open with the Launcher, either in a tab or detached window. Close that tab or window, and access stops.</p>
+        ${switchLineHtml(
+          "hostAccessDefaultConfigured",
+          "Allow new local Instances to use this computer",
+          "You can change this for each Instance.",
+          false
+        )}
         ${scopeFieldsHtml("hostAccessDefault", defaults.scopes, { onboarding: true })}
         <div class="dm-field">
           <label for="hostAccessDefaultFolder">Default folder for files and commands <span class="dm-optional">optional</span></label>
           <div class="dm-host-folder-row">
-            <input id="hostAccessDefaultFolder" class="dm-text-input" type="text" readonly value="${escapeHtml(defaults.folder)}" placeholder="Choose a fallback folder">
-            <button class="button" type="button" data-choose-folder>Choose</button>
+            <input id="hostAccessDefaultFolder" class="dm-text-input" type="text" readonly value="${escapeHtml(defaults.folder)}" placeholder="Choose a fallback folder" data-host-config-control>
+            <button class="button" type="button" data-choose-folder data-host-config-control>Choose</button>
           </div>
           <div class="dm-field-hint">Used when an Instance has no workspace on this computer. Agent Zero reads and writes files here. Commands start here but can reach other folders.</div>
         </div>
       </div>
       <div class="dm-dialog-footer">
         <button class="button" type="button" data-skip>Skip</button>
-        <button class="button confirm" type="submit">Enable by default</button>
+        <button class="button confirm" type="submit">Save defaults</button>
       </div>
     </form>`;
   const form = dialog.querySelector("form");
   const folder = dialog.querySelector("#hostAccessDefaultFolder");
+  const configuredInput = dialog.querySelector("#hostAccessDefaultConfigured");
   bindScopeDependency(dialog);
+  bindHostAccessState(dialog, {
+    configuredSelector: "#hostAccessDefaultConfigured"
+  });
   dialog.querySelector("[data-choose-folder]")?.addEventListener("click", () => chooseFolder(folder));
   const save = async (configured) => {
     const ok = await window.dockerManagerActions?.setHostAccessSettings?.({
@@ -279,10 +293,10 @@ function openHostAccessOnboarding(state = {}) {
   dialog.querySelector("[data-skip]")?.addEventListener("click", () => save(false));
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
-    void save(true);
+    void save(configuredInput?.checked === true);
   });
   document.body.appendChild(dialog);
-  window.setTimeout(() => form?.querySelector("button.confirm")?.focus(), 0);
+  window.setTimeout(() => configuredInput?.focus(), 0);
 }
 
 function maybeOpenHostAccessOnboarding(state = {}) {
@@ -340,7 +354,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
         ${switchLineHtml(
           "hostAccessConfigured",
           "Allow this Instance to use this computer",
-          "Access ends when you close or detach its tab.",
+          "Access stays on with the Launcher while this Instance is open, either in a tab or detached window.",
           configured
         )}
         ${scopeFieldsHtml("hostAccessInstance", config.scopes, {

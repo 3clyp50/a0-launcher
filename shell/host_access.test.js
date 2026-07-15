@@ -9,12 +9,12 @@ const {
   resolveInstanceHostAccess
 } = require('./host_access');
 
-test('Host access defaults local Instances on with browser and Computer Use opt-in', () => {
+test('Host access defaults local Instances off with browser and Computer Use opt-in', () => {
   const settings = normalizeHostAccessSettings({});
   const local = resolveInstanceHostAccess(settings, { kind: 'local', id: 'abc123' });
 
-  assert.equal(local.configured, true);
-  assert.equal(local.masterEnabled, true);
+  assert.equal(local.configured, false);
+  assert.equal(local.masterEnabled, false);
   assert.deepEqual(local.scopes, {
     files: true,
     file_write: true,

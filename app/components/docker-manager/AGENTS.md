@@ -39,12 +39,13 @@ This scope owns:
   Instance defaults, port/env overrides, data-loss acknowledgement, and
   update/switch actions.
 - `local-testing/`: local containers, per-instance action menus, rename, color
-  selection, launcher-saved credential and Host access controls for local and
-  saved remote Instances, clone/log inspection controls, remote instance CRUD,
-  and instance opening.
+  selection, launcher-saved credential controls for local and saved remote
+  Instances, clone/log inspection controls, remote instance CRUD, and instance
+  opening.
 - `advanced/`: tabbed developer-mode custom image runner with inline Docker
   Compose composer, diagnostics, and storage-volume maintenance.
-- `settings/`: port preferences and saved Instance provider/model defaults.
+- `settings/`: port, workspace, Host access, and saved Instance provider/model
+  defaults.
 - `instance-tabs/`: browser-style tab chrome, Launcher tab, active-tab
   controls, Host access status/settings affordances, empty state, and viewport
   bounds reporting for shell-owned Agent Zero UI views.
@@ -298,14 +299,18 @@ This scope owns:
   Host directory mapping should make clear whether the selected folder is a
   parent for per-Instance workspaces or the exact folder mounted at `/a0/usr`.
 - Settings owns persistence for preferred UI/SSH ports and Instance
-  provider/model defaults plus workspace storage defaults. Do not scatter those
-  persistent controls into install or instance cards except for the first-pull
-  defaults prompt.
+  provider/model defaults plus workspace storage and Host access defaults. The
+  Instance defaults tab must expose the same master state, five permissions,
+  and fallback folder chosen during Host access onboarding, preserve hidden
+  browser-profile state, and save them through the page's single Save action.
+  Do not scatter persistent default controls into install or instance cards
+  except for the first-pull defaults prompt.
   Its single visible save action should persist every Settings sub-tab, including
   edited fields in inactive panels.
 - `Open UI` opens local and remote instances in a launcher tab by default.
   Reopening the same target focuses the existing tab. Detach moves the target
-  into a standalone secure Electron window without stopping the instance.
+  into a standalone secure Electron window without stopping the instance or
+  its live Host access lease; closing that window ends the lease.
 - Instance tab chrome keeps a Launcher tab as the first tab whenever any
   instance UI tab is open. Selecting Launcher clears the active shell-owned
   view and leaves the launcher surface usable below the tab strip.
@@ -314,12 +319,11 @@ This scope owns:
 - Each Instance tab shows a noninteractive Host access state glyph and a
   separately accessible settings button. Supported states are Connecting,
   Connected, Paused, Needs action, Error, and Disconnected; the controls must
-  remain usable at compact widths. Each Instance card keeps the same settings
-  affordance available after its tab is closed or detached; without a live tab,
-  the modal edits saved settings and says Ready to connect when Host access is
-  enabled, with a direct cue to open the Instance in a Launcher tab. Remote
-  Instances stay configured off by default, but an unset folder in their Host
-  access dialog is prefilled from the Launcher default for a first opt-in.
+  remain usable at compact widths. Instance cards must not repeat the Host
+  access icon or settings button; intentional connection and scope changes
+  belong in an open Launcher Instance tab or Agent Zero Core. Remote Instances
+  stay configured off by default, but an unset folder in their Host access
+  dialog is prefilled from the Launcher default for a first opt-in.
 - File read and file write are separate permissions. Write depends on read,
   and Code execution depends on write. Permission choices render as a compact
   icon/title/description list inside a native disclosure that starts collapsed;
@@ -327,9 +331,12 @@ This scope owns:
   off so those opt-in controls remain discoverable. Summarize all five
   permissions while Host access is on, show only that Host access is off when
   the master switch is off, and keep the folder field inside the same
-  disclosure. The one-time onboarding is the exception: keep its full
-  permission list visible and use switch controls.
-  Browser and Computer Use start opt-in.
+  disclosure and use Agent Zero-style switch controls in every Host access
+  view. The one-time onboarding is the exception only to collapsing: keep its
+  full permission list visible.
+  Host access starts off for new local and remote setups, with the local default
+  master switch available in both onboarding and Settings. Browser and Computer
+  Use start opt-in.
   One Agent Zero-style switch owns both connection and permission state and
   visibly disables its dependent permissions. Call the selected path the folder
   for files and commands, explain both roles in plain language, and make

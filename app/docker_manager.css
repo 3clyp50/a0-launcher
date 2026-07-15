@@ -2474,6 +2474,11 @@ body {
   margin-top: 0.15rem;
 }
 
+.dm-settings-host-access {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--dm-line-soft);
+}
+
 .dm-settings-advanced {
   margin-top: 0.85rem;
 }
@@ -2882,10 +2887,6 @@ body.dm-instance-home-active .dm-page {
   right: 0;
   background: var(--color-background);
   padding-left: 0.35rem;
-}
-
-.dm-host-access-button:not(:disabled) .material-symbols-outlined {
-  color: var(--color-highlight);
 }
 
 .dm-host-access-dialog {

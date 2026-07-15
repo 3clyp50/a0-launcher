@@ -1839,7 +1839,7 @@ function hideInstanceTabView(tab) {
 
 function applyActiveInstanceTabBounds() {
   for (const tab of instanceTabs.values()) {
-    if (tab.id !== activeInstanceTabId || !instanceTabBounds) {
+    if (tab.detached || tab.id !== activeInstanceTabId || !instanceTabBounds) {
       hideInstanceTabView(tab);
       continue;
     }
@@ -1851,9 +1851,18 @@ function applyActiveInstanceTabBounds() {
   }
 }
 
-function destroyInstanceTab(tab, reason = 'destroyed') {
+function destroyInstanceTab(tab, reason = 'destroyed', { keepGateway = false } = {}) {
   if (!tab) return;
-  hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), reason);
+  if (!keepGateway) {
+    hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), reason);
+    const detachedWindow = tab.detachedWindow;
+    tab.detachedWindow = null;
+    try {
+      if (detachedWindow && !detachedWindow.isDestroyed()) detachedWindow.close();
+    } catch {
+      // ignore
+    }
+  }
 
   try {
     if (mainWindow && !mainWindow.isDestroyed() && mainWindow.contentView && typeof mainWindow.contentView.removeChildView === 'function') {
@@ -1878,6 +1887,13 @@ function cleanupInstanceTabs() {
   instanceTabs = new Map();
   activeInstanceTabId = '';
   instanceTabBounds = null;
+}
+
+function firstEmbeddedInstanceTabId() {
+  for (const tab of instanceTabs.values()) {
+    if (!tab.detached) return tab.id;
+  }
+  return '';
 }
 
 function isNavigationAllowedForTab(tab, url) {
@@ -1989,7 +2005,8 @@ function findInstanceTabByKey(key) {
 
 function setActiveInstanceTab(id) {
   const tabId = typeof id === 'string' ? id : '';
-  if (!tabId || !instanceTabs.has(tabId)) {
+  const tab = tabId ? instanceTabs.get(tabId) : null;
+  if (!tab || tab.detached) {
     throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
   }
   activeInstanceTabId = tabId;
@@ -2074,11 +2091,12 @@ function attachInstanceTabEvents(tab) {
     }
   });
   wc.once('destroyed', () => {
+    if (tab.detached) return;
     hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), 'web_contents_destroyed');
     if (!instanceTabs.has(tab.id)) return;
     instanceTabs.delete(tab.id);
     if (activeInstanceTabId === tab.id) {
-      activeInstanceTabId = instanceTabs.keys().next().value || '';
+      activeInstanceTabId = firstEmbeddedInstanceTabId();
     }
     applyActiveInstanceTabBounds();
     sendInstanceTabsEvent();
@@ -2087,7 +2105,7 @@ function attachInstanceTabEvents(tab) {
 
 async function applyInstanceUiSection(tab, section) {
   const script = instanceUiSectionScript(section);
-  const wc = tab?.view?.webContents;
+  const wc = tab?.detachedWindow?.webContents || tab?.view?.webContents;
   if (!script || !wc || wc.isDestroyed?.()) return false;
   try {
     return await wc.executeJavaScript(script, true);
@@ -2101,7 +2119,21 @@ async function openInstanceTab(target) {
     throw createTabTargetError('UI_UNAVAILABLE', 'Launcher window is not available.');
   }
 
-  const existing = findInstanceTabByKey(target.key);
+  let existing = findInstanceTabByKey(target.key);
+  if (existing?.detached) {
+    const detachedWindow = existing.detachedWindow;
+    if (detachedWindow && !detachedWindow.isDestroyed()) {
+      existing.title = target.title || existing.title;
+      existing.gatewayHost = gatewayHostUrl(target.url) || existing.gatewayHost || '';
+      detachedWindow.show();
+      detachedWindow.focus();
+      await applyInstanceUiSection(existing, target.section);
+      return { opened: true, tabId: existing.id, focusedExisting: true, detached: true };
+    }
+    instanceTabs.delete(existing.id);
+    hostGatewaySupervisor.stop(hostGatewayLeaseKey(existing), 'detached_window_destroyed');
+    existing = null;
+  }
   if (existing) {
     existing.title = target.title || existing.title;
     existing.titleLocked = Boolean(target.title) || existing.titleLocked;
@@ -2172,7 +2204,7 @@ async function openInstanceTab(target) {
     if (activeInstanceTabId === tab.id) {
       activeInstanceTabId = instanceTabs.has(previousActiveTabId)
         ? previousActiveTabId
-        : instanceTabs.keys().next().value || '';
+        : firstEmbeddedInstanceTabId();
     }
     applyActiveInstanceTabBounds();
     sendInstanceTabsEvent();
@@ -2192,7 +2224,7 @@ function closeInstanceTab(id) {
   instanceTabs.delete(tabId);
   destroyInstanceTab(tab, 'tab_closed');
   if (activeInstanceTabId === tabId) {
-    activeInstanceTabId = instanceTabs.keys().next().value || '';
+    activeInstanceTabId = firstEmbeddedInstanceTabId();
   }
   applyActiveInstanceTabBounds();
   sendInstanceTabsEvent();
@@ -2205,23 +2237,44 @@ function reloadInstanceTab(id) {
   if (!tab) {
     throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
   }
-  const wc = tab.view?.webContents;
+  const wc = tab.detachedWindow?.webContents || tab.view?.webContents;
   reloadInstanceWebContents(wc);
   return { reloaded: true, tabId };
 }
 
-function detachInstanceTab(id) {
+async function detachInstanceTab(id) {
   const tabId = typeof id === 'string' ? id : '';
   const tab = tabId ? instanceTabs.get(tabId) : null;
   if (!tab) {
     throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
   }
 
-  openAgentZeroUiWindow(tab.url, tab.title);
-  instanceTabs.delete(tabId);
-  destroyInstanceTab(tab, 'tab_detached');
+  const detachedWindow = await openAgentZeroUiWindow(tab.url, tab.title, tab);
+  if (!instanceTabs.has(tabId)) {
+    detachedWindow.close();
+    throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab was closed before it could be detached.');
+  }
+
+  tab.detached = true;
+  tab.detachedWindow = detachedWindow;
+  const closeDetachedLease = () => {
+    if (tab.detachedWindow !== detachedWindow) return;
+    tab.detachedWindow = null;
+    instanceTabs.delete(tabId);
+    hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), 'detached_window_closed');
+    if (activeInstanceTabId === tabId) activeInstanceTabId = firstEmbeddedInstanceTabId();
+    applyActiveInstanceTabBounds();
+    sendInstanceTabsEvent();
+  };
+  detachedWindow.once('closed', closeDetachedLease);
+  detachedWindow.webContents.once('destroyed', closeDetachedLease);
+
+  destroyInstanceTab(tab, 'tab_detached', { keepGateway: true });
+  tab.view = null;
+  tab.loading = false;
+  tab.canReload = false;
   if (activeInstanceTabId === tabId) {
-    activeInstanceTabId = instanceTabs.keys().next().value || '';
+    activeInstanceTabId = firstEmbeddedInstanceTabId();
   }
   applyActiveInstanceTabBounds();
   sendInstanceTabsEvent();

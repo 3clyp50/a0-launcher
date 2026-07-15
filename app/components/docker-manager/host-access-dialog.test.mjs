@@ -93,6 +93,8 @@ test('File write controls Code execution without hiding file reads', () => {
     browser: false,
     computer_use: true
   });
+  assert.equal(normalizeConfig({}, {}, 'local').configured, false);
+  assert.equal(normalizeConfig({}, {}, 'local').masterEnabled, false);
   assert.equal(normalizeConfig({}, {}, 'remote').configured, false);
 });
 
@@ -107,10 +109,11 @@ test('Host permissions use one collapsed native disclosure', () => {
   assert.match(html, /<details class="dm-advanced dm-host-access-permissions">/);
   assert.match(html, /<summary>Host permissions <span data-host-scope-summary>On: Read, Write, Code · Off: Browser, Computer Use<\/span><\/summary>/);
   assert.match(html, /<fieldset[\s\S]*<div data-folder>Folder<\/div>\s*<\/details>/);
+  assert.equal(html.match(/dm-host-access-toggler/g)?.length, 5);
   assert.doesNotMatch(html, /<details[^>]* open/);
 });
 
-test('Host access onboarding keeps permission switches visible', () => {
+test('Host access onboarding starts off and keeps permission switches visible', async () => {
   const html = scopeFieldsHtml('host', {
     files: true,
     file_write: true,
@@ -121,6 +124,10 @@ test('Host access onboarding keeps permission switches visible', () => {
   assert.match(html, /dm-host-access-permissions-static/);
   assert.match(html, /dm-host-access-switch/);
   assert.doesNotMatch(html, /<details/);
+  const source = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
+  assert.match(source, /hostAccessDefaultConfigured/);
+  assert.match(source, /"You can change this for each Instance\.",\s+false/);
+  assert.match(source, />Save defaults<\/button>/);
 });
 
 test('Advanced Host access details start collapsed with a short summary', async () => {
@@ -157,8 +164,10 @@ test('Host capability statuses are human labels and arm only when actionable', (
 
 test('Host access UI uses five friendly permissions and explains the command boundary', async () => {
   const source = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
-  assert.match(source, /current Instance tab is open in the Launcher/i);
-  assert.match(source, /close or detach that tab, and access stops/i);
+  assert.match(source, /current Instance is open with the Launcher/i);
+  assert.match(source, /either in a tab or detached window/i);
+  assert.match(source, /close that tab or window, and access stops/i);
+  assert.doesNotMatch(source, /Access stays on when you detach/i);
   assert.match(source, /Files read/);
   assert.match(source, /Files write/);
   assert.match(source, /Use my Browser/);

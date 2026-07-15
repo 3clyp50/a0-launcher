@@ -233,6 +233,36 @@ test('makeTabsSnapshot supports launcher home with no active instance tab', () =
   });
 });
 
+test('makeTabsSnapshot keeps a detached Host access lease available to Instance controls', () => {
+  const tabs = new Map();
+  tabs.set('tab-1', {
+    id: 'tab-1',
+    kind: 'local',
+    title: 'Research instance',
+    url: 'http://127.0.0.1:32080/',
+    containerId: 'abc',
+    detached: true,
+    hostAccess: { state: 'connected', connected: true }
+  });
+
+  assert.deepEqual(makeTabsSnapshot(tabs, ''), {
+    tabs: [{
+      id: 'tab-1',
+      kind: 'local',
+      title: 'Research instance',
+      url: 'http://127.0.0.1:32080/',
+      containerId: 'abc',
+      instanceId: '',
+      active: false,
+      loading: false,
+      canReload: false,
+      detached: true,
+      hostAccess: { state: 'connected', connected: true }
+    }],
+    activeTabId: ''
+  });
+});
+
 test('instance context menu exposes copy for selected page text', () => {
   assert.deepEqual(
     instanceContextMenuActions({

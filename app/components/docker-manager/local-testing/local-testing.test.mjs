@@ -42,7 +42,6 @@ const {
   emptyInstancesStateModel,
   instancePowerMenuConfig,
   instanceUpdateModel,
-  hostAccessTargetForInstance,
   isBlockingOperationRunning,
   latestAvailableReleaseTag,
   remoteInstanceStatusModel,
@@ -87,14 +86,6 @@ test('instance chips prefer Git release tags over channel labels', () => {
     }),
     '2.0 @ 5c914bc49ebd'
   );
-});
-
-test('Instance card Host access reuses a live tab and otherwise keeps the saved identity', () => {
-  const target = { kind: 'local', containerId: 'abc', title: 'Local' };
-  const tab = { id: 'tab-1', kind: 'local', containerId: 'abc', hostAccess: { state: 'connected' } };
-
-  assert.equal(hostAccessTargetForInstance({ instanceTabs: { tabs: [tab] } }, target), tab);
-  assert.equal(hostAccessTargetForInstance({ instanceTabs: { tabs: [] } }, target), target);
 });
 
 test('custom image identity remains visible after an in-container update', () => {

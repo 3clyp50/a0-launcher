@@ -137,6 +137,15 @@ test('Host access uses one switch for connection and permission state', async ()
   assert.match(source, /configured: enabled,\s+masterEnabled: enabled/);
 });
 
+test('Host access settings can open from a saved Instance without a live tab', async () => {
+  const source = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
+  assert.match(source, /if \(!instanceKey\(tab\)\) return false/);
+  assert.doesNotMatch(source, /if \(!tab\?\.id\) return false/);
+  assert.match(source, /disconnectedWithoutTab && configured \? "Ready to connect"/);
+  assert.match(source, /Open this Instance in a Launcher tab to connect\./);
+  assert.match(source, /enabled \? "Ready to connect" : "Disconnected"/);
+});
+
 test('Host capability statuses are human labels and arm only when actionable', () => {
   assert.equal(capabilityStatusLabel('ready', 'Unknown'), 'Ready');
   assert.equal(capabilityStatusLabel('persistent', 'Unknown'), 'Ready');

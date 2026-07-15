@@ -39,9 +39,9 @@ This scope owns:
   Instance defaults, port/env overrides, data-loss acknowledgement, and
   update/switch actions.
 - `local-testing/`: local containers, per-instance action menus, rename, color
-  selection, launcher-saved credential controls for local and saved remote
-  Instances, clone/log inspection controls, remote instance CRUD, and instance
-  opening.
+  selection, launcher-saved credential and Host access controls for local and
+  saved remote Instances, clone/log inspection controls, remote instance CRUD,
+  and instance opening.
 - `advanced/`: tabbed developer-mode custom image runner with inline Docker
   Compose composer, diagnostics, and storage-volume maintenance.
 - `settings/`: port preferences and saved Instance provider/model defaults.
@@ -314,9 +314,12 @@ This scope owns:
 - Each Instance tab shows a noninteractive Host access state glyph and a
   separately accessible settings button. Supported states are Connecting,
   Connected, Paused, Needs action, Error, and Disconnected; the controls must
-  remain usable at compact widths. Remote Instances stay configured off by
-  default, but an unset folder in their Host access dialog is prefilled from
-  the Launcher default for a first opt-in.
+  remain usable at compact widths. Each Instance card keeps the same settings
+  affordance available after its tab is closed or detached; without a live tab,
+  the modal edits saved settings and says Ready to connect when Host access is
+  enabled, with a direct cue to open the Instance in a Launcher tab. Remote
+  Instances stay configured off by default, but an unset folder in their Host
+  access dialog is prefilled from the Launcher default for a first opt-in.
 - File read and file write are separate permissions. Write depends on read,
   and Code execution depends on write. Permission choices render as a compact
   icon/title/description list inside a native disclosure that starts collapsed;

@@ -291,7 +291,7 @@ function maybeOpenHostAccessOnboarding(state = {}) {
 }
 
 function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
-  if (!tab?.id) return false;
+  if (!instanceKey(tab)) return false;
   document.getElementById("hostAccessDialog")?.remove();
   const config = configForTarget(state, tab);
   const runtime = tab.hostAccess || {};
@@ -301,6 +301,12 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const computer = details.computer_use || {};
   const canArmComputer = computerUseNeedsArm(computer.status);
   const stateName = String(runtime.state || "disconnected");
+  const disconnectedWithoutTab = !tab.id && stateName === "disconnected";
+  const configured = config.configured && config.masterEnabled;
+  const connectionLabel = disconnectedWithoutTab && configured ? "Ready to connect" : statusLabel(stateName);
+  const connectionDetail = disconnectedWithoutTab
+    ? configured ? "Open this Instance in a Launcher tab to connect." : "Host access is off."
+    : runtime.hostLabel || gateway.host_label || "This computer";
   const compatibility = runtime.code === "CLI_UPDATE_REQUIRED"
     ? "Update A0 CLI to use Host access"
     : ["CORE_UPDATE_REQUIRED", "CONTRACT_MISMATCH", "PLUGIN_MISSING"].includes(runtime.code)
@@ -328,14 +334,14 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
       <div class="dm-dialog-body">
         <div class="dm-host-access-summary">
           <span class="dm-host-status-dot ${escapeHtml(stateName)}" aria-hidden="true"></span>
-          <div><strong>${escapeHtml(statusLabel(stateName))}</strong><small>${escapeHtml(runtime.hostLabel || gateway.host_label || "This computer")}</small></div>
+          <div><strong data-host-connection-label>${escapeHtml(connectionLabel)}</strong><small data-host-connection-detail>${escapeHtml(connectionDetail)}</small></div>
         </div>
         ${runtime.message ? `<div class="dm-host-access-notice ${stateName === "error" ? "error" : ""}">${escapeHtml(runtime.message)}</div>` : ""}
         ${switchLineHtml(
           "hostAccessConfigured",
           "Allow this Instance to use this computer",
           "Access ends when you close or detach its tab.",
-          config.configured && config.masterEnabled
+          configured
         )}
         ${scopeFieldsHtml("hostAccessInstance", config.scopes, {
           detailsContent: `<div class="dm-field">
@@ -380,6 +386,18 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   bindHostAccessState(dialog, {
     configuredSelector: "#hostAccessConfigured"
   });
+  const configuredInput = dialog.querySelector("#hostAccessConfigured");
+  if (disconnectedWithoutTab) {
+    const syncConnectionCopy = () => {
+      const enabled = configuredInput?.checked === true;
+      dialog.querySelector("[data-host-connection-label]").textContent = enabled ? "Ready to connect" : "Disconnected";
+      dialog.querySelector("[data-host-connection-detail]").textContent = enabled
+        ? "Open this Instance in a Launcher tab to connect."
+        : "Host access is off.";
+    };
+    configuredInput?.addEventListener("change", syncConnectionCopy);
+    syncConnectionCopy();
+  }
   dialog.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(dialog)));
   dialog.addEventListener("mousedown", (event) => {
     if (event.target === dialog) closeDialog(dialog);
@@ -391,7 +409,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   dialog.querySelector("[data-rearm]")?.addEventListener("click", () => window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "rearm_computer_use"));
   dialog.querySelector("form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const enabled = dialog.querySelector("#hostAccessConfigured")?.checked === true;
+    const enabled = configuredInput?.checked === true;
     const saved = await window.dockerManagerActions?.setInstanceHostAccess?.(tab, {
       configured: enabled,
       masterEnabled: enabled,

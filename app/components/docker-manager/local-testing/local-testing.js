@@ -8,6 +8,7 @@ import {
   createLocalInstanceButtonModel,
   openCreateLocalInstanceDialog
 } from "../run-instance-dialog.js";
+import { openHostAccessDialog } from "../host-access-dialog.js";
 
 function byId(id) { return document.getElementById(id); }
 
@@ -54,6 +55,30 @@ function localCloneTargetForRemote(remote, containers) {
   return (Array.isArray(containers) ? containers : []).find((container) =>
     container?.containerId && localLoopbackPortKey(container?.uiUrl) === remotePortKey
   ) || null;
+}
+
+function hostAccessTargetForInstance(state = {}, target = {}) {
+  const kind = target?.kind === "remote" ? "remote" : "local";
+  const id = kind === "remote" ? target?.instanceId || target?.id : target?.containerId || target?.id;
+  const tabs = Array.isArray(state?.instanceTabs?.tabs) ? state.instanceTabs.tabs : [];
+  return tabs.find((tab) => {
+    if (tab?.kind !== kind) return false;
+    return kind === "remote" ? tab?.instanceId === id : tab?.containerId === id;
+  }) || target;
+}
+
+function createHostAccessButton(target) {
+  const button = document.createElement("button");
+  button.className = "button dm-icon-button dm-host-access-button";
+  button.type = "button";
+  button.title = "Host access";
+  button.setAttribute("aria-label", `Host access for ${target?.title || "this Instance"}`);
+  button.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">computer</span>';
+  button.addEventListener("click", () => {
+    const state = window.__dmLastState || {};
+    openHostAccessDialog(hostAccessTargetForInstance(state, target), state);
+  });
+  return button;
 }
 
 function tagFromImageRef(value) {
@@ -1607,6 +1632,14 @@ function renderDockerInstance(list, c, state) {
     actions.appendChild(startBtn);
   }
 
+  if (containerId) {
+    actions.appendChild(createHostAccessButton({
+      kind: "local",
+      containerId,
+      title: displayName
+    }));
+  }
+
   const menu = createCardMenu([
     menuButton("edit", "Rename", () => {
       openRenameInstanceDialog({
@@ -1772,6 +1805,14 @@ function renderRemoteInstance(list, remote, state) {
   openBtn.addEventListener("click", openRemoteInstanceUi);
   actions.appendChild(openBtn);
 
+  if (remote?.id) {
+    actions.appendChild(createHostAccessButton({
+      kind: "remote",
+      instanceId: remote.id,
+      title: displayName
+    }));
+  }
+
   const menuItems = [];
   menuItems.push(menuButton("edit", "Rename", () => {
     openRenameInstanceDialog({
@@ -1894,6 +1935,7 @@ export {
   emptyInstancesStateModel,
   instancePowerMenuConfig,
   instanceUpdateModel,
+  hostAccessTargetForInstance,
   remoteInstanceStatusModel,
   remoteCliMenuConfig,
   dockerInstanceRuntimeSummary,

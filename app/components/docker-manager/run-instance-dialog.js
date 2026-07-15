@@ -155,15 +155,6 @@ function isTestingEntry(entry) {
   return entry?.isBackendImage !== false && entry?.tag === "testing";
 }
 
-function releaseTagIsNewer(candidate, current) {
-  const candidateParts = parseReleaseTagParts(candidate);
-  const currentParts = parseReleaseTagParts(current);
-  if (!candidateParts || !currentParts) return false;
-  if (candidateParts.major !== currentParts.major) return candidateParts.major > currentParts.major;
-  if (candidateParts.minor !== currentParts.minor) return candidateParts.minor > currentParts.minor;
-  return candidateParts.patch > currentParts.patch;
-}
-
 function isInstalledRunEntry(entry) {
   if (!entry || typeof entry !== "object") return false;
   if (entry.availability === "installing") return false;
@@ -325,10 +316,7 @@ function selectedChoiceFromDialog(dialog, fallbackEntry, choices = []) {
 }
 
 function channelPullDefault(choice = null) {
-  if (!isChannelVersionChoice(choice)) return false;
-  if (!isInstalledRunEntry(choice)) return true;
-  if (choice?.differsFromPublished) return true;
-  return releaseTagIsNewer(choice?.publishedReleaseTag, choice?.matchedReleaseTag);
+  return isChannelVersionChoice(choice);
 }
 
 function openRunInstanceDialog({ entry, state, versionChoices = null, includeVersionPicker = false, title = "Run instance", submitLabel = "Run", selectedTag = "" } = {}) {
@@ -399,17 +387,21 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
           <div class="dm-field-label">Host access</div>
           ${hostAccessSwitchLineHtml(
             "activateHostAccessConfigured",
-            "Use this computer",
+            "Allow this Instance to use this computer",
             "Access ends when you close or detach its tab.",
-            hostAccessDefaults.configured
+            hostAccessDefaults.configured && hostAccessDefaults.masterEnabled
           )}
-          ${hostAccessScopeFieldsHtml("activateHostAccess", hostAccessDefaults.scopes, { compact: true })}
-          <label for="activateHostAccessFolder">Starting folder</label>
-          <div class="dm-host-folder-row">
-            <input id="activateHostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeAttribute(hostAccessDefaults.folder)}" placeholder="Choose a folder on this computer" data-host-config-control>
-            <button class="button" type="button" data-host-folder data-host-config-control>Choose</button>
-          </div>
-          <div id="activateHostAccessFolderHint" class="dm-field-hint">Your Instance workspace is used automatically. Agent Zero starts here, but commands can also reach other files you can access on this computer.</div>
+          ${hostAccessScopeFieldsHtml("activateHostAccess", hostAccessDefaults.scopes, {
+            compact: true,
+            detailsContent: `<div class="dm-field">
+              <label for="activateHostAccessFolder">Folder for files and commands</label>
+              <div class="dm-host-folder-row">
+                <input id="activateHostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeAttribute(hostAccessDefaults.folder)}" placeholder="Choose a folder on this computer" data-host-config-control>
+                <button class="button" type="button" data-host-folder data-host-config-control>Choose</button>
+              </div>
+              <div id="activateHostAccessFolderHint" class="dm-field-hint">Using this Instance's workspace. Agent Zero reads and writes files here. Commands start here but can reach other folders on this computer.</div>
+            </div>`
+          })}
         </div>
         <details class="dm-advanced">
           <summary>Advanced</summary>
@@ -509,8 +501,8 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
     }
     if (hostAccessFolderHint) {
       hostAccessFolderHint.textContent = usesWorkspace
-        ? "Your Instance workspace is used automatically. Agent Zero starts here, but commands can also reach other files you can access on this computer."
-        : "Agent Zero starts here, but commands can also reach other files you can access on this computer.";
+        ? "Using this Instance's workspace. Agent Zero reads and writes files here. Commands start here but can reach other folders on this computer."
+        : "Agent Zero reads and writes files here. Commands start here but can reach other folders on this computer.";
     }
   };
   const syncStorageFields = () => {
@@ -608,7 +600,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
     };
     options.hostAccess = {
       configured: hostAccessConfiguredInput?.checked === true,
-      masterEnabled: true,
+      masterEnabled: hostAccessConfiguredInput?.checked === true,
       folder: hostAccessFolderInput?.value || "",
       scopes: readHostAccessScopes(dialog.querySelector(".dm-host-access-setup")),
       browserSelection: hostAccessDefaults.browserSelection
@@ -624,7 +616,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
       options.volumeName = storageModeInput?.value === "named_volume" ? storageVolumeNameInput?.value || "" : "";
     }
     if (options.hostAccess.configured && options.storageMode === "named_volume" && !options.hostAccess.folder) {
-      window.toastFrontendError?.("Choose a starting folder on this computer.", "Agent Zero");
+      window.toastFrontendError?.("Choose a folder for files and commands.", "Agent Zero");
       return;
     }
     const defaultsSaved = await window.dockerManagerActions?.setInstanceDefaults?.(instanceDefaults, { quiet: true });

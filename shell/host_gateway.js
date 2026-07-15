@@ -131,7 +131,8 @@ function publicGatewayStatus(value = {}) {
     retryable: value.retryable === true,
     suppressed: value.suppressed === true
   };
-  if (value.gateway && typeof value.gateway === 'object') out.gateway = sanitizeGatewayMetadata(value.gateway);
+  if (state === 'disconnected') out.gateway = null;
+  else if (value.gateway && typeof value.gateway === 'object') out.gateway = sanitizeGatewayMetadata(value.gateway);
   return out;
 }
 

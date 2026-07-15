@@ -255,7 +255,7 @@ test('contract failures remain actionable after the child exits', () => {
   assert.equal(statuses.at(-1).retryable, true);
 });
 
-test('Emergency disconnect suppresses the current lease until tab reopen', () => {
+test('Disconnect clears live metadata and suppresses the current lease until tab reopen', () => {
   const children = [fakeChild(), fakeChild()];
   let spawns = 0;
   const supervisor = new HostGatewaySupervisor({
@@ -269,13 +269,18 @@ test('Emergency disconnect suppresses the current lease until tab reopen', () =>
       kind: 'launcher',
       id: 'launcher-1',
       state: 'disconnected',
-      host_label: 'My computer'
+      host_label: 'My computer',
+      status: {
+        browser: { status: 'ready' },
+        computer_use: { status: 'ready' }
+      }
     }
   })}\n`);
   children[0].exitCode = 0;
   children[0].emit('exit', 0, null);
 
   assert.equal(supervisor.isSuppressed('tab-1'), true);
+  assert.equal(supervisor.statusFor('tab-1').gateway, null);
   assert.equal(supervisor.start('tab-1', launch()).suppressed, true);
   assert.equal(spawns, 1);
   assert.equal(supervisor.retry('tab-1').suppressed, true);

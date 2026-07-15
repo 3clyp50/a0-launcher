@@ -1638,7 +1638,7 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
   if (!workspace.path) {
     setTabHostAccess(tab, hostAccessStatus('needs_action', {
       code: 'HOST_FOLDER_REQUIRED',
-      message: 'Choose a starting folder on this computer.'
+      message: 'Choose a folder for files and commands.'
     }), config);
     return null;
   }
@@ -1714,7 +1714,7 @@ async function restartHostGatewayForTab(tab) {
     const config = identity ? resolveInstanceHostAccess(settings, identity) : tab.hostAccessConfig;
     const status = {
       ...hostGatewaySupervisor.statusFor(leaseKey),
-      message: 'Emergency disconnected for this tab. Close and reopen the tab to reconnect.',
+      message: 'Disconnected for this tab. Close and reopen the tab to reconnect.',
       suppressed: true
     };
     setTabHostAccess(tab, status, config);

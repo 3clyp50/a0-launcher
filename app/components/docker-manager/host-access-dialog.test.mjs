@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 const {
+  bindHostAccessState,
   bindScopeDependency,
   capabilityStatusLabel,
   computerUseNeedsArm,
@@ -28,12 +29,20 @@ test('scope binding keeps the permission summary current', () => {
     addEventListener(_type, listener) { this.change = listener; }
   }]));
   const summary = {};
+  const configured = {
+    checked: false,
+    addEventListener(_type, listener) { this.change = listener; }
+  };
+  const scopes = {};
   const root = {
     querySelector(selector) {
       if (selector === '[data-host-scope-summary]') return summary;
+      if (selector === '#hostAccessConfigured') return configured;
+      if (selector === '.dm-host-access-scopes') return scopes;
       return controls[selector.match(/data-host-scope="([^"]+)"/)?.[1]] || null;
     },
     querySelectorAll(selector) {
+      if (selector === '[data-host-config-control]') return [];
       const fields = Object.values(controls);
       return selector.endsWith(':checked') ? fields.filter((field) => field.checked) : fields;
     }
@@ -42,7 +51,14 @@ test('scope binding keeps the permission summary current', () => {
   bindScopeDependency(root);
   controls.browser.checked = true;
   controls.browser.change();
-  assert.equal(summary.textContent, 'Browser on · Computer Use off');
+  assert.equal(summary.textContent, 'On: Read, Write, Code, Browser · Off: Computer Use');
+
+  bindHostAccessState(root, { configuredSelector: '#hostAccessConfigured' });
+  assert.equal(scopes.disabled, true);
+  assert.equal(summary.textContent, 'Host access off');
+  configured.checked = true;
+  configured.change();
+  assert.equal(summary.textContent, 'On: Read, Write, Code, Browser · Off: Computer Use');
 });
 
 test('local Host access inherits defaults while remote Host access stays off with a folder prefill', () => {
@@ -87,10 +103,38 @@ test('Host permissions use one collapsed native disclosure', () => {
     code_execution: true,
     browser: false,
     computer_use: false
-  });
+  }, { detailsContent: '<div data-folder>Folder</div>' });
   assert.match(html, /<details class="dm-advanced dm-host-access-permissions">/);
-  assert.match(html, /<summary>Host permissions <span data-host-scope-summary>Browser off · Computer Use off<\/span><\/summary>/);
+  assert.match(html, /<summary>Host permissions <span data-host-scope-summary>On: Read, Write, Code · Off: Browser, Computer Use<\/span><\/summary>/);
+  assert.match(html, /<fieldset[\s\S]*<div data-folder>Folder<\/div>\s*<\/details>/);
   assert.doesNotMatch(html, /<details[^>]* open/);
+});
+
+test('Host access onboarding keeps permission switches visible', () => {
+  const html = scopeFieldsHtml('host', {
+    files: true,
+    file_write: true,
+    code_execution: true,
+    browser: false,
+    computer_use: false
+  }, { onboarding: true });
+  assert.match(html, /dm-host-access-permissions-static/);
+  assert.match(html, /dm-host-access-switch/);
+  assert.doesNotMatch(html, /<details/);
+});
+
+test('Advanced Host access details start collapsed with a short summary', async () => {
+  const source = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
+  assert.match(source, /<details class="dm-advanced dm-host-access-advanced">/);
+  assert.match(source, /<summary>Advanced settings <span>Browser and connection details<\/span><\/summary>/);
+  assert.match(source, /dm-host-access-advanced[\s\S]*Browser to use[\s\S]*dm-host-access-diagnostics/);
+  assert.doesNotMatch(source, /<details[^>]*dm-host-access-advanced[^>]* open/);
+});
+
+test('Host access uses one switch for connection and permission state', async () => {
+  const source = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /hostAccessMaster|Host access active/);
+  assert.match(source, /configured: enabled,\s+masterEnabled: enabled/);
 });
 
 test('Host capability statuses are human labels and arm only when actionable', () => {
@@ -109,7 +153,8 @@ test('Host access UI uses five friendly permissions and explains the command bou
   assert.match(source, /Files read/);
   assert.match(source, /Files write/);
   assert.match(source, /Use my Browser/);
-  assert.match(source, /commands can also reach other files/i);
+  assert.match(source, /Commands start here but can reach other folders/i);
+  assert.match(source, /Folder for files and commands/);
   assert.match(source, /Update A0 CLI to use Host access/);
   assert.doesNotMatch(source, /2\.5 or newer/);
   assert.doesNotMatch(source, /Personal browser/);

@@ -43,9 +43,10 @@ test('version choices pin channels, include installed versions and hide testing'
   assert.equal(choices[3].imageRef, 'my-agent-zero:latest');
 });
 
-test('channel pull defaults only when missing or stale', () => {
+test('channel pull defaults on for every channel choice', () => {
   assert.equal(isChannelVersionChoice({ tag: 'latest' }), true);
   assert.equal(isChannelVersionChoice({ tag: 'v2.0' }), false);
+  assert.equal(channelPullDefault({ tag: 'v2.0', availability: 'installed' }), false);
   assert.equal(channelPullDefault({ tag: 'latest', availability: 'available' }), true);
   assert.equal(channelPullDefault({ tag: 'ready', availability: 'installed', differsFromPublished: true }), true);
   assert.equal(channelPullDefault({
@@ -59,7 +60,7 @@ test('channel pull defaults only when missing or stale', () => {
     availability: 'installed',
     matchedReleaseTag: 'v1.10',
     publishedReleaseTag: 'v1.10'
-  }), false);
+  }), true);
 });
 
 test('create local instance button model explains disabled states', () => {
@@ -154,10 +155,12 @@ test('advanced options are collapsed by default', async () => {
   assert.doesNotMatch(source, /<details class="dm-advanced" open>/);
 });
 
-test('local Instance setup reuses its workspace as the friendly starting folder', async () => {
+test('local Instance setup explains the folder for files and commands', async () => {
   const source = await readFile(new URL('./run-instance-dialog.js', import.meta.url), 'utf8');
-  assert.match(source, /"Use this computer"/);
-  assert.match(source, /Your Instance workspace is used automatically/);
+  assert.match(source, /"Allow this Instance to use this computer"/);
+  assert.match(source, /Folder for files and commands/);
+  assert.match(source, /Using this Instance's workspace/);
   assert.match(source, /syncHostAccessFolder/);
-  assert.match(source, /commands can also reach other files/i);
+  assert.match(source, /Commands start here but can reach other folders/i);
+  assert.match(source, /masterEnabled: hostAccessConfiguredInput\?\.checked === true/);
 });

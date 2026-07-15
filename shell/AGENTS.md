@@ -107,8 +107,8 @@ This scope owns:
   support, and select CLI candidates by their advertised `a0 gateway` contract
   rather than a release number so a capable sibling development checkout can
   follow an older installed CLI. Contract, authentication, and runtime exits
-  stay stopped until an explicit Retry; an emergency disconnect is suppressed
-  until that tab closes.
+  stay stopped until an explicit Retry; a user-requested Disconnect is
+  suppressed until that tab closes.
   Keep gateway identity stable for the Launcher installation across tabs,
   preserve saved reverse-proxy base paths, reject URL credentials, and bound
   JSONL input before it enters renderer state. Treat stdout as a strict JSONL

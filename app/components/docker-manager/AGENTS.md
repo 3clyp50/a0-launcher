@@ -26,7 +26,7 @@ This scope owns:
   credential dialog used by the startup runtime gate and the Instances tab.
 - `host-access-dialog.js`: one-time Host access onboarding, existing-Instance
   settings, scope dependency UI, folder selection, browser-profile selection,
-  diagnostics, Retry, and emergency disconnect.
+  diagnostics, Retry, and disconnected state.
 - `first-instance-setup/`: retired first image-pull defaults panel retained for
   compatibility while normal creation owns first Instance launch choices.
 - `setup-showcase/`: Agent Zero capability slideshow helper shown during the
@@ -321,18 +321,26 @@ This scope owns:
   and Code execution depends on write. Permission choices render as a compact
   icon/title/description list inside a native disclosure that starts collapsed;
   its summary must always identify whether Browser and Computer Use are on or
-  off so those opt-in controls remain discoverable. Browser and Computer Use
-  start opt-in.
-  Master controls use the Agent
-  Zero-style switch and visibly disable their dependent permissions. Copy
-  should call the selected path the starting folder and make
+  off so those opt-in controls remain discoverable. Summarize all five
+  permissions while Host access is on, show only that Host access is off when
+  the master switch is off, and keep the folder field inside the same
+  disclosure. The one-time onboarding is the exception: keep its full
+  permission list visible and use switch controls.
+  Browser and Computer Use start opt-in.
+  One Agent Zero-style switch owns both connection and permission state and
+  visibly disables its dependent permissions. Call the selected path the folder
+  for files and commands, explain both roles in plain language, and make
   clear that commands may use other locations available to the Launcher user.
+  Keep browser selection and Connection/Computer Use diagnostics in a collapsed
+  Advanced settings disclosure with a short summary.
   Browser preparation and Computer Use
   permission failures are Needs action states, not silent relaunches or grants.
   Present capability metadata as human labels and offer Computer Use arming only
   for actionable approval, rearm, or error states—not healthy trust modes.
   Compatibility copy must name advertised Launcher gateway support rather than
   assume a specific A0 CLI release number.
+- Local creation defaults channel updates on for `latest` and `ready`; users may
+  turn the checkbox off when they intentionally want the installed channel image.
 
 ## Work Guidance
 

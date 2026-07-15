@@ -1,5 +1,5 @@
 const SCOPE_FIELDS = Object.freeze([
-  { key: "files", icon: "folder_open", label: "Files read", hint: "Open files in the starting folder." },
+  { key: "files", icon: "folder_open", label: "Files read", hint: "Open files in the folder below." },
   { key: "file_write", icon: "edit_document", label: "Files write", hint: "Create and change files there." },
   { key: "code_execution", icon: "terminal", label: "Code execution", hint: "Run terminal commands on this computer." },
   { key: "browser", icon: "language", label: "Use my Browser", hint: "Work in a supported browser profile." },
@@ -78,10 +78,8 @@ function configForTarget(state = {}, target = {}) {
   return config;
 }
 
-function scopeFieldsHtml(prefix, scopes, { compact = false } = {}) {
-  return `<details class="dm-advanced dm-host-access-permissions">
-    <summary>Host permissions <span data-host-scope-summary>${scopeSummaryText(scopes)}</span></summary>
-    <fieldset class="dm-host-access-scopes${compact ? " compact" : ""}" aria-label="Host permissions">
+function scopeFieldsHtml(prefix, scopes, { compact = false, onboarding = false, detailsContent = "" } = {}) {
+  const fields = `<fieldset class="dm-host-access-scopes${compact ? " compact" : ""}" aria-label="Host permissions">
       ${SCOPE_FIELDS.map(({ key, icon, label, hint }) => `
         <label class="dm-host-access-scope">
           <span class="material-symbols-outlined dm-host-access-scope-icon" aria-hidden="true">${escapeHtml(icon)}</span>
@@ -89,15 +87,38 @@ function scopeFieldsHtml(prefix, scopes, { compact = false } = {}) {
             <strong>${escapeHtml(label)}</strong>
             <small>${escapeHtml(hint)}</small>
           </span>
-          <input id="${prefix}-${key}" data-host-scope="${key}" type="checkbox"${scopes[key] ? " checked" : ""}>
+          ${onboarding ? `<span class="dm-host-access-switch">
+            <input id="${prefix}-${key}" data-host-scope="${key}" type="checkbox"${scopes[key] ? " checked" : ""}>
+            <span class="dm-host-access-toggler" aria-hidden="true"></span>
+          </span>` : `<input id="${prefix}-${key}" data-host-scope="${key}" type="checkbox"${scopes[key] ? " checked" : ""}>`}
         </label>
       `).join("")}
-    </fieldset>
+    </fieldset>`;
+  if (onboarding) {
+    return `<div class="dm-host-access-permissions-static">
+      <div class="dm-field-label">Host permissions</div>
+      ${fields}
+    </div>`;
+  }
+  return `<details class="dm-advanced dm-host-access-permissions">
+    <summary>Host permissions <span data-host-scope-summary>${scopeSummaryText(scopes)}</span></summary>
+    ${fields}
+    ${detailsContent}
   </details>`;
 }
 
-function scopeSummaryText(scopes) {
-  return `Browser ${scopes.browser ? "on" : "off"} · Computer Use ${scopes.computer_use ? "on" : "off"}`;
+function scopeSummaryText(scopes, enabled = true) {
+  if (!enabled) return "Host access off";
+  const permissions = [
+    ["Read", scopes.files],
+    ["Write", scopes.file_write],
+    ["Code", scopes.code_execution],
+    ["Browser", scopes.browser],
+    ["Computer Use", scopes.computer_use]
+  ];
+  const on = permissions.filter(([, active]) => active).map(([label]) => label);
+  const off = permissions.filter(([, active]) => !active).map(([label]) => label);
+  return [on.length ? `On: ${on.join(", ")}` : "", off.length ? `Off: ${off.join(", ")}` : ""].filter(Boolean).join(" · ");
 }
 
 function syncScopeDependency(root) {
@@ -121,23 +142,21 @@ function bindScopeDependency(root) {
   syncScopeDependency(root);
 }
 
-function bindHostAccessState(root, { configuredSelector = "", masterSelector = "" } = {}) {
+function bindHostAccessState(root, { configuredSelector = "" } = {}) {
   if (!root) return;
   const configured = configuredSelector ? root.querySelector(configuredSelector) : null;
-  const master = masterSelector ? root.querySelector(masterSelector) : null;
   const scopes = root.querySelector(".dm-host-access-scopes");
   const sync = () => {
     const configuredOn = !configured || configured.checked;
-    if (master) master.disabled = !configuredOn;
-    if (scopes) scopes.disabled = !configuredOn || (master && !master.checked);
+    if (scopes) scopes.disabled = !configuredOn;
     root.querySelectorAll("[data-host-config-control]").forEach((control) => {
       control.disabled = !configuredOn || control.dataset.hostLocked === "true";
     });
-    root.querySelectorAll("[data-host-master-row]").forEach((row) => row.classList.toggle("is-disabled", !configuredOn));
     syncScopeDependency(root);
+    const summary = root.querySelector("[data-host-scope-summary]");
+    if (summary) summary.textContent = scopeSummaryText(readScopes(root), configuredOn);
   };
   configured?.addEventListener("change", sync);
-  master?.addEventListener("change", sync);
   sync();
 }
 
@@ -225,14 +244,14 @@ function openHostAccessOnboarding(state = {}) {
       </div>
       <div class="dm-dialog-body">
         <p class="dm-dialog-copy">Agent Zero can help with files, apps, and tasks on this computer while the current Instance tab is open in the Launcher. Close or detach that tab, and access stops.</p>
-        ${scopeFieldsHtml("hostAccessDefault", defaults.scopes)}
+        ${scopeFieldsHtml("hostAccessDefault", defaults.scopes, { onboarding: true })}
         <div class="dm-field">
-          <label for="hostAccessDefaultFolder">Default starting folder <span class="dm-optional">optional</span></label>
+          <label for="hostAccessDefaultFolder">Default folder for files and commands <span class="dm-optional">optional</span></label>
           <div class="dm-host-folder-row">
             <input id="hostAccessDefaultFolder" class="dm-text-input" type="text" readonly value="${escapeHtml(defaults.folder)}" placeholder="Choose a fallback folder">
             <button class="button" type="button" data-choose-folder>Choose</button>
           </div>
-          <div class="dm-field-hint">Local Instances use their workspace automatically. This fallback is for Instances without one on this computer.</div>
+          <div class="dm-field-hint">Used when an Instance has no workspace on this computer. Agent Zero reads and writes files here. Commands start here but can reach other folders.</div>
         </div>
       </div>
       <div class="dm-dialog-footer">
@@ -249,7 +268,7 @@ function openHostAccessOnboarding(state = {}) {
       onboardingComplete: true,
       defaults: {
         configured,
-        masterEnabled: true,
+        masterEnabled: configured,
         folder: folder?.value || "",
         scopes: readScopes(dialog),
         browserSelection: ""
@@ -281,7 +300,6 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const browser = details.browser || {};
   const computer = details.computer_use || {};
   const canArmComputer = computerUseNeedsArm(computer.status);
-  const isRemote = tab.kind === "remote";
   const stateName = String(runtime.state || "disconnected");
   const compatibility = runtime.code === "CLI_UPDATE_REQUIRED"
     ? "Update A0 CLI to use Host access"
@@ -315,36 +333,34 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
         ${runtime.message ? `<div class="dm-host-access-notice ${stateName === "error" ? "error" : ""}">${escapeHtml(runtime.message)}</div>` : ""}
         ${switchLineHtml(
           "hostAccessConfigured",
-          isRemote ? "Use this computer" : "Allow this Instance to use this computer",
+          "Allow this Instance to use this computer",
           "Access ends when you close or detach its tab.",
-          config.configured
+          config.configured && config.masterEnabled
         )}
-        <div data-host-master-row>
-          ${switchLineHtml(
-            "hostAccessMaster",
-            "Host access active",
-            "Pause every permission without changing your choices.",
-            config.masterEnabled
-          )}
-        </div>
-        ${scopeFieldsHtml("hostAccessInstance", config.scopes)}
-        <div class="dm-field">
-          <label for="hostAccessFolder">Starting folder</label>
-          <div class="dm-host-folder-row">
-            <input id="hostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeHtml(config.folder)}" placeholder="Choose a folder on this computer" data-host-config-control data-host-locked="${folderLocked}">
-            <button class="button" type="button" data-choose-folder data-host-config-control data-host-locked="${folderLocked}"${folderLocked ? " disabled" : ""}>Choose</button>
+        ${scopeFieldsHtml("hostAccessInstance", config.scopes, {
+          detailsContent: `<div class="dm-field">
+            <label for="hostAccessFolder">Folder for files and commands</label>
+            <div class="dm-host-folder-row">
+              <input id="hostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeHtml(config.folder)}" placeholder="Choose a folder on this computer" data-host-config-control data-host-locked="${folderLocked}">
+              <button class="button" type="button" data-choose-folder data-host-config-control data-host-locked="${folderLocked}"${folderLocked ? " disabled" : ""}>Choose</button>
+            </div>
+            <div class="dm-field-hint">${folderLocked ? "Using this Instance's workspace. Agent Zero reads and writes files here. Commands start here but can reach other folders on this computer." : "Agent Zero reads and writes files here. Commands start here but can reach other folders on this computer."}</div>
+          </div>`
+        })}
+        <details class="dm-advanced dm-host-access-advanced">
+          <summary>Advanced settings <span>Browser and connection details</span></summary>
+          <div class="dm-advanced-body">
+            <div class="dm-field">
+              <label for="hostAccessBrowser">Browser to use</label>
+              <select id="hostAccessBrowser" class="dm-select" data-host-config-control>${browserOptions(browser, config.browserSelection)}</select>
+              <div class="dm-field-hint">${escapeHtml(browser.support_reason || capabilityStatusLabel(browser.status, "We'll look for a supported browser when you connect."))}</div>
+            </div>
+            <div class="dm-host-access-diagnostics">
+              <div><span>Connection</span><strong>${escapeHtml(compatibility)}</strong></div>
+              <div><span>Computer Use</span><strong>${escapeHtml(capabilityStatusLabel(computer.status, "Permission checked when connected"))}</strong></div>
+            </div>
           </div>
-          <div class="dm-field-hint">${folderLocked ? "Using this Instance's workspace automatically. Agent Zero starts here, but commands can also reach other files you can access on this computer." : "Agent Zero starts here, but commands can also reach other files you can access on this computer."}</div>
-        </div>
-        <div class="dm-field">
-          <label for="hostAccessBrowser">Browser to use</label>
-          <select id="hostAccessBrowser" class="dm-select" data-host-config-control>${browserOptions(browser, config.browserSelection)}</select>
-          <div class="dm-field-hint">${escapeHtml(browser.support_reason || capabilityStatusLabel(browser.status, "We'll look for a supported browser when you connect."))}</div>
-        </div>
-        <div class="dm-host-access-diagnostics">
-          <div><span>Connection</span><strong>${escapeHtml(compatibility)}</strong></div>
-          <div><span>Computer Use</span><strong>${escapeHtml(capabilityStatusLabel(computer.status, "Permission checked when connected"))}</strong></div>
-        </div>
+        </details>
       </div>
       <div class="dm-dialog-footer dm-host-access-footer">
         <div class="dm-dialog-footer-group">
@@ -362,8 +378,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const folder = dialog.querySelector("#hostAccessFolder");
   bindScopeDependency(dialog);
   bindHostAccessState(dialog, {
-    configuredSelector: "#hostAccessConfigured",
-    masterSelector: "#hostAccessMaster"
+    configuredSelector: "#hostAccessConfigured"
   });
   dialog.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(dialog)));
   dialog.addEventListener("mousedown", (event) => {
@@ -376,9 +391,10 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   dialog.querySelector("[data-rearm]")?.addEventListener("click", () => window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "rearm_computer_use"));
   dialog.querySelector("form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const enabled = dialog.querySelector("#hostAccessConfigured")?.checked === true;
     const saved = await window.dockerManagerActions?.setInstanceHostAccess?.(tab, {
-      configured: dialog.querySelector("#hostAccessConfigured")?.checked === true,
-      masterEnabled: dialog.querySelector("#hostAccessMaster")?.checked === true,
+      configured: enabled,
+      masterEnabled: enabled,
       folder: folder?.value || "",
       scopes: readScopes(dialog),
       browserSelection: dialog.querySelector("#hostAccessBrowser")?.value || ""

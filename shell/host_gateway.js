@@ -33,6 +33,7 @@ function sanitizeGatewayMetadata(value = {}) {
   const state = GATEWAY_STATES.has(source.state) ? source.state : 'connected';
   const scopes = source.scopes && typeof source.scopes === 'object' ? source.scopes : {};
   const files = scopes.files === true;
+  const fileWrite = files && (typeof scopes.file_write === 'boolean' ? scopes.file_write : files);
   return {
     version: Number(source.version) === 1 ? 1 : 0,
     kind: source.kind === 'launcher' ? 'launcher' : '',
@@ -42,7 +43,8 @@ function sanitizeGatewayMetadata(value = {}) {
     master_enabled: source.master_enabled !== false,
     scopes: {
       files,
-      code_execution: files && scopes.code_execution === true,
+      file_write: fileWrite,
+      code_execution: fileWrite && scopes.code_execution === true,
       browser: scopes.browser === true,
       computer_use: scopes.computer_use === true
     },
@@ -52,8 +54,18 @@ function sanitizeGatewayMetadata(value = {}) {
 
 function gatewayScopeArgument(scopes = {}) {
   const filesEnabled = scopes?.files === true;
-  return ['files', 'code_execution', 'browser', 'computer_use']
-    .filter((key) => scopes?.[key] === true && (key !== 'code_execution' || filesEnabled))
+  const fileWriteEnabled = filesEnabled && scopes?.file_write === true;
+  return [
+    ['files', 'file_read'],
+    ['file_write', 'file_write'],
+    ['code_execution', 'code_execution'],
+    ['browser', 'browser'],
+    ['computer_use', 'computer_use']
+  ]
+    .filter(([key]) => scopes?.[key] === true &&
+      (key !== 'file_write' || filesEnabled) &&
+      (key !== 'code_execution' || fileWriteEnabled))
+    .map(([, argument]) => argument)
     .join(',');
 }
 
@@ -72,11 +84,14 @@ function gatewayErrorState(code) {
 
 function gatewayHelpSupportsLauncher(result = {}) {
   const output = `${result.stdout || ''}\n${result.stderr || ''}`;
-  return result.status === 0 && output.includes('--gateway-id') && output.includes('--scopes');
+  return result.status === 0 && output.includes('--gateway-id') &&
+    output.includes('--scopes') && output.includes('file_read') && output.includes('file_write');
 }
 
 function coreCapabilitiesSupportLauncher(value) {
-  return Array.isArray(value?.features) && value.features.includes('launcher_gateway');
+  return Array.isArray(value?.features) &&
+    value.features.includes('launcher_gateway') &&
+    value.features.includes('launcher_gateway_file_write');
 }
 
 function launcherUserAgent(value, version) {
@@ -144,7 +159,7 @@ class HostGatewaySupervisor {
       state: 'connecting',
       connected: false,
       hostLabel: String(launch.hostLabel || ''),
-      message: 'Connecting Launcher host…',
+      message: 'Connecting this computer…',
       code: '',
       retryable: false,
       suppressed: false

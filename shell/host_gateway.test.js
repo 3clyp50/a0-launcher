@@ -41,29 +41,32 @@ function launch(overrides = {}) {
     gatewayId: 'launcher-1',
     hostLabel: 'My computer',
     masterEnabled: true,
-    scopes: { files: true, code_execution: true, browser: true, computer_use: false },
+    scopes: { files: true, file_write: true, code_execution: true, browser: true, computer_use: false },
     env: { A0_USERNAME: 'jan', A0_PASSWORD: 'secret' },
     ...overrides
   };
 }
 
-test('gateway scope arguments enforce the Files and Code execution contract upstream', () => {
+test('gateway scope arguments enforce file and Code execution dependencies upstream', () => {
   assert.equal(gatewayScopeArgument({
     files: true,
+    file_write: true,
     code_execution: true,
     browser: false,
     computer_use: true
-  }), 'files,code_execution,computer_use');
+  }), 'file_read,file_write,code_execution,computer_use');
   assert.equal(gatewayScopeArgument({ files: false, code_execution: true, browser: true }), 'browser');
+  assert.equal(gatewayScopeArgument({ files: true, file_write: false, code_execution: true }), 'file_read');
 });
 
 test('CLI and Core capability gates require advertised gateway contracts', () => {
   assert.equal(gatewayHelpSupportsLauncher({
     status: 0,
-    stdout: 'usage: a0 gateway --gateway-id ID --scopes LIST'
+    stdout: 'usage: a0 gateway --gateway-id ID --scopes LIST (file_read, file_write)'
   }), true);
-  assert.equal(gatewayHelpSupportsLauncher({ status: 0, stdout: 'usage: a0 headless' }), false);
-  assert.equal(coreCapabilitiesSupportLauncher({ features: ['launcher_gateway'] }), true);
+  assert.equal(gatewayHelpSupportsLauncher({ status: 0, stdout: 'usage: a0 gateway --gateway-id ID --scopes LIST (file_write)' }), false);
+  assert.equal(coreCapabilitiesSupportLauncher({ features: ['launcher_gateway', 'launcher_gateway_file_write'] }), true);
+  assert.equal(coreCapabilitiesSupportLauncher({ features: ['launcher_gateway'] }), false);
   assert.equal(coreCapabilitiesSupportLauncher({ features: ['chat_create'] }), false);
 });
 
@@ -95,10 +98,12 @@ test('gateway metadata is bounded before it reaches renderer state', () => {
     kind: 'launcher',
     id: 'x'.repeat(300),
     state: 'connected',
-    scopes: { files: false, code_execution: true, browser: true },
+    scopes: { files: true, file_write: false, code_execution: true, browser: true },
     status: { browser: { message: 'x'.repeat(4000) } }
   });
   assert.equal(metadata.id.length, 128);
+  assert.equal(metadata.scopes.files, true);
+  assert.equal(metadata.scopes.file_write, false);
   assert.equal(metadata.scopes.code_execution, false);
   assert.equal(metadata.status.browser.message.length, 2048);
 });
@@ -144,7 +149,7 @@ test('JSONL status is published and Core scope changes flow back to persistence'
       host_label: 'My computer',
       state: 'paused',
       master_enabled: false,
-      scopes: { files: true, code_execution: false, browser: true, computer_use: false }
+      scopes: { files: true, file_write: true, code_execution: false, browser: true, computer_use: false }
     }
   })}\n`);
 

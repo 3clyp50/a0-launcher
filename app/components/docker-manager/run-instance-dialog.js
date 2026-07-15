@@ -9,10 +9,12 @@ import {
   readInstanceDefaultsFromForm
 } from "./instance-defaults.js";
 import {
+  bindHostAccessState,
   bindScopeDependency,
   normalizeConfig as normalizeHostAccessConfig,
   readScopes as readHostAccessScopes,
-  scopeFieldsHtml as hostAccessScopeFieldsHtml
+  scopeFieldsHtml as hostAccessScopeFieldsHtml,
+  switchLineHtml as hostAccessSwitchLineHtml
 } from "./host-access-dialog.js";
 
 function closeDialog(dialog) {
@@ -395,16 +397,19 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
         </div>
         <div class="dm-field dm-host-access-setup">
           <div class="dm-field-label">Host access</div>
-          <label class="dm-checkbox-line">
-            <input id="activateHostAccessConfigured" type="checkbox"${hostAccessDefaults.configured ? " checked" : ""}>
-            <span>Connect this computer while the Instance tab is open</span>
-          </label>
+          ${hostAccessSwitchLineHtml(
+            "activateHostAccessConfigured",
+            "Use this computer",
+            "Access ends when you close or detach its tab.",
+            hostAccessDefaults.configured
+          )}
           ${hostAccessScopeFieldsHtml("activateHostAccess", hostAccessDefaults.scopes, { compact: true })}
+          <label for="activateHostAccessFolder">Starting folder</label>
           <div class="dm-host-folder-row">
-            <input id="activateHostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeAttribute(hostAccessDefaults.folder)}" placeholder="Fallback folder for named-volume Instances">
-            <button class="button" type="button" data-host-folder>Choose</button>
+            <input id="activateHostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeAttribute(hostAccessDefaults.folder)}" placeholder="Choose a folder on this computer" data-host-config-control>
+            <button class="button" type="button" data-host-folder data-host-config-control>Choose</button>
           </div>
-          <div class="dm-field-hint">Bind-mounted Instances use the host directory backing <strong>/a0/usr</strong>. Commands run as the Launcher user and are not sandboxed to the folder.</div>
+          <div id="activateHostAccessFolderHint" class="dm-field-hint">Your Instance workspace is used automatically. Agent Zero starts here, but commands can also reach other files you can access on this computer.</div>
         </div>
         <details class="dm-advanced">
           <summary>Advanced</summary>
@@ -466,20 +471,48 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   const envInput = dialog.querySelector("#activateEnvVars");
   const hostAccessConfiguredInput = dialog.querySelector("#activateHostAccessConfigured");
   const hostAccessFolderInput = dialog.querySelector("#activateHostAccessFolder");
+  const hostAccessFolderButton = dialog.querySelector("[data-host-folder]");
+  const hostAccessFolderHint = dialog.querySelector("#activateHostAccessFolderHint");
   let nameDirty = false;
   let storageHostDirty = false;
   const defaultHostRoot = state?.storagePreferences?.hostRoot || "~/agent-zero";
+  let hostAccessFallbackFolder = hostAccessDefaults.folder;
   let lastChannelPullTag = "";
 
   bindInstanceDefaultProviderPlaceholderSync(dialog, "activate");
   bindScopeDependency(dialog.querySelector(".dm-host-access-setup"));
-  dialog.querySelector("[data-host-folder]")?.addEventListener("click", async () => {
+  bindHostAccessState(dialog.querySelector(".dm-host-access-setup"), {
+    configuredSelector: "#activateHostAccessConfigured"
+  });
+  hostAccessFolderButton?.addEventListener("click", async () => {
     const selected = await window.dockerManagerActions?.chooseHostAccessFolder?.(hostAccessFolderInput?.value || "");
-    if (selected?.path && hostAccessFolderInput) hostAccessFolderInput.value = selected.path;
+    if (selected?.path && hostAccessFolderInput) {
+      hostAccessFallbackFolder = selected.path;
+      hostAccessFolderInput.value = selected.path;
+    }
   });
   if (nameInput) nameInput.value = defaultInstanceName(initialTag, state);
   if (portInput) portInput.value = "0:80";
   if (storageHostRootInput) storageHostRootInput.value = directWorkspaceFolder(defaultHostRoot, nameInput?.value || "");
+  const syncHostAccessFolder = () => {
+    const usesWorkspace = storageModeInput?.value !== "named_volume";
+    if (hostAccessFolderInput) {
+      hostAccessFolderInput.value = usesWorkspace
+        ? storageModeInput?.value === "host_directory_exact"
+          ? storageHostRootInput?.value || ""
+          : directWorkspaceFolder(defaultHostRoot, nameInput?.value || "")
+        : hostAccessFallbackFolder;
+      hostAccessFolderInput.disabled = hostAccessConfiguredInput?.checked !== true;
+    }
+    if (hostAccessFolderButton) {
+      hostAccessFolderButton.disabled = usesWorkspace || hostAccessConfiguredInput?.checked !== true;
+    }
+    if (hostAccessFolderHint) {
+      hostAccessFolderHint.textContent = usesWorkspace
+        ? "Your Instance workspace is used automatically. Agent Zero starts here, but commands can also reach other files you can access on this computer."
+        : "Agent Zero starts here, but commands can also reach other files you can access on this computer.";
+    }
+  };
   const syncStorageFields = () => {
     const visibility = storageFieldVisibility(storageModeInput?.value);
     const hostField = dialog.querySelector("#activateStorageHostRootField");
@@ -489,8 +522,13 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
     if (!storageHostDirty && storageHostRootInput) {
       storageHostRootInput.value = directWorkspaceFolder(defaultHostRoot, nameInput?.value || "");
     }
+    syncHostAccessFolder();
   };
-  storageHostRootInput?.addEventListener("input", () => { storageHostDirty = true; });
+  storageHostRootInput?.addEventListener("input", () => {
+    storageHostDirty = true;
+    syncHostAccessFolder();
+  });
+  hostAccessConfiguredInput?.addEventListener("change", syncHostAccessFolder);
   storageModeInput?.addEventListener("change", syncStorageFields);
   syncStorageFields();
   const syncChannelPull = () => {
@@ -518,11 +556,13 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   nameInput?.addEventListener("input", () => {
     nameDirty = true;
     if (!storageHostDirty) syncStorageFields();
+    else syncHostAccessFolder();
   });
   versionInput?.addEventListener("change", () => {
     const choice = selectedChoiceFromDialog(dialog, initialEntry, choices);
     if (nameInput && !nameDirty) nameInput.value = defaultInstanceName(choice?.tag || versionInput.value, state);
     if (!storageHostDirty) syncStorageFields();
+    else syncHostAccessFolder();
     syncChannelPull();
   });
 
@@ -584,7 +624,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
       options.volumeName = storageModeInput?.value === "named_volume" ? storageVolumeNameInput?.value || "" : "";
     }
     if (options.hostAccess.configured && options.storageMode === "named_volume" && !options.hostAccess.folder) {
-      window.toastFrontendError?.("Choose a host folder for Host access with a named Docker volume.", "Agent Zero");
+      window.toastFrontendError?.("Choose a starting folder on this computer.", "Agent Zero");
       return;
     }
     const defaultsSaved = await window.dockerManagerActions?.setInstanceDefaults?.(instanceDefaults, { quiet: true });

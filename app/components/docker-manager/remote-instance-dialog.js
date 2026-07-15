@@ -112,19 +112,20 @@ function openAddRemoteInstanceDialog(options = {}) {
           <legend class="dm-field-label">Host access</legend>
           <label class="dm-radio-line">
             <input name="remoteHostAccess" type="radio" value="remote" checked>
-            <span><strong>Use the remote machine</strong><small>Agent Zero tools stay on the server where this Instance runs.</small></span>
+            <span><strong>Use the remote machine</strong><small>Keep file and computer tools on the server.</small></span>
           </label>
           <label class="dm-radio-line">
             <input name="remoteHostAccess" type="radio" value="launcher">
-            <span><strong>Connect this computer while this tab is open</strong><small>Closing or detaching the Launcher tab disconnects it.</small></span>
+            <span><strong>Connect this computer while this tab is open</strong><small>Access stops when you close or detach the tab.</small></span>
           </label>
           <div data-launcher-host-options hidden>
             ${hostAccessScopeFieldsHtml("remoteHostAccess", hostDefaults.scopes, { compact: true })}
+            <label for="remoteHostAccessFolder">Starting folder on this computer</label>
             <div class="dm-host-folder-row">
               <input id="remoteHostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeHtml(launcherDefaultFolder)}" placeholder="Choose a folder on this computer">
               <button class="button" type="button" data-host-folder>Choose</button>
             </div>
-            <div class="dm-field-hint">File operations stay in this folder. Commands start here but run as the Launcher user and are not sandboxed to it.</div>
+            <div class="dm-field-hint">Agent Zero starts here, but commands can also reach other files you can access on this computer.</div>
           </div>
         </fieldset>
       </div>
@@ -192,7 +193,7 @@ function openAddRemoteInstanceDialog(options = {}) {
     }
     const connectLauncher = dialog.querySelector('input[name="remoteHostAccess"]:checked')?.value === "launcher";
     if (connectLauncher && !hostFolder?.value) {
-      window.toastFrontendError?.("Choose a folder on this computer for Host access.", "Agent Zero");
+      window.toastFrontendError?.("Choose a starting folder on this computer.", "Agent Zero");
       return;
     }
     const result = await window.dockerManagerActions?.addRemoteInstance?.({

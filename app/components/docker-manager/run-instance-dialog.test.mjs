@@ -154,8 +154,10 @@ test('advanced options are collapsed by default', async () => {
   assert.doesNotMatch(source, /<details class="dm-advanced" open>/);
 });
 
-test('local Instance setup repeats Host access and its command boundary', async () => {
+test('local Instance setup reuses its workspace as the friendly starting folder', async () => {
   const source = await readFile(new URL('./run-instance-dialog.js', import.meta.url), 'utf8');
-  assert.match(source, /Connect this computer while the Instance tab is open/);
-  assert.match(source, /not sandboxed to the folder/);
+  assert.match(source, /"Use this computer"/);
+  assert.match(source, /Your Instance workspace is used automatically/);
+  assert.match(source, /syncHostAccessFolder/);
+  assert.match(source, /commands can also reach other files/i);
 });

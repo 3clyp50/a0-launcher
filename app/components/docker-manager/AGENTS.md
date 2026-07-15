@@ -317,10 +317,16 @@ This scope owns:
   remain usable at compact widths. Remote Instances stay configured off by
   default, but an unset folder in their Host access dialog is prefilled from
   the Launcher default for a first opt-in.
-- Files is read/write or off. Code execution depends on Files and turns off
-  with it. Copy must explain that the selected folder bounds file operations
-  but is only the initial command directory: commands run as the Launcher user
-  and are not sandboxed to that folder. Browser preparation and Computer Use
+- File read and file write are separate permissions. Write depends on read,
+  and Code execution depends on write. Permission choices render as a compact
+  icon/title/description list inside a native disclosure that starts collapsed;
+  its summary must identify Browser and Computer Use when they are off so those
+  opt-in controls remain discoverable. Browser and Computer Use start opt-in.
+  Master controls use the Agent
+  Zero-style switch and visibly disable their dependent permissions. Copy
+  should call the selected path the starting folder and make
+  clear that commands may use other locations available to the Launcher user.
+  Browser preparation and Computer Use
   permission failures are Needs action states, not silent relaunches or grants.
   Present capability metadata as human labels and offer Computer Use arming only
   for actionable approval, rearm, or error states—not healthy trust modes.

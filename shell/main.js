@@ -1613,13 +1613,13 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
   if (!settings.onboardingComplete) {
     setTabHostAccess(tab, hostAccessStatus('needs_action', {
       code: 'ONBOARDING_REQUIRED',
-      message: 'Choose the Launcher Host access default before connecting.'
+      message: 'Choose how Agent Zero can use this computer.'
     }), config);
     return null;
   }
   if (!config.configured) {
     setTabHostAccess(tab, hostAccessStatus('disconnected', {
-      message: identity.kind === 'remote' ? 'Using the remote machine.' : 'Launcher Host access is off.'
+      message: identity.kind === 'remote' ? 'Using the remote machine.' : 'This computer is not connected.'
     }), config);
     return null;
   }
@@ -1638,7 +1638,7 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
   if (!workspace.path) {
     setTabHostAccess(tab, hostAccessStatus('needs_action', {
       code: 'HOST_FOLDER_REQUIRED',
-      message: 'Choose a folder on this computer for Host access.'
+      message: 'Choose a starting folder on this computer.'
     }), config);
     return null;
   }
@@ -1652,7 +1652,7 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
   if (!cli) {
     setTabHostAccess(tab, hostAccessStatus('needs_action', {
       code: 'CLI_UPDATE_REQUIRED',
-      message: 'Install or select an A0 CLI with Launcher gateway support.'
+      message: 'Update A0 CLI to use Host access.'
     }), config);
     return null;
   }
@@ -1662,7 +1662,7 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
     if (!host || !await coreSupportsLauncherGateway(host)) {
       setTabHostAccess(tab, hostAccessStatus('needs_action', {
         code: 'CORE_UPDATE_REQUIRED',
-        message: 'This Agent Zero Instance needs Launcher gateway support.'
+        message: 'Update this Agent Zero Instance to use Host access.'
       }), config);
       return null;
     }
@@ -1722,7 +1722,7 @@ async function restartHostGatewayForTab(tab) {
   }
   hostGatewaySupervisor.stop(leaseKey, 'settings_changed');
   setTabHostAccess(tab, hostAccessStatus('connecting', {
-    message: 'Applying Host access settings…'
+    message: 'Updating Host access…'
   }), tab.hostAccessConfig || null);
   return await startHostGatewayForTab(tab, { force: true });
 }

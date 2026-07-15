@@ -2890,7 +2890,7 @@ body.dm-instance-home-active .dm-page {
 
 .dm-host-access-dialog {
   width: min(44rem, calc(100vw - 2rem));
-  max-height: min(48rem, calc(100vh - 2rem));
+  max-height: min(54rem, calc(100vh - 2rem));
 }
 
 #hostAccessDialog,
@@ -2907,31 +2907,75 @@ body.dm-instance-home-active .dm-page {
   text-transform: uppercase;
 }
 
+.dm-host-access-permissions > summary {
+  min-height: 2rem;
+  color: var(--color-text);
+}
+
+.dm-host-access-permissions > summary [data-host-scope-summary] {
+  float: right;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.dm-host-access-permissions[open] > summary {
+  margin-bottom: 0.3rem;
+}
+
 .dm-host-access-scopes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem;
+  gap: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .dm-host-access-scope {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.55rem;
-  border: 1px solid var(--dm-line-soft);
-  border-radius: var(--dm-radius-max);
-  padding: 0.65rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.58rem 0.2rem;
+  border-bottom: 1px solid var(--dm-line-soft);
   cursor: pointer;
+  font-weight: 400;
 }
 
-.dm-host-access-scope strong,
-.dm-host-access-scope small {
+.dm-host-access-scope:last-child {
+  border-bottom: 0;
+}
+
+.dm-host-access-scope-copy,
+.dm-host-access-scope-copy strong,
+.dm-host-access-scope-copy small {
   display: block;
 }
 
 .dm-host-access-scopes.compact .dm-host-access-scope {
   align-items: center;
-  min-height: 2.35rem;
-  padding: 0.48rem 0.58rem;
+  min-height: 2.6rem;
+  padding: 0.45rem 0.2rem;
+}
+
+.dm-host-access-scopes:disabled {
+  opacity: 0.45;
+}
+
+.dm-host-access-scopes:disabled .dm-host-access-scope {
+  cursor: default;
+}
+
+.dm-host-access-scope-icon {
+  color: var(--color-text-muted);
+  font-size: 1.15rem;
+}
+
+.dm-host-access-scope input {
+  accent-color: var(--color-highlight);
+  margin: 0;
 }
 
 .dm-host-access-setup .dm-radio-line {
@@ -2956,6 +3000,7 @@ fieldset.dm-host-access-setup > legend {
 
 .dm-host-access-setup .dm-radio-line small {
   color: var(--color-text-muted);
+  font-weight: 400;
   line-height: 1.35;
   margin-top: 0.12rem;
 }
@@ -2968,8 +3013,95 @@ fieldset.dm-host-access-setup > legend {
 .dm-host-access-scope small {
   color: var(--color-text-muted);
   font-size: 0.72rem;
+  font-weight: 400;
   line-height: 1.35;
   margin-top: 0.18rem;
+}
+
+.dm-host-access-switch-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 2.85rem;
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: 400;
+}
+
+.dm-host-access-switch-line > span:first-child,
+.dm-host-access-switch-line strong,
+.dm-host-access-switch-line small {
+  display: block;
+}
+
+.dm-host-access-switch-line strong {
+  font-size: 0.82rem;
+}
+
+.dm-host-access-switch-line small {
+  margin-top: 0.14rem;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.dm-host-access-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 1.42rem;
+}
+
+.dm-host-access-switch input {
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.dm-host-access-toggler {
+  position: absolute;
+  inset: 0;
+  border-radius: 1.42rem;
+  background: #555;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.dm-host-access-toggler::before {
+  content: "";
+  position: absolute;
+  left: 0.2rem;
+  bottom: 0.2rem;
+  width: 1.02rem;
+  height: 1.02rem;
+  border-radius: 50%;
+  background: #ddd;
+  transition: 160ms ease;
+}
+
+.dm-host-access-switch input:checked + .dm-host-access-toggler {
+  background: var(--color-highlight);
+}
+
+.dm-host-access-switch input:checked + .dm-host-access-toggler::before {
+  transform: translateX(1.08rem);
+  background: #fff;
+}
+
+.dm-host-access-switch input:focus-visible + .dm-host-access-toggler {
+  outline: 2px solid var(--color-highlight);
+  outline-offset: 2px;
+}
+
+.dm-host-access-switch input:disabled + .dm-host-access-toggler {
+  cursor: default;
+  opacity: 0.45;
+}
+
+[data-host-master-row].is-disabled {
+  opacity: 0.55;
 }
 
 .dm-host-folder-row {
@@ -3039,7 +3171,6 @@ fieldset.dm-host-access-setup > legend {
 }
 
 @media (max-width: 620px) {
-  .dm-host-access-scopes,
   .dm-host-access-diagnostics {
     grid-template-columns: 1fr;
   }

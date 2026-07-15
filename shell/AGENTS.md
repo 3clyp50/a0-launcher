@@ -101,8 +101,9 @@ This scope owns:
 - Launcher gateway supervision must use the installed CLI contract and JSONL
   stdin/stdout; it must not open an inbound port or expose a generic process
   surface through preload. Pass credentials only as ephemeral environment
-  variables, never arguments or renderer state. Capability-gate startup on both
-  `launcher_gateway` HTTP support and `launcher_gateway_control` WebSocket
+  variables, never arguments or renderer state. Capability-gate startup on
+  `launcher_gateway` plus `launcher_gateway_file_write` HTTP support and
+  `launcher_gateway_control` WebSocket
   support, and select CLI candidates by their advertised `a0 gateway` contract
   rather than a release number so a capable sibling development checkout can
   follow an older installed CLI. Contract, authentication, and runtime exits
@@ -112,8 +113,9 @@ This scope owns:
   preserve saved reverse-proxy base paths, reject URL credentials, and bound
   JSONL input before it enters renderer state. Treat stdout as a strict JSONL
   contract, require versioned status to match the requested gateway identity,
-  and terminate children that do not publish valid status within the bounded
-  startup window.
+  send `file_read` for the separate read permission, and terminate children
+  that do not publish valid status within the bounded startup window. The CLI
+  reserves the older `files` argument for legacy read/write Launchers.
 - Embedded and detached Launcher-owned Agent Zero web contents must append
   `A0-Launcher/<version>` to the user agent. This tag identifies the shell-owned
   browsing surface; it does not grant authentication or gateway authority.

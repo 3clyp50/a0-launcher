@@ -1,8 +1,9 @@
 const DEFAULT_HOST_ACCESS_SCOPES = Object.freeze({
   files: true,
+  file_write: true,
   code_execution: true,
-  browser: true,
-  computer_use: true
+  browser: false,
+  computer_use: false
 });
 
 function normalizeHostAccessScopes(value, fallback = DEFAULT_HOST_ACCESS_SCOPES) {
@@ -10,6 +11,11 @@ function normalizeHostAccessScopes(value, fallback = DEFAULT_HOST_ACCESS_SCOPES)
   const base = fallback && typeof fallback === 'object' ? fallback : DEFAULT_HOST_ACCESS_SCOPES;
   const scopes = {
     files: typeof source.files === 'boolean' ? source.files : Boolean(base.files),
+    file_write: typeof source.file_write === 'boolean'
+      ? source.file_write
+      : typeof source.files === 'boolean'
+        ? source.files
+        : Boolean(base.file_write ?? base.files),
     code_execution: typeof source.code_execution === 'boolean'
       ? source.code_execution
       : Boolean(base.code_execution),
@@ -18,7 +24,8 @@ function normalizeHostAccessScopes(value, fallback = DEFAULT_HOST_ACCESS_SCOPES)
       ? source.computer_use
       : Boolean(base.computer_use)
   };
-  if (!scopes.files) scopes.code_execution = false;
+  if (!scopes.files) scopes.file_write = false;
+  if (!scopes.file_write) scopes.code_execution = false;
   return scopes;
 }
 

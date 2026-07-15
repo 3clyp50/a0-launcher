@@ -89,7 +89,7 @@ This scope owns:
   invent parallel files.
 - Host access persistence lives in `state_store.js`: one-time onboarding,
   local defaults, optional default folder, per-Instance configured/master
-  state, four scopes, personal-browser selection, and the stable Launcher
+  state, five permission scopes, browser selection, and the stable Launcher
   installation ID. Child PIDs and connection status are runtime-only. Local
   records use container IDs and remote records use saved remote Instance IDs.
 - A local bind mount backing `/a0/usr` is the authoritative Host access folder.

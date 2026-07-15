@@ -97,12 +97,7 @@ function scopeFieldsHtml(prefix, scopes, { compact = false } = {}) {
 }
 
 function scopeSummaryText(scopes) {
-  const selected = SCOPE_FIELDS.filter(({ key }) => scopes[key]).length;
-  const optionalOff = [
-    !scopes.browser && "Browser",
-    !scopes.computer_use && "Computer Use"
-  ].filter(Boolean);
-  return `${selected} selected${optionalOff.length ? ` · ${optionalOff.join(" and ")} off` : ""}`;
+  return `Browser ${scopes.browser ? "on" : "off"} · Computer Use ${scopes.computer_use ? "on" : "off"}`;
 }
 
 function syncScopeDependency(root) {

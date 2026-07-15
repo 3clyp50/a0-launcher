@@ -320,8 +320,9 @@ This scope owns:
 - File read and file write are separate permissions. Write depends on read,
   and Code execution depends on write. Permission choices render as a compact
   icon/title/description list inside a native disclosure that starts collapsed;
-  its summary must identify Browser and Computer Use when they are off so those
-  opt-in controls remain discoverable. Browser and Computer Use start opt-in.
+  its summary must always identify whether Browser and Computer Use are on or
+  off so those opt-in controls remain discoverable. Browser and Computer Use
+  start opt-in.
   Master controls use the Agent
   Zero-style switch and visibly disable their dependent permissions. Copy
   should call the selected path the starting folder and make

@@ -42,7 +42,7 @@ test('scope binding keeps the permission summary current', () => {
   bindScopeDependency(root);
   controls.browser.checked = true;
   controls.browser.change();
-  assert.equal(summary.textContent, '4 selected · Computer Use off');
+  assert.equal(summary.textContent, 'Browser on · Computer Use off');
 });
 
 test('local Host access inherits defaults while remote Host access stays off with a folder prefill', () => {
@@ -89,7 +89,7 @@ test('Host permissions use one collapsed native disclosure', () => {
     computer_use: false
   });
   assert.match(html, /<details class="dm-advanced dm-host-access-permissions">/);
-  assert.match(html, /<summary>Host permissions <span data-host-scope-summary>3 selected · Browser and Computer Use off<\/span><\/summary>/);
+  assert.match(html, /<summary>Host permissions <span data-host-scope-summary>Browser off · Computer Use off<\/span><\/summary>/);
   assert.doesNotMatch(html, /<details[^>]* open/);
 });
 

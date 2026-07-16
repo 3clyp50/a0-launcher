@@ -438,7 +438,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
             </div>
             <div class="dm-field">
               <label for="activateEnvVars">Environment variables</label>
-              <textarea id="activateEnvVars" class="dm-textarea" spellcheck="false" placeholder="A0_SET__model_config__chat_model__provider=openrouter&#10;A0_SET__model_config__chat_model__name=anthropic/claude-sonnet-5&#10;API_KEY_OPENROUTER=sk-..."></textarea>
+              <textarea id="activateEnvVars" class="dm-textarea" spellcheck="false" placeholder="A0_SET__model_config__chat_model__provider=openrouter&#10;A0_SET__model_config__chat_model__name=openai/gpt-5.6-terra&#10;API_KEY_OPENROUTER=sk-..."></textarea>
               <div class="dm-field-hint">Agent Zero supports <strong>A0_SET_&lt;setting_name&gt;=&lt;value&gt;</strong> for initial defaults. Saved settings still take precedence, and restart is required for changes.</div>
             </div>
           </div>

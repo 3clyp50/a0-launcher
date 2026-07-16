@@ -1072,6 +1072,22 @@ function workspaceStorageFromInspect(inspect) {
       migrationAvailable: false
     };
   }
+  const runtimeMount = mounts.find((item) =>
+    String(item?.Type || '').toLowerCase() === 'bind' &&
+    String(item?.Destination || '').trim().replace(/\/+$/, '') === '/a0'
+  ) || null;
+  const runtimePath = String(runtimeMount?.Source || '').trim();
+  if (runtimePath) {
+    return {
+      mode: 'custom_mount',
+      target: WORKSPACE_MOUNT_TARGET,
+      persistent: true,
+      legacy: false,
+      hostPath: path.resolve(runtimePath, 'usr'),
+      volumeName: '',
+      migrationAvailable: false
+    };
+  }
   if (fromLabels?.persistent) return fromLabels;
   if (fromLabels && fromLabels.mode === STORAGE_MODE_EPHEMERAL) return fromLabels;
   return {
@@ -1086,15 +1102,7 @@ function workspaceStorageFromInspect(inspect) {
 function workspaceHostPathFromInspect(inspect) {
   const storage = workspaceStorageFromInspect(inspect);
   const hostPath = typeof storage?.hostPath === 'string' ? storage.hostPath.trim() : '';
-  if (storage?.persistent) return hostPath ? path.resolve(hostPath) : '';
-
-  const mounts = Array.isArray(inspect?.Mounts) ? inspect.Mounts : [];
-  const runtimeMount = mounts.find((item) =>
-    String(item?.Type || '').toLowerCase() === 'bind' &&
-    String(item?.Destination || '').trim().replace(/\/+$/, '') === '/a0'
-  );
-  const runtimePath = String(runtimeMount?.Source || '').trim();
-  return runtimePath ? path.resolve(runtimePath, 'usr') : '';
+  return storage?.persistent && hostPath ? path.resolve(hostPath) : '';
 }
 
 function isWindowsAbsolutePath(value) {

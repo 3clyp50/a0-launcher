@@ -197,8 +197,9 @@ function storageOpenButtonLabel(platform) {
 function deleteInstanceStorageModel(instance = {}, state = {}) {
   const storage = instance?.workspaceStorage || null;
   const persistent = storage?.persistent === true;
-  const hostPath = persistent && typeof storage?.hostPath === "string" ? storage.hostPath.trim() : "";
-  const volumeName = persistent && !hostPath && typeof storage?.volumeName === "string" ? storage.volumeName.trim() : "";
+  const removable = storage?.mode !== "custom_mount";
+  const hostPath = persistent && removable && typeof storage?.hostPath === "string" ? storage.hostPath.trim() : "";
+  const volumeName = persistent && removable && !hostPath && typeof storage?.volumeName === "string" ? storage.volumeName.trim() : "";
   const storageKind = hostPath ? "folder" : volumeName ? "volume" : "";
   return {
     hasStorageChoice: !!storageKind,
@@ -1924,7 +1925,8 @@ export {
   latestAvailableReleaseTag,
   localCardsRenderKey,
   openCardMenu,
-  storageOpenButtonLabel
+  storageOpenButtonLabel,
+  workspaceStorageFolderAvailable
 };
 
 window.addEventListener("dm:state", (e) => render(e.detail || {}));

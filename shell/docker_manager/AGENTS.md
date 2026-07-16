@@ -166,6 +166,9 @@ This scope owns:
 - Host-directory workspace paths may be resolved for the shell-owned
   `Open storage folder` action. Named Docker volumes should stay represented as
   Docker volumes rather than guessed host paths.
+- A host repository bind at `/a0` exposes its nested `/a0/usr` as persistent
+  custom storage for folder opening, but it is not launcher-owned storage and
+  must never be offered for deletion with the Instance.
 - Long-running operations return an operation id and emit progress.
 - Concurrent state refreshes are newest-wins. Before publishing a refreshed
   state, reapply the latest cached local and remote runtime identity so an older

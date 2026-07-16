@@ -49,7 +49,8 @@ const {
   instanceVisualBadge,
   localCardsRenderKey,
   openCardMenu,
-  storageOpenButtonLabel
+  storageOpenButtonLabel,
+  workspaceStorageFolderAvailable
 } = await import('./local-testing.js');
 const { createInstanceVisual } = await import('../card-visuals.js');
 
@@ -352,6 +353,18 @@ test('delete dialog storage model handles Docker volumes without file-manager ac
   );
 
   assert.equal(deleteInstanceStorageModel({ workspaceStorage: { persistent: false } }).hasStorageChoice, false);
+});
+
+test('repo-mounted workspaces can open without offering destructive storage cleanup', () => {
+  const instance = {
+    workspaceStorage: {
+      mode: 'custom_mount',
+      persistent: true,
+      hostPath: '/home/ada/agent-zero/usr'
+    }
+  };
+  assert.equal(workspaceStorageFolderAvailable(instance), true);
+  assert.equal(deleteInstanceStorageModel(instance).hasStorageChoice, false);
 });
 
 test('openable card header binds click and keyboard activation', () => {

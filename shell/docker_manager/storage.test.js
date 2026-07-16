@@ -570,6 +570,15 @@ test('workspace storage detection distinguishes legacy and persistent containers
   assert.equal(persistent.mode, 'host_directory');
   assert.equal(persistent.persistent, true);
   assert.equal(persistent.hostPath, '/tmp/a0/usr');
+
+  const repoMounted = workspaceStorageFromInspect({
+    Config: { Labels: {} },
+    Mounts: [{ Type: 'bind', Source: '/tmp/agent-zero', Destination: '/a0' }]
+  });
+  assert.equal(repoMounted.mode, 'custom_mount');
+  assert.equal(repoMounted.persistent, true);
+  assert.equal(repoMounted.hostPath, path.resolve('/tmp/agent-zero/usr'));
+  assert.equal(repoMounted.migrationAvailable, false);
 });
 
 test('workspace host folder resolver only returns persistent bind paths', () => {
@@ -633,6 +642,13 @@ test('workspace storage removal plans only target explicit persistent storage', 
     workspaceStorageRemovalPlanFromInspect({
       Config: { Labels: {} },
       Mounts: [{ Type: 'bind', Source: '/', Destination: WORKSPACE_MOUNT_TARGET }]
+    }),
+    null
+  );
+  assert.equal(
+    workspaceStorageRemovalPlanFromInspect({
+      Config: { Labels: {} },
+      Mounts: [{ Type: 'bind', Source: '/tmp/agent-zero', Destination: '/a0' }]
     }),
     null
   );

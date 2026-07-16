@@ -263,6 +263,8 @@ This scope owns:
 - `Open storage folder` should appear only for persistent workspace storage
   that exposes an actual host directory path. Do not show it for named Docker
   volumes when the host file manager cannot open a stable user-facing folder.
+- Repo-mounted `/a0` Instances may open the nested host `usr` folder, but custom
+  mounts must not offer launcher storage deletion.
 - `Persist a0/usr data` belongs in the local instance overflow menu only when
   the Docker Manager marks the container as legacy or non-persistent. The
   action must call a named renderer action, keep the old container retained

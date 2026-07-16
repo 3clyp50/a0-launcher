@@ -15,9 +15,9 @@ This scope owns:
   protocol, main windows, IPC handlers, shell actions, and Docker Manager event
   forwarding.
 - `shell/preload.js`: safe renderer bridge exposed through `contextBridge`.
-- `shell/instance_preload.js`: the isolated Instance-page bridge for querying,
-  reconnecting, and requesting Computer Use approval only for its own Host
-  access lease.
+- `shell/instance_preload.js`: the isolated Instance-page bridge for opening
+  the Launcher-owned Host access editor, querying or reconnecting its own
+  lease, and requesting Computer Use approval for that lease.
 - `shell/host_access.js`: normalized Launcher Host access defaults, per-Instance
   configuration, scope dependencies, and stable Instance keys.
 - `shell/host_gateway.js`: supervised, newline-delimited JSON bridge to the
@@ -127,9 +127,10 @@ This scope owns:
   `A0-Launcher/<version>` to the user agent. This tag identifies the shell-owned
   browsing surface; it does not grant authentication or gateway authority.
   Their dedicated preload may expose only the current lease's reconnect state,
-  reconnect intent, and Computer Use approval intent. Main-process handlers
-  must resolve the caller back to its owning embedded or detached WebContents
-  before acting.
+  Launcher-owned settings intent, reconnect intent, and Computer Use approval
+  intent. Main-process handlers must resolve the caller back to its owning
+  embedded or detached WebContents before acting. Opening settings may reveal
+  the trusted Launcher editor but must not directly re-enable access.
 - Local development content is selected by `A0_LAUNCHER_LOCAL_REPO`,
   `A0_LAUNCHER_USE_LOCAL_CONTENT`, a repo-shaped default-app current working
   directory, a repo-shaped unpackaged-app current working directory, or the

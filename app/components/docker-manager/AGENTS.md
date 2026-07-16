@@ -324,9 +324,11 @@ This scope owns:
   Connected, Paused, Needs action, Error, and Disconnected; the controls must
   remain usable at compact widths. Opening its settings must keep that Instance
   selected, temporarily hiding only the shell-owned view while the Launcher
-  modal is open and restoring it when the modal closes. Instance cards must not
-  repeat the Host access icon or settings button; intentional connection and
-  scope changes belong in an open Launcher Instance tab or Agent Zero Core.
+  modal is open and restoring it when the modal closes. Agent Zero Core may
+  request this same Launcher-owned modal for its current tab, but it must not
+  re-enable a saved Host access choice directly. Instance cards must not repeat
+  the Host access icon or settings button; intentional connection and scope
+  changes belong in an open Launcher Instance tab or Agent Zero Core.
   Remote Instances stay configured off by default, but an unset folder in their
   Host access
   dialog is prefilled from the Launcher default for a first opt-in.

@@ -435,7 +435,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     if (saved !== false) closeDialog(dialog);
   });
   document.body.appendChild(dialog);
-  if (tab.active === true) window.dockerManagerActions?.hideInstanceTabView?.();
+  window.dockerManagerActions?.hideInstanceTabView?.();
   window.setTimeout(() => dialog.querySelector("#hostAccessConfigured")?.focus(), 0);
   return true;
 }

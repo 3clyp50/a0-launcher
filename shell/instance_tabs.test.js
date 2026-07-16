@@ -281,11 +281,15 @@ test('Launcher host IPC resolves only the owning embedded or detached Instance W
 
 test('Instance preload exposes only bounded Launcher host intents', () => {
   const source = fs.readFileSync(path.join(__dirname, 'instance_preload.js'), 'utf8');
+  const rendererPreloadSource = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
   const mainSource = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
   assert.match(source, /exposeInMainWorld\('a0LauncherHost'/);
   assert.match(source, /launcher-host:get-state/);
+  assert.match(source, /launcher-host:open-settings/);
   assert.match(source, /launcher-host:reconnect/);
   assert.match(source, /launcher-host:rearm-computer-use/);
+  assert.match(rendererPreloadSource, /docker-manager:openHostAccess/);
+  assert.match(mainSource, /ipcMain\.handle\('launcher-host:open-settings'/);
   assert.match(mainSource, /ipcMain\.handle\('launcher-host:rearm-computer-use'/);
   assert.doesNotMatch(source, /dockerManagerAPI|exec|credentials/);
 });

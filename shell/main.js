@@ -3888,6 +3888,23 @@ ipcMain.handle('launcher-host:get-state', async (event) => {
   };
 });
 
+ipcMain.handle('launcher-host:open-settings', async (event) => {
+  try {
+    const tab = findInstanceTabByWebContents(instanceTabs, event.sender);
+    if (!tab) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Launcher Instance tab not found.');
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.webContents || mainWindow.webContents.isDestroyed()) {
+      throw createTabTargetError('LAUNCHER_UNAVAILABLE', 'A0 Launcher is not available.');
+    }
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    sendDockerManagerEvent('docker-manager:openHostAccess', { tabId: tab.id });
+    return { ok: true };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
 ipcMain.handle('launcher-host:reconnect', async (event) => {
   try {
     const tab = findInstanceTabByWebContents(instanceTabs, event.sender);

@@ -166,6 +166,13 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
 }
 
 window.addEventListener("dm:state", (event) => render(event.detail));
+window.addEventListener("dm:open-host-access", (event) => {
+  const state = window.__dmLastState || {};
+  const snapshot = instanceTabsFromState(state);
+  const tabId = typeof event.detail?.tabId === "string" ? event.detail.tabId : "";
+  const tab = (Array.isArray(snapshot.tabs) ? snapshot.tabs : []).find((item) => item?.id === tabId);
+  if (tab) openHostAccessDialog(tab, state);
+});
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => render());

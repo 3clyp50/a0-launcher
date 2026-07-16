@@ -338,6 +338,14 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     ipcRenderer.on('docker-manager:instanceTabs', listener);
     return () => ipcRenderer.removeListener('docker-manager:instanceTabs', listener);
   },
+  onOpenHostAccess: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(
+      payload && typeof payload.tabId === 'string' ? payload.tabId : ''
+    );
+    ipcRenderer.on('docker-manager:openHostAccess', listener);
+    return () => ipcRenderer.removeListener('docker-manager:openHostAccess', listener);
+  },
   onStateChange: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, state) => callback(state);

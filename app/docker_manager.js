@@ -1962,6 +1962,12 @@ function initSubscriptions() {
       applyInstanceTabsSnapshot(tabsSnapshot);
     });
   }
+
+  if (typeof api.onOpenHostAccess === "function") {
+    api.onOpenHostAccess((tabId) => {
+      if (tabId) window.dispatchEvent(new CustomEvent("dm:open-host-access", { detail: { tabId } }));
+    });
+  }
 }
 
 function initNavigationRefresh() {

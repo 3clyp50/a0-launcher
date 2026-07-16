@@ -391,17 +391,19 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
             "Access stays on with the Launcher while this Instance is open, either in a tab or detached window.",
             hostAccessDefaults.configured && hostAccessDefaults.masterEnabled
           )}
-          ${hostAccessScopeFieldsHtml("activateHostAccess", hostAccessDefaults.scopes, {
-            compact: true,
-            detailsContent: `<div class="dm-field">
-              <label for="activateHostAccessFolder">Folder for files and commands</label>
-              <div class="dm-host-folder-row">
-                <input id="activateHostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeAttribute(hostAccessDefaults.folder)}" placeholder="Choose a folder on this computer" data-host-config-control>
-                <button class="button" type="button" data-host-folder data-host-config-control>Choose</button>
-              </div>
-              <div id="activateHostAccessFolderHint" class="dm-field-hint">Using this Instance's workspace. Agent Zero reads and writes files here. Commands start here but can reach other folders on this computer.</div>
-            </div>`
-          })}
+          <div data-launcher-host-options>
+            ${hostAccessScopeFieldsHtml("activateHostAccess", hostAccessDefaults.scopes, {
+              compact: true,
+              detailsContent: `<div class="dm-field">
+                <label for="activateHostAccessFolder">Folder for files and commands</label>
+                <div class="dm-host-folder-row">
+                  <input id="activateHostAccessFolder" class="dm-text-input" type="text" readonly value="${escapeAttribute(hostAccessDefaults.folder)}" placeholder="Choose a folder on this computer" data-host-config-control>
+                  <button class="button" type="button" data-host-folder data-host-config-control>Choose</button>
+                </div>
+                <div id="activateHostAccessFolderHint" class="dm-field-hint">Using this Instance's workspace. Agent Zero reads and writes files here. Commands start here but can reach other folders on this computer.</div>
+              </div>`
+            })}
+          </div>
         </div>
         <details class="dm-advanced">
           <summary>Advanced</summary>
@@ -462,6 +464,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   const storageVolumeNameInput = dialog.querySelector("#activateStorageVolumeName");
   const envInput = dialog.querySelector("#activateEnvVars");
   const hostAccessConfiguredInput = dialog.querySelector("#activateHostAccessConfigured");
+  const hostAccessOptions = dialog.querySelector("[data-launcher-host-options]");
   const hostAccessFolderInput = dialog.querySelector("#activateHostAccessFolder");
   const hostAccessFolderButton = dialog.querySelector("[data-host-folder]");
   const hostAccessFolderHint = dialog.querySelector("#activateHostAccessFolderHint");
@@ -487,17 +490,19 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
   if (portInput) portInput.value = "0:80";
   if (storageHostRootInput) storageHostRootInput.value = directWorkspaceFolder(defaultHostRoot, nameInput?.value || "");
   const syncHostAccessFolder = () => {
+    const hostAccessEnabled = hostAccessConfiguredInput?.checked === true;
     const usesWorkspace = storageModeInput?.value !== "named_volume";
+    if (hostAccessOptions) hostAccessOptions.hidden = !hostAccessEnabled;
     if (hostAccessFolderInput) {
       hostAccessFolderInput.value = usesWorkspace
         ? storageModeInput?.value === "host_directory_exact"
           ? storageHostRootInput?.value || ""
           : directWorkspaceFolder(defaultHostRoot, nameInput?.value || "")
         : hostAccessFallbackFolder;
-      hostAccessFolderInput.disabled = hostAccessConfiguredInput?.checked !== true;
+      hostAccessFolderInput.disabled = !hostAccessEnabled;
     }
     if (hostAccessFolderButton) {
-      hostAccessFolderButton.disabled = usesWorkspace || hostAccessConfiguredInput?.checked !== true;
+      hostAccessFolderButton.disabled = usesWorkspace || !hostAccessEnabled;
     }
     if (hostAccessFolderHint) {
       hostAccessFolderHint.textContent = usesWorkspace

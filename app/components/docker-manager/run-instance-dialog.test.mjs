@@ -155,9 +155,12 @@ test('advanced options are collapsed by default', async () => {
   assert.doesNotMatch(source, /<details class="dm-advanced" open>/);
 });
 
-test('local Instance setup explains the folder for files and commands', async () => {
+test('local Instance setup inherits Host access defaults and hides its options while off', async () => {
   const source = await readFile(new URL('./run-instance-dialog.js', import.meta.url), 'utf8');
   assert.match(source, /"Allow this Instance to use this computer"/);
+  assert.match(source, /hostAccessDefaults\.configured && hostAccessDefaults\.masterEnabled/);
+  assert.match(source, /data-launcher-host-options/);
+  assert.match(source, /hostAccessOptions\.hidden = !hostAccessEnabled/);
   assert.match(source, /Folder for files and commands/);
   assert.match(source, /Using this Instance's workspace/);
   assert.match(source, /syncHostAccessFolder/);

@@ -42,12 +42,12 @@ const SETUP_SHOWCASE_SLIDES = Object.freeze([
     mediaLabel: "Agent Zero Time Travel interface with snapshots and diffs."
   }),
   Object.freeze({
-    id: "a0-cli",
-    title: "A0 CLI: Your Browser and Computer",
-    description: "Connect host files, Host Web Browser, and Computer Use beyond the Agent Zero sandbox when A0 CLI is installed.",
+    id: "host-access",
+    title: "Your Browser and Computer",
+    description: "Launcher Host access can connect local files, your browser, and Computer Use when you enable it for an Instance.",
     mediaType: "image",
     media: `${SHOWCASE_ASSET_BASE}/computer-use-poster.png`,
-    mediaLabel: "A0 CLI connected to Host Web Browser and Computer Use on the user's desktop."
+    mediaLabel: "Launcher Host access connected to the user's browser and computer."
   })
 ]);
 

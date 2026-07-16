@@ -16,8 +16,11 @@ container, release, storage-volume, and remote-instance orchestration.
 - Keeps retained instances available for rollback.
 - Shows local containers, saved remote instances, and storage volumes.
 - Opens Agent Zero UIs from the instance where they belong.
-- Provides a bottom A0 CLI Connector for launching the `a0` CLI against a
-  running local instance.
+- Installs and maintains the official A0 CLI, with per-Instance actions to open
+  it or run installation/update explicitly.
+- Offers opt-in, tab-leased Host access for local files, browser, and computer
+  control without making CLI installation part of first-run or permission
+  onboarding.
 
 ## Runtime Model
 
@@ -103,11 +106,13 @@ A0_BACKEND_IMAGE_REPO="namespace/agent-zero" npm start
 The default backend image is `agent0ai/agent-zero`, and the default backend
 release metadata repository is `agent0ai/agent-zero`.
 
-The A0 CLI Connector prefers the launcher-managed active instance URL. If there
-is no launcher-managed active instance, it falls back to a running local Agent
-Zero container from the Instances inventory when that container exposes a local
-UI URL such as `http://127.0.0.1:32080/`. The terminal launcher accepts only
-local `http:` or `https:` URLs without credentials.
+Launcher checks the official A0 CLI in the background at startup, installing it
+when missing or incompatible and updating it when a newer release is available.
+This does not enable Host access: a gateway runs only for an Instance whose Host
+access setting was explicitly enabled while its Launcher tab or detached window
+is open. Each local and saved remote Instance menu keeps `Install / Update A0
+CLI`; `Open A0 CLI` appears once the system CLI is installed. A0 CLI v2.5 is the
+first release carrying the Launcher gateway contract.
 
 ## Validation
 

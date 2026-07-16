@@ -22,6 +22,8 @@ This scope owns:
   configuration, scope dependencies, and stable Instance keys.
 - `shell/host_gateway.js`: supervised, newline-delimited JSON bridge to the
   installed `a0 gateway` child process.
+- `shell/a0_cli_install.js`: official A0 CLI installer command and release
+  version policy shared by automatic and manual CLI maintenance.
 - `shell/loading.html`: loading/error shell while content initializes.
 - `shell/launcher_update.js`: launcher update version formatting and legacy
   platform release-asset selection helpers.
@@ -65,10 +67,21 @@ This scope owns:
   `A0_USERNAME` and `A0_PASSWORD` environment variables for that terminal launch
   when the target is local loopback or remote `https:`; do not write passwords
   into wrapper scripts or command lines.
-- A0 CLI availability shown to the renderer is based on whether the `a0`
-  terminal command can be discovered on the host. Installing A0 CLI is a named
-  shell-owned intent that opens a fixed installer wrapper for the official
-  `a0-connector` install script; do not expose generic command execution.
+- After Electron becomes ready, the shell asynchronously ensures that the
+  system A0 CLI is installed, advertises the Launcher gateway contract, and is
+  current with the latest discoverable `a0-connector` release. Use only the
+  official fixed installer endpoint, keep failures non-blocking for the rest of
+  Launcher, and expose checking/installing state to the renderer. The
+  named `Install / Update A0 CLI` intent reruns the same maintenance path and
+  must report completion instead of merely opening a terminal. Do not expose
+  generic command execution. Installing or updating the CLI is not Host access
+  consent; gateway startup still requires an enabled saved choice and an open
+  eligible Instance tab. Preserve user-requested gateway disconnection while
+  stopping and restarting other leases around CLI maintenance.
+- A0 CLI v2.5 is the first release expected to advertise the Launcher gateway
+  contract. Keep actual gateway startup capability-gated so compatible
+  development checkouts and future versions work without version-specific
+  branches.
 - External links should open through Electron `shell.openExternal` only after
   validation. Approved public launcher resources such as Docs, API Dashboard,
   and Support should be exposed to the renderer as fixed resource IDs, not
@@ -261,6 +274,7 @@ After shell changes, run:
 ```bash
 node --check shell/main.js
 node --check shell/preload.js
+node --test shell/a0_cli_install.test.js
 node --test shell/launcher_update.test.js
 node --test shell/launcher_updater_debug_release.test.js
 node --test shell/instance_tabs.test.js

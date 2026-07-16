@@ -15,3 +15,9 @@ test('setup showcase slides use renderer-visible image assets', () => {
     assert.ok(fs.existsSync(path.join(appRoot, slide.media)), `${slide.id} media asset should exist`);
   }
 });
+
+test('setup showcase presents Host access as a Launcher capability', () => {
+  const slide = SETUP_SHOWCASE_SLIDES.find((candidate) => candidate.id === 'host-access');
+  assert.match(`${slide?.title} ${slide?.description}`, /Launcher Host access/);
+  assert.doesNotMatch(`${slide?.title} ${slide?.description}`, /A0 CLI/);
+});

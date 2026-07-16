@@ -500,24 +500,21 @@ function remoteInstanceStatusModel(remote) {
 }
 
 function remoteCliMenuConfig(remote, state = {}) {
-  const cliInstalled = state?.cli?.installed === true;
+  if (state?.cli?.installed !== true) return null;
+  const cliInstalling = state?.cli?.installing === true;
   const operationRunning = isBlockingOperationRunning(state);
   const instanceId = typeof remote?.id === "string" ? remote.id : "";
   return {
-    icon: cliInstalled ? "terminal" : "download",
-    label: cliInstalled ? "Open A0 CLI" : "Install A0 CLI",
-    disabled: cliInstalled ? (!instanceId || operationRunning) : operationRunning,
-    title: cliInstalled
-      ? instanceId
+    icon: "terminal",
+    label: "Open A0 CLI",
+    disabled: cliInstalling || !instanceId || operationRunning,
+    title: cliInstalling
+      ? "A0 CLI is being prepared"
+      : instanceId
         ? "Choose a folder and open A0 CLI for this remote instance"
-        : "A saved remote Instance is required"
-      : "Install A0 CLI on this computer",
+        : "A saved remote Instance is required",
     onSelect: () => {
-      if (cliInstalled) {
-        window.dockerManagerActions?.openCliTerminal?.({ kind: "remote", instanceId });
-      } else {
-        window.dockerManagerActions?.installCli?.();
-      }
+      if (!cliInstalling) window.dockerManagerActions?.openCliTerminal?.({ kind: "remote", instanceId });
     }
   };
 }
@@ -1485,6 +1482,7 @@ function renderDockerInstance(list, c, state) {
   const visualBadge = instanceVisualBadge(c);
   const cliHost = localUiUrl(c?.uiUrl);
   const cliInstalled = state?.cli?.installed === true;
+  const cliInstalling = state?.cli?.installing === true;
   const launcherCredentials = c?.launcherCredentials && typeof c.launcherCredentials === "object" ? c.launcherCredentials : null;
   const card = document.createElement("div");
   card.className = "dm-card";
@@ -1691,18 +1689,23 @@ function renderDockerInstance(list, c, state) {
       disabled: !containerId || operationRunning || containerOperationRunning,
       title: "Clone this instance on open ports"
     }),
-    menuButton(cliInstalled ? "terminal" : "download", cliInstalled ? "Open A0 CLI" : "Install A0 CLI", () => {
-      if (cliInstalled) window.dockerManagerActions?.openCliTerminal?.({ host: cliHost, containerId });
-      else window.dockerManagerActions?.installCli?.();
+    cliInstalled ? menuButton("terminal", "Open A0 CLI", () => {
+      if (!cliInstalling) window.dockerManagerActions?.openCliTerminal?.({ host: cliHost, containerId });
     }, {
-      disabled: cliInstalled ? (!isRunning || !cliHost || operationRunning || containerOperationRunning) : operationRunning,
-      title: cliInstalled
-        ? !isRunning
+      disabled: cliInstalling || !isRunning || !cliHost || operationRunning || containerOperationRunning,
+      title: cliInstalling
+        ? "A0 CLI is being prepared"
+        : !isRunning
           ? "Start this instance before opening A0 CLI"
           : cliHost
             ? "Choose a folder and open A0 CLI for this instance"
             : "A0 CLI requires a running local Web UI"
-        : "Install A0 CLI on this computer"
+    }) : null,
+    menuButton("download", "Install / Update A0 CLI", () => {
+      window.dockerManagerActions?.installCli?.();
+    }, {
+      disabled: cliInstalling,
+      title: cliInstalling ? "A0 CLI is being prepared" : "Install or update A0 CLI on this computer"
     }),
     menuButton(powerMenuItem.icon, powerMenuItem.label, () => {
       if (powerMenuItem.action === "start") {
@@ -1831,9 +1834,19 @@ function renderRemoteInstance(list, remote, state) {
   }));
 
   const cliMenu = remoteCliMenuConfig(remote, state);
-  menuItems.push(menuButton(cliMenu.icon, cliMenu.label, cliMenu.onSelect, {
-    disabled: cliMenu.disabled,
-    title: cliMenu.title
+  if (cliMenu) {
+    menuItems.push(menuButton(cliMenu.icon, cliMenu.label, cliMenu.onSelect, {
+      disabled: cliMenu.disabled,
+      title: cliMenu.title
+    }));
+  }
+  menuItems.push(menuButton("download", "Install / Update A0 CLI", () => {
+    window.dockerManagerActions?.installCli?.();
+  }, {
+    disabled: state?.cli?.installing === true,
+    title: state?.cli?.installing === true
+      ? "A0 CLI is being prepared"
+      : "Install or update A0 CLI on this computer"
   }));
 
   if (cloneTarget?.containerId) {

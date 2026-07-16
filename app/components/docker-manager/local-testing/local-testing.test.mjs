@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 globalThis.document = {
@@ -493,7 +494,7 @@ test('remote instance status labels health states', () => {
   assert.equal(remoteInstanceStatusModel({}).label, 'Checking');
 });
 
-test('remote CLI menu opens saved remote target when CLI is installed', async () => {
+test('remote CLI menu opens saved remote target when CLI is ready', async () => {
   const calls = [];
   window.dockerManagerActions = {
     openCliTerminal: (target) => calls.push(target),
@@ -510,24 +511,25 @@ test('remote CLI menu opens saved remote target when CLI is installed', async ()
   assert.deepEqual(calls, [{ kind: 'remote', instanceId: 'remote-1' }]);
 });
 
-test('remote CLI menu uses installer when CLI is missing', async () => {
+test('remote CLI menu hides Open while CLI is not installed', () => {
   const calls = [];
   window.dockerManagerActions = {
     openCliTerminal: (target) => calls.push(target),
     installCli: () => calls.push('install')
   };
 
-  const config = remoteCliMenuConfig({ id: 'remote-1' }, { cli: { installed: false } });
-  assert.equal(config.icon, 'download');
-  assert.equal(config.label, 'Install A0 CLI');
-  assert.equal(config.disabled, false);
-
-  await config.onSelect();
-
-  assert.deepEqual(calls, ['install']);
+  const config = remoteCliMenuConfig({ id: 'remote-1' }, {
+    cli: { installed: false, installing: true }
+  });
+  assert.equal(config, null);
+  assert.deepEqual(calls, []);
 });
 
 test('remote CLI menu disables opening without a saved remote id or during blocking work', () => {
+  assert.equal(
+    remoteCliMenuConfig({ id: 'remote-1' }, { cli: { installed: true, installing: true } }).disabled,
+    true
+  );
   assert.equal(
     remoteCliMenuConfig({}, { cli: { installed: true } }).disabled,
     true
@@ -539,6 +541,17 @@ test('remote CLI menu disables opening without a saved remote id or during block
     }).disabled,
     true
   );
+});
+
+test('Instance menus keep Install or Update separate from installed-only Open', async () => {
+  const source = await readFile(new URL('./local-testing.js', import.meta.url), 'utf8');
+  assert.match(source, /cliInstalled \? menuButton\("terminal", "Open A0 CLI"/);
+  assert.equal(source.match(/"Install \/ Update A0 CLI"/g)?.length, 2);
+});
+
+test('first-Instance onboarding does not offer a CLI installer step', async () => {
+  const source = await readFile(new URL('../first-instance-setup/first-instance-setup.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /Install A0 CLI|installCli|STEP_CLI/);
 });
 
 test('card menu placement reserves fixed bottom chrome in short windows', () => {

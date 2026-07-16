@@ -14,7 +14,6 @@ const FIRST_INSTANCE_SETUP_CLASS = "dm-first-instance-setup";
 const FIRST_INSTANCE_SETUP_PREFIX = "firstSetup";
 const STEP_MODELS = "models";
 const STEP_FIRST_INSTANCE = "first-instance";
-const STEP_CLI = "cli";
 const STORAGE_MODE_HOST_DIRECTORY = "host_directory";
 const STORAGE_MODE_NAMED_VOLUME = "named_volume";
 const STORAGE_MODE_EPHEMERAL = "ephemeral";
@@ -126,41 +125,29 @@ function shouldShowFirstInstanceSetup(state = {}) {
 }
 
 function setStep(panel, step) {
-  const nextStep = step === STEP_CLI ? STEP_CLI : step === STEP_FIRST_INSTANCE ? STEP_FIRST_INSTANCE : STEP_MODELS;
-  const installComplete = panel.dataset.installComplete === "true";
+  const nextStep = step === STEP_FIRST_INSTANCE ? STEP_FIRST_INSTANCE : STEP_MODELS;
   panel.dataset.step = nextStep;
 
   const modelsStep = panel.querySelector(".dm-first-instance-step-models");
   const runStep = panel.querySelector(".dm-first-instance-step-run");
-  const cliStep = panel.querySelector(".dm-first-instance-step-cli");
   if (modelsStep) modelsStep.classList.toggle("hidden", nextStep !== STEP_MODELS);
   if (runStep) runStep.classList.toggle("hidden", nextStep !== STEP_FIRST_INSTANCE);
-  if (cliStep) cliStep.classList.toggle("hidden", nextStep !== STEP_CLI);
 
   const title = panel.querySelector(".dm-first-instance-title");
-  if (title) {
-    title.textContent = nextStep === STEP_CLI
-      ? "Install A0 CLI"
-      : nextStep === STEP_FIRST_INSTANCE ? "Start your first Instance" : "Choose Instance defaults";
-  }
+  if (title) title.textContent = nextStep === STEP_FIRST_INSTANCE ? "Start your first Instance" : "Choose Instance defaults";
 
   const description = panel.querySelector(".dm-first-instance-description");
   if (description) {
-    description.textContent = nextStep === STEP_CLI
-      ? "Add the optional desktop bridge now, or skip it and continue."
-      : nextStep === STEP_FIRST_INSTANCE
-        ? "Use the defaults you just chose for the first Instance, or save them for later."
-        : "Choose the providers and models Agent Zero should use for new Instances.";
+    description.textContent = nextStep === STEP_FIRST_INSTANCE
+      ? "Use the defaults you just chose for the first Instance, or save them for later."
+      : "Choose the providers and models Agent Zero should use for new Instances.";
   }
 
   const back = panel.querySelector(".dm-first-instance-back");
   if (back) {
     back.classList.toggle("hidden", nextStep === STEP_MODELS);
-    back.textContent = nextStep === STEP_CLI ? "< Back to first Instance" : "< Back to model configuration";
+    back.textContent = "< Back to model configuration";
   }
-
-  const primary = panel.querySelector(".dm-first-instance-primary");
-  if (primary) primary.textContent = nextStep === STEP_CLI ? (installComplete ? "Finish" : "Show slideshow") : "Continue";
 }
 
 function createRunChoice(state) {
@@ -227,50 +214,6 @@ function createRunChoice(state) {
   return runBlock;
 }
 
-function createCliInstallStep(state, actions) {
-  const installed = state?.cli?.installed === true;
-  const block = createEl("div", "dm-first-instance-cli");
-
-  const copy = createEl(
-    "p",
-    "dm-first-instance-cli-copy",
-    installed
-      ? "A0 CLI is already installed on this computer. You can open it from any running Instance when you want Agent Zero connected to your desktop."
-      : "Install A0 CLI if you want Agent Zero to work beyond the Docker sandbox: read, write, and edit local files, use your own browser for webpages, or use Computer Use on this desktop."
-  );
-  block.appendChild(copy);
-
-  const features = createEl("div", "dm-first-instance-cli-features");
-  for (const [icon, label] of [
-    ["folder_open", "Local files"],
-    ["language", "Your browser"],
-    ["desktop_windows", "Computer Use"]
-  ]) {
-    const item = createEl("div", "dm-first-instance-cli-feature");
-    const symbol = createEl("span", "material-symbols-outlined", icon);
-    symbol.setAttribute("aria-hidden", "true");
-    item.appendChild(symbol);
-    item.appendChild(createEl("span", "", label));
-    features.appendChild(item);
-  }
-  block.appendChild(features);
-
-  if (installed) {
-    block.appendChild(createEl("div", "dm-field-hint dm-first-instance-cli-status", "Ready: the a0 command is available."));
-  } else {
-    const install = createEl("button", "button confirm dm-first-instance-cli-install", "Install A0 CLI");
-    install.type = "button";
-    install.addEventListener("click", () => {
-      actions?.installCli?.();
-    });
-    block.appendChild(install);
-    block.appendChild(createEl("div", "dm-field-hint dm-first-instance-cli-status", "The installer opens in a terminal. When it finishes, the a0 command should be available."));
-  }
-
-  block.appendChild(createEl("div", "dm-field-hint", "You can skip this now. Agent Zero still works in the browser, and you can install A0 CLI later from any Instance menu."));
-  return block;
-}
-
 function finishSetup(progress, actions, onDone) {
   const opId = asText(progress?.opId);
   if (opId) acknowledgedOps.add(opId);
@@ -287,7 +230,6 @@ function finishSetup(progress, actions, onDone) {
 function syncFirstInstanceSetupState(panel, state = {}) {
   if (!panel) return;
   const progress = state?.progress || null;
-  panel.dataset.installComplete = installIsComplete(progress) ? "true" : "false";
   const checkLabel = panel.querySelector(".dm-first-instance-check")?.querySelector("span");
   if (checkLabel) {
     checkLabel.textContent = installIsComplete(progress)
@@ -301,7 +243,6 @@ function createFirstInstanceSetup(state, actions, onDone) {
   const progress = state?.progress || null;
   const instanceDefaults = normalizeInstanceDefaults(state?.instanceDefaults);
   const section = createEl("section", FIRST_INSTANCE_SETUP_CLASS);
-  section.dataset.installComplete = installIsComplete(progress) ? "true" : "false";
   section.setAttribute("aria-label", "Choose Instance defaults");
 
   const head = createEl("div", "dm-first-instance-head");
@@ -334,26 +275,19 @@ function createFirstInstanceSetup(state, actions, onDone) {
   runPane.appendChild(createRunChoice(state));
   layout.appendChild(runPane);
 
-  const cliPane = createEl("div", "dm-first-instance-step dm-first-instance-step-cli hidden");
-  cliPane.appendChild(createCliInstallStep(state, actions));
-  layout.appendChild(cliPane);
   section.appendChild(layout);
 
   const actionRow = createEl("div", "dm-first-instance-actions");
   const back = createEl("button", "dm-text-button dm-first-instance-back hidden", "< Back to model configuration");
   back.type = "button";
-  back.addEventListener("click", () => {
-    setStep(section, section.dataset.step === STEP_CLI ? STEP_FIRST_INSTANCE : STEP_MODELS);
-  });
+  back.addEventListener("click", () => setStep(section, STEP_MODELS));
   actionRow.appendChild(back);
 
   const skip = createEl("button", "dm-text-button dm-first-instance-skip", "Skip");
   skip.type = "button";
   skip.addEventListener("click", async () => {
-    if (section.dataset.step !== STEP_CLI) {
-      const ok = await actions?.skipFirstInstanceSetup?.({ opId: asText(progress?.opId) });
-      if (ok === false) return;
-    }
+    const ok = await actions?.skipFirstInstanceSetup?.({ opId: asText(progress?.opId) });
+    if (ok === false) return;
     await finishSetup(progress, actions, onDone);
   });
   actionRow.appendChild(skip);
@@ -361,11 +295,6 @@ function createFirstInstanceSetup(state, actions, onDone) {
   const primary = createEl("button", "button confirm dm-first-instance-primary", "Continue");
   primary.type = "button";
   primary.addEventListener("click", async () => {
-    if (section.dataset.step === STEP_CLI) {
-      await finishSetup(progress, actions, onDone);
-      return;
-    }
-
     const defaults = readInstanceDefaultsFromForm(section, FIRST_INSTANCE_SETUP_PREFIX);
     const envResult = buildInstanceEnvText(defaults);
     if (!envResult.ok) {
@@ -387,7 +316,7 @@ function createFirstInstanceSetup(state, actions, onDone) {
       storageMode: section.querySelector("#firstSetupStorageMode")?.value || ""
     });
     if (!ok) return;
-    setStep(section, STEP_CLI);
+    await finishSetup(progress, actions, onDone);
   });
   actionRow.appendChild(primary);
   section.appendChild(actionRow);

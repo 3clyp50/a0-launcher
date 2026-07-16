@@ -228,12 +228,11 @@ This scope owns:
   The card overflow menu should choose its up/down direction from available
   viewport space, reserve any fixed bottom launcher chrome, and use bounded
   internal scrolling when the window is short.
-  `Open A0 CLI` may appear on local and saved remote Instance cards. It should
-  let the shell show the native working-folder picker before terminal launch;
-  canceling that picker should not display an error.
-  If the shell reports that the host `a0` command is unavailable, the same menu
-  slot should become `Install A0 CLI` and launch the shell-owned installer
-  intent instead of failing late.
+  `Install / Update A0 CLI` remains available on local and saved remote Instance
+  cards. Add the separate `Open A0 CLI` action only when the shell reports a
+  system CLI installed. Open should let the shell show the native working-folder
+  picker before terminal launch; canceling that picker should not display an
+  error. Disable it while CLI maintenance is running.
   Clone opens a quiet confirmation dialog with `/a0/usr` category choices hidden
   in a disclosure by default; all categories are selected by default to match
   Agent Zero backup behavior, while clearing all categories intentionally
@@ -344,7 +343,9 @@ This scope owns:
   full permission list visible.
   Host access starts off for new local and remote setups, with the local default
   master switch available in both onboarding and Settings. Browser and Computer
-  Use start opt-in.
+  Use start opt-in. Do not add a CLI installation helper to first-Instance or
+  Host access onboarding; Launcher owns CLI preparation independently of
+  permission opt-in.
   One Agent Zero-style switch owns both connection and permission state and
   visibly disables its dependent permissions. Call the selected path the folder
   for files and commands, explain both roles in plain language, and make

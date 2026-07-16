@@ -39,6 +39,12 @@ const {
   publicGatewayStatus
 } = require('./host_gateway');
 const {
+  A0_CLI_RELEASE_API_URL,
+  normalizeA0CliVersion,
+  runA0CliInstaller,
+  shouldInstallA0Cli
+} = require('./a0_cli_install');
+const {
   cleanupLauncherUpdaterArtifacts,
   writeLauncherUpdaterInstallMarker
 } = require('./launcher_updater_artifacts');
@@ -64,8 +70,6 @@ const BUILD_INFO_FILE = path.join(__dirname, 'build-info.json');
 const GITHUB_REPO_ENV_VAR = 'A0_LAUNCHER_GITHUB_REPO';
 const LOCAL_REPO_ENV_VAR = 'A0_LAUNCHER_LOCAL_REPO';
 const USE_LOCAL_CONTENT_ENV_VAR = 'A0_LAUNCHER_USE_LOCAL_CONTENT';
-const A0_CLI_INSTALL_SCRIPT_URL = 'https://raw.githubusercontent.com/agent0ai/a0-connector/main/install.sh';
-const A0_CLI_INSTALL_SCRIPT_URL_WINDOWS = 'https://raw.githubusercontent.com/agent0ai/a0-connector/main/install.ps1';
 const PUBLIC_RESOURCE_LINKS = Object.freeze({
   docs: 'https://www.agent-zero.ai/p/docs/',
   apiDashboard: 'https://www.agent-zero.ai/p/community/api-dashboard/',
@@ -195,6 +199,9 @@ let launcherUpdateState = {
 let mainWindowMode = '';
 let mainWindowCreatedAt = 0;
 let hostGatewayQuitPending = false;
+let a0CliEnsurePromise = null;
+let a0CliEnsureState = 'idle';
+let a0CliResolvedBinary = '';
 
 const hostGatewaySupervisor = new HostGatewaySupervisor({
   onStatus(leaseKey, status) {
@@ -1644,6 +1651,12 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
     return null;
   }
 
+  try {
+    await ensureA0CliInstalled();
+  } catch {
+    // The capability check below reports the actionable Host access state.
+  }
+
   let cli;
   try {
     cli = findA0CliBinary({ requireGateway: true });
@@ -1653,7 +1666,7 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
   if (!cli) {
     setTabHostAccess(tab, hostAccessStatus('needs_action', {
       code: 'CLI_UPDATE_REQUIRED',
-      message: 'Update A0 CLI to use Host access.'
+      message: 'Launcher Host access could not be prepared. Retry, or use Install / Update A0 CLI from the Instance menu.'
     }), config);
     return null;
   }
@@ -2420,6 +2433,7 @@ function getA0CliStatus() {
   const commandPath = findA0CliCommandBinary();
   return {
     installed: !!commandPath,
+    installing: a0CliEnsureState === 'checking' || a0CliEnsureState === 'installing',
     command: commandPath ? 'a0' : ''
   };
 }
@@ -2454,6 +2468,128 @@ function findA0CliBinary({ requireGateway = false } = {}) {
     : 'A0 CLI was not found. Install a0-connector or add the a0 command to PATH.');
   err.code = requireGateway ? 'CLI_UPDATE_REQUIRED' : 'TERMINAL_UNAVAILABLE';
   throw err;
+}
+
+function findCompatibleA0CliBinary() {
+  try {
+    return findA0CliBinary({ requireGateway: true });
+  } catch {
+    return '';
+  }
+}
+
+function readA0CliVersion(cli) {
+  const binary = existingFilePath(cli);
+  if (!binary) return '';
+  try {
+    const result = childProcess.spawnSync(binary, ['--version'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      env: { ...process.env, TERM: 'dumb', NO_COLOR: '1' },
+      windowsHide: true
+    });
+    return normalizeA0CliVersion(`${result.stdout || ''}\n${result.stderr || ''}`);
+  } catch {
+    return '';
+  }
+}
+
+async function fetchLatestA0CliVersion() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  timer.unref?.();
+  try {
+    const response = await net.fetch(A0_CLI_RELEASE_API_URL, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'A0-Launcher'
+      },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}.`);
+    const payload = await response.json();
+    return normalizeA0CliVersion(payload?.tag_name);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function publishA0CliStatus() {
+  if (!contentInitialized || mainWindowMode !== 'app') return;
+  try {
+    const state = await dockerManager.getDockerManagerState();
+    sendDockerManagerEvent('docker-manager:state', sanitizeDockerManagerState(state));
+  } catch {
+    // The next normal Docker Manager refresh carries the CLI state.
+  }
+}
+
+function setA0CliEnsureState(state, binary = '') {
+  a0CliEnsureState = state;
+  if (binary) a0CliResolvedBinary = binary;
+  void publishA0CliStatus();
+}
+
+function ensureA0CliInstalled({ force = false } = {}) {
+  if (a0CliEnsurePromise) return a0CliEnsurePromise;
+  const readyCli = a0CliEnsureState === 'ready' ? existingFilePath(a0CliResolvedBinary) : '';
+  if (!force && readyCli) return Promise.resolve(readyCli);
+
+  a0CliEnsurePromise = (async () => {
+    setA0CliEnsureState('checking');
+    const installedCli = findA0CliCommandBinary();
+    const supportsGateway = !!installedCli && a0CliSupportsGateway(installedCli);
+    const currentVersion = readA0CliVersion(installedCli);
+    let latestVersion = '';
+    if (installedCli && supportsGateway) {
+      try {
+        latestVersion = await fetchLatestA0CliVersion();
+      } catch (error) {
+        console.warn('[a0-cli] update check failed; using the installed compatible CLI', error?.message || error);
+      }
+    }
+
+    const installRequired = force || shouldInstallA0Cli({
+      installed: !!installedCli,
+      supportsGateway,
+      currentVersion,
+      latestVersion
+    });
+    if (!installRequired) {
+      const compatible = findCompatibleA0CliBinary() || installedCli;
+      setA0CliEnsureState('ready', compatible);
+      return compatible;
+    }
+
+    setA0CliEnsureState('installing');
+    try {
+      await runA0CliInstaller();
+      const installed = findA0CliCommandBinary();
+      if (!installed || !a0CliSupportsGateway(installed)) {
+        const error = new Error('The installed A0 CLI does not provide Launcher Host access.');
+        error.code = 'CLI_INSTALL_FAILED';
+        throw error;
+      }
+      setA0CliEnsureState('ready', installed);
+      return installed;
+    } catch (error) {
+      const compatible = findCompatibleA0CliBinary();
+      if (compatible) {
+        console.warn('[a0-cli] install or update failed; keeping the compatible CLI', error?.message || error);
+        setA0CliEnsureState('ready', compatible);
+        if (force) throw error;
+        return compatible;
+      }
+      setA0CliEnsureState('error');
+      throw error;
+    }
+  })();
+  const pending = a0CliEnsurePromise;
+  const clearPending = () => {
+    if (a0CliEnsurePromise === pending) a0CliEnsurePromise = null;
+  };
+  pending.then(clearPending, clearPending);
+  return pending;
 }
 
 function a0CliSupportsOption(cli, option) {
@@ -2591,65 +2727,6 @@ function writeDockerLoginPowerShellWrapper(dockerCli) {
     '  Write-Host "Docker login completed."',
     '} else {',
     '  Write-Host "Docker login exited with code $code."',
-    '}',
-    'Write-Host ""',
-    'Read-Host "Press Enter to close this window"',
-    'exit $code',
-    ''
-  ].join('\r\n');
-  fsSync.writeFileSync(scriptPath, script, { encoding: 'utf8' });
-  return scriptPath;
-}
-
-function writeA0CliInstallShellWrapper() {
-  const scriptPath = path.join(terminalWrapperDir(), 'a0-cli-install.sh');
-  const script = [
-    '#!/usr/bin/env bash',
-    'set -u',
-    'clear 2>/dev/null || true',
-    'echo "Install A0 CLI"',
-    'echo',
-    'echo "A0 CLI lets Agent Zero work with your local files, browser, and computer when you allow it."',
-    'echo "This installer will add the a0 command to this computer."',
-    'echo',
-    `curl -LsSf ${shellSingleQuote(A0_CLI_INSTALL_SCRIPT_URL)} | sh`,
-    'code=$?',
-    'echo',
-    'if [ "$code" -eq 0 ]; then',
-    '  echo "A0 CLI installation completed. Open a new terminal and run: a0"',
-    'else',
-    '  echo "A0 CLI installation exited with code $code."',
-    'fi',
-    'echo',
-    'read -r -p "Press Enter to close this window..." _',
-    'exit "$code"',
-    ''
-  ].join('\n');
-  fsSync.writeFileSync(scriptPath, script, { encoding: 'utf8', mode: 0o700 });
-  try {
-    fsSync.chmodSync(scriptPath, 0o700);
-  } catch {
-    // Best-effort on platforms that ignore POSIX modes.
-  }
-  return scriptPath;
-}
-
-function writeA0CliInstallPowerShellWrapper() {
-  const scriptPath = path.join(terminalWrapperDir(), 'a0-cli-install.ps1');
-  const script = [
-    'Write-Host "Install A0 CLI"',
-    'Write-Host ""',
-    'Write-Host "A0 CLI lets Agent Zero work with your local files, browser, and computer when you allow it."',
-    'Write-Host "This installer will add the a0 command to this computer."',
-    'Write-Host ""',
-    `irm ${powerShellSingleQuote(A0_CLI_INSTALL_SCRIPT_URL_WINDOWS)} | iex`,
-    '$code = $LASTEXITCODE',
-    'if ($null -eq $code) { $code = 0 }',
-    'Write-Host ""',
-    'if ($code -eq 0) {',
-    '  Write-Host "A0 CLI installation completed. Open a new terminal and run: a0"',
-    '} else {',
-    '  Write-Host "A0 CLI installation exited with code $code."',
     '}',
     'Write-Host ""',
     'Read-Host "Press Enter to close this window"',
@@ -2900,87 +2977,6 @@ function openA0CliTerminalLinux(host, cli, workingDirectory, credentials = null)
   throw err;
 }
 
-function openA0CliInstallTerminalWindows() {
-  const scriptPath = writeA0CliInstallPowerShellWrapper();
-  const psArgs = ['-NoLogo', '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath];
-
-  if (findCommandOnPath('wt.exe')) {
-    try {
-      spawnDetached('wt.exe', ['new-tab', '--title', 'Install A0 CLI', 'powershell.exe', ...psArgs], { env: process.env });
-      return { opened: true, command: 'wt.exe' };
-    } catch {
-      // Fall through to PowerShell's own console window.
-    }
-  }
-
-  const launcherScript = [
-    `$argumentList = ${powerShellArrayLiteral(psArgs)}`,
-    "Start-Process -FilePath 'powershell.exe' -ArgumentList $argumentList -WindowStyle Normal"
-  ].join('; ');
-  const launched = childProcess.spawnSync('powershell.exe', [
-    '-NoLogo',
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-Command',
-    launcherScript
-  ], {
-    encoding: 'utf8',
-    env: process.env,
-    windowsHide: true
-  });
-  if (launched.error || launched.status !== 0) {
-    const detail = launched.error?.message || launched.stderr?.trim() || `PowerShell exited with code ${launched.status}`;
-    const err = new Error(`Could not open the A0 CLI installer. ${detail}`);
-    err.code = 'TERMINAL_UNAVAILABLE';
-    throw err;
-  }
-  return { opened: true, command: 'powershell.exe' };
-}
-
-function openA0CliInstallTerminalMac() {
-  const scriptPath = writeA0CliInstallShellWrapper();
-  const command = `bash ${shellSingleQuote(scriptPath)}`;
-
-  spawnDetached('osascript', [
-    '-e',
-    `tell application "Terminal" to do script ${appleScriptString(command)}`,
-    '-e',
-    'tell application "Terminal" to activate'
-  ], {
-    env: process.env
-  });
-  return { opened: true, command: 'Terminal.app' };
-}
-
-function openA0CliInstallTerminalLinux() {
-  const scriptPath = writeA0CliInstallShellWrapper();
-  const command = `bash ${shellSingleQuote(scriptPath)}`;
-  const candidates = [
-    ['x-terminal-emulator', ['-e', 'bash', '-lc', command]],
-    ['gnome-terminal', ['--', 'bash', '-lc', command]],
-    ['konsole', ['-e', 'bash', '-lc', command]],
-    ['xfce4-terminal', ['-e', `bash -lc ${shellSingleQuote(command)}`]],
-    ['xterm', ['-e', 'bash', '-lc', command]]
-  ];
-
-  let lastError = null;
-  for (const [cmd, args] of candidates) {
-    try {
-      const found = findCommandOnPath(cmd);
-      if (!found) continue;
-      spawnDetached(cmd, args, { env: process.env });
-      return { opened: true, command: cmd };
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  const err = new Error(lastError?.message || 'No terminal emulator was found.');
-  err.code = 'TERMINAL_UNAVAILABLE';
-  throw err;
-}
-
 function openDockerLoginTerminalWindows(dockerCli) {
   const scriptPath = writeDockerLoginPowerShellWrapper(dockerCli);
   const psArgs = ['-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath];
@@ -3073,16 +3069,6 @@ function openDockerLoginTerminal() {
   throw err;
 }
 
-function openA0CliInstallTerminal() {
-  if (process.platform === 'win32') return openA0CliInstallTerminalWindows();
-  if (process.platform === 'darwin') return openA0CliInstallTerminalMac();
-  if (process.platform === 'linux') return openA0CliInstallTerminalLinux();
-
-  const err = new Error('Opening the A0 CLI installer is not available on this system.');
-  err.code = 'TERMINAL_UNAVAILABLE';
-  throw err;
-}
-
 async function resolveA0CliTerminalTarget(host, options = {}) {
   const request = isPlainObject(options) ? options : {};
   const kind = typeof request.kind === 'string' ? request.kind.trim() : '';
@@ -3117,7 +3103,7 @@ async function resolveA0CliTerminalTarget(host, options = {}) {
 
 async function openA0CliTerminal(host, ownerWindow, options = {}) {
   const target = await resolveA0CliTerminalTarget(host, options);
-  const cli = findA0CliBinary();
+  const cli = findA0CliCommandBinary() || await ensureA0CliInstalled();
   const credentials = await instanceCredentialsForCliTarget(target);
   const workingDirectory = await chooseA0CliWorkingDirectory(ownerWindow);
   if (!workingDirectory) return { opened: false, canceled: true };
@@ -4618,10 +4604,18 @@ ipcMain.handle('docker-manager:openCliTerminal', async (event, body) => {
 });
 
 ipcMain.handle('docker-manager:installCli', async () => {
+  const tabs = Array.from(instanceTabs.values());
   try {
-    return openA0CliInstallTerminal();
+    hostGatewaySupervisor.stopAll('cli_update', { preserveSuppression: true });
+    if (hostGatewaySupervisor.pendingStopCount()) {
+      await hostGatewaySupervisor.waitForStopped(8500);
+    }
+    const cli = await ensureA0CliInstalled({ force: true });
+    return { installed: true, command: cli ? 'a0' : '' };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
+  } finally {
+    for (const tab of tabs) void restartHostGatewayForTab(tab);
   }
 });
 
@@ -4669,6 +4663,9 @@ app.whenReady().then(async () => {
   });
   await cleanupStaleLauncherUpdaterArtifacts();
   configureLauncherAutoUpdate();
+  void ensureA0CliInstalled().catch((error) => {
+    console.warn('[a0-cli] automatic install or update failed', error?.message || error);
+  });
   createWindow();
 
   // Wait a moment for loading screen to render

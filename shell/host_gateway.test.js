@@ -290,6 +290,28 @@ test('Disconnect clears live metadata and suppresses the current lease until it 
   assert.equal(spawns, 2);
 });
 
+test('CLI maintenance stops children without clearing a user-requested disconnect', () => {
+  const child = fakeChild();
+  const supervisor = new HostGatewaySupervisor({ spawn: () => child });
+  supervisor.start('tab-1', launch());
+  child.stdout.write(`${JSON.stringify({
+    type: 'status',
+    gateway: {
+      version: 1,
+      kind: 'launcher',
+      id: 'launcher-1',
+      state: 'disconnected'
+    }
+  })}\n`);
+
+  supervisor.stopAll('cli_update', { preserveSuppression: true });
+
+  assert.equal(supervisor.isSuppressed('tab-1'), true);
+  assert.equal(supervisor.statusFor('tab-1').state, 'disconnected');
+  assert.match(child.input, /cli_update/);
+  assert.equal(supervisor.start('tab-1', launch()).suppressed, true);
+});
+
 test('application cleanup terminates and waits for every open tab lease', async () => {
   const children = [fakeChild(), fakeChild()];
   let index = 0;

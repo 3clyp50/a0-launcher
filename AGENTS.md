@@ -64,6 +64,18 @@ Architecture contracts:
   cleanup end the lease. Detaching transfers the same lease, while
   Launcher-home selection and in-tab reload keep it alive. Disconnect suppresses
   that lease until the user reconnects from Agent Zero Core or closes it.
+- Launcher startup asynchronously installs the official A0 CLI when it is
+  missing or lacks the Launcher gateway contract, and updates it when a newer
+  release is available. Installing the CLI grants no host capability by itself:
+  only an explicitly enabled Host access choice on an open Instance tab may
+  start a gateway lease. An Instance menu shows `Open A0 CLI` only when a
+  system CLI is installed, and keeps `Install / Update A0 CLI` as the recovery
+  and maintenance action. First-run and Host access onboarding do not include a
+  separate CLI installer step.
+- A0 CLI v2.5 is the first connector release with the Launcher gateway
+  contract. Continue capability-gating gateway candidates rather than replacing
+  that contract check with a version comparison; an unreleased sibling
+  development checkout may advertise the capability before the public release.
 
 Runtime and release contracts:
 
@@ -235,6 +247,7 @@ node --check shell/main.js
 node --check shell/preload.js
 node --check shell/docker_manager/index.js
 node --check app/docker_manager.js
+node --test shell/a0_cli_install.test.js shell/host_gateway.test.js
 node --test shell/launcher_updater_debug_release.test.js
 git diff --check
 ```

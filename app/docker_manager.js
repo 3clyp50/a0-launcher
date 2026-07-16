@@ -238,7 +238,7 @@ function snapshot() {
     portPreferences: store.portPreferences || null,
     instanceDefaults: normalizeInstanceDefaults(store.instanceDefaults),
     hostAccess: store.hostAccess || null,
-    cli: store.cli || { installed: false, command: "" },
+    cli: store.cli || { installed: false, installing: false, command: "" },
     retentionPolicy: store.retentionPolicy || null,
     instanceTabs: store.instanceTabs || { tabs: [], activeTabId: "" }
   };
@@ -590,7 +590,7 @@ async function refresh() {
       store.storagePreferences = state?.storagePreferences || null;
       store.instanceDefaults = state?.instanceDefaults || null;
       store.hostAccess = state?.hostAccess || null;
-      store.cli = state?.cli || { installed: false, command: "" };
+      store.cli = state?.cli || { installed: false, installing: false, command: "" };
       store.retentionPolicy = state?.retentionPolicy || null;
       if (!store.error) setBanner("", "");
     }
@@ -1625,15 +1625,16 @@ async function installCli() {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.installCli !== "function") return false;
   try {
+    setBanner("info", "Installing or updating A0 CLI…");
     const res = await api.installCli();
     if (isErrorResponse(res)) {
       setBanner("error", res.message);
       return false;
     }
-    setBanner("info", "A0 CLI installer opened.");
+    setBanner("info", "A0 CLI is ready.");
     return true;
   } catch (e) {
-    setBanner("error", e?.message || "Unable to open A0 CLI installer");
+    setBanner("error", e?.message || "Unable to install or update A0 CLI");
     return false;
   }
 }
@@ -1916,7 +1917,7 @@ function initSubscriptions() {
         store.portPreferences = state?.portPreferences || null;
         store.instanceDefaults = state?.instanceDefaults || null;
         store.hostAccess = state?.hostAccess || null;
-        store.cli = state?.cli || { installed: false, command: "" };
+        store.cli = state?.cli || { installed: false, installing: false, command: "" };
         store.retentionPolicy = state?.retentionPolicy || null;
         emitState();
         maybeStartPendingFirstInstanceFromState(snapshot());

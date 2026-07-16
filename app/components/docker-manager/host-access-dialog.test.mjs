@@ -227,7 +227,8 @@ test('Host access UI uses five friendly permissions and explains the command bou
   assert.match(source, /Use my Browser/);
   assert.match(source, /Commands start here but can reach other folders/i);
   assert.match(source, /Folder for files and commands/);
-  assert.match(source, /Update A0 CLI to use Host access/);
+  assert.match(source, /Launcher setup needs attention/);
+  assert.doesNotMatch(source, /data-install-cli/);
   assert.doesNotMatch(source, /2\.5 or newer/);
   assert.doesNotMatch(source, /Personal browser/);
   assert.match(source, /candidate\?\.browser_id \|\| candidate\?\.id/);

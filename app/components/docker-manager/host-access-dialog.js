@@ -348,9 +348,9 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     ? configured ? "Open this Instance in a Launcher tab to connect." : "Host access is off."
     : runtime.hostLabel || gateway.host_label || "This computer";
   const compatibility = runtime.code === "CLI_UPDATE_REQUIRED"
-    ? "Update A0 CLI to use Host access"
+    ? "Launcher setup needs attention"
     : ["CORE_UPDATE_REQUIRED", "CONTRACT_MISMATCH", "PLUGIN_MISSING"].includes(runtime.code)
-      ? "Update Agent Zero or A0 CLI to use Host access"
+      ? "Update Launcher or Agent Zero to use Host access"
       : runtime.code === "AUTH_REQUIRED"
         ? "Sign in to this Instance"
       : runtime.code === "ONBOARDING_REQUIRED"
@@ -410,7 +410,6 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
       </div>
       <div class="dm-dialog-footer dm-host-access-footer">
         <div class="dm-dialog-footer-group">
-          ${runtime.code === "CLI_UPDATE_REQUIRED" ? '<button class="button" type="button" data-install-cli>Install / Update CLI</button>' : ""}
           ${runtime.retryable || ["error", "needs_action"].includes(stateName) ? '<button class="button" type="button" data-retry>Retry</button>' : ""}
           ${browser.can_prepare ? '<button class="button" type="button" data-prepare-browser>Set up browser</button>' : ""}
           ${canArmComputer ? '<button class="button" type="button" data-rearm>Allow Computer Use</button>' : ""}
@@ -443,7 +442,6 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     if (event.target === dialog) closeDialog(dialog);
   });
   dialog.querySelector("[data-choose-folder]")?.addEventListener("click", () => chooseFolder(folder));
-  dialog.querySelector("[data-install-cli]")?.addEventListener("click", () => window.dockerManagerActions?.installCli?.());
   dialog.querySelector("[data-retry]")?.addEventListener("click", () => window.dockerManagerActions?.retryHostGateway?.(tab.id));
   dialog.querySelector("[data-prepare-browser]")?.addEventListener("click", () => {
     const hint = browserSetupHint(browser);

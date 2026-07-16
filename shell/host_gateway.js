@@ -248,14 +248,28 @@ class HostGatewaySupervisor {
     }
   }
 
-  stop(tabId, reason = 'closed') {
+  stop(tabId, reason = 'closed', options = {}) {
     const id = String(tabId || '').trim();
     const record = this.records.get(id);
     if (!record) return false;
+    const preserveSuppression = options.preserveSuppression === true && record.suppressed;
     record.intentional = true;
-    record.removed = true;
+    record.removed = !preserveSuppression;
     this._clearStartupTimer(record);
-    this.records.delete(id);
+    if (preserveSuppression) {
+      record.status = {
+        ...record.status,
+        state: 'disconnected',
+        connected: false,
+        code: '',
+        message: '',
+        retryable: false,
+        suppressed: true
+      };
+      this._publish(record);
+    } else {
+      this.records.delete(id);
+    }
     const child = record.child;
     if (child && child.exitCode === null) {
       this.closingChildren.add(child);
@@ -280,9 +294,9 @@ class HostGatewaySupervisor {
     return true;
   }
 
-  stopAll(reason = 'app_quit') {
+  stopAll(reason = 'app_quit', options = {}) {
     const tabIds = [...this.records.keys()];
-    for (const tabId of tabIds) this.stop(tabId, reason);
+    for (const tabId of tabIds) this.stop(tabId, reason, options);
     return tabIds.length;
   }
 

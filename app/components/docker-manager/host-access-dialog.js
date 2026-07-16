@@ -228,6 +228,31 @@ function browserOptions(browser = {}, selected = "") {
   return options.map((option) => `<option value="${escapeHtml(option.value)}"${option.value === selected ? " selected" : ""}>${escapeHtml(option.label)}</option>`).join("");
 }
 
+function browserSetupHint(browser = {}) {
+  const available = Array.isArray(browser?.available_browsers) ? browser.available_browsers : [];
+  const hasDebuggingEndpoint = Boolean(String(browser?.cdp_endpoint || "").trim())
+    || available.some((candidate) => Boolean(String(candidate?.cdp_endpoint || "").trim()));
+  return hasDebuggingEndpoint
+    ? ""
+    : "Open Chrome or Chromium at chrome://inspect/#remote-debugging, Edge at edge://inspect/#remote-debugging, or Opera at opera://inspect/#remote-debugging. Brave and Vivaldi are supported too. Turn on ‘Allow remote debugging for this browser instance,’ then click Set up browser again.";
+}
+
+function watchBrowserSetupFailure(tabId) {
+  let timeoutId = 0;
+  const stop = () => {
+    window.clearTimeout(timeoutId);
+    window.removeEventListener("dm:state", onState);
+  };
+  const onState = (event) => {
+    const tab = event?.detail?.instanceTabs?.tabs?.find((candidate) => candidate?.id === tabId);
+    if (tab?.hostAccess?.code !== "GATEWAY_COMMAND_FAILED") return;
+    window.toastFrontendInfo?.(browserSetupHint(), "Set up browser", 12, "dm-host-browser-setup");
+    stop();
+  };
+  window.addEventListener("dm:state", onState);
+  timeoutId = window.setTimeout(stop, 30000);
+}
+
 function closeDialog(dialog) {
   dialog?.remove();
   window.dockerManagerActions?.syncInstanceTabBounds?.();
@@ -420,7 +445,12 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   dialog.querySelector("[data-choose-folder]")?.addEventListener("click", () => chooseFolder(folder));
   dialog.querySelector("[data-install-cli]")?.addEventListener("click", () => window.dockerManagerActions?.installCli?.());
   dialog.querySelector("[data-retry]")?.addEventListener("click", () => window.dockerManagerActions?.retryHostGateway?.(tab.id));
-  dialog.querySelector("[data-prepare-browser]")?.addEventListener("click", () => window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "prepare_browser"));
+  dialog.querySelector("[data-prepare-browser]")?.addEventListener("click", () => {
+    const hint = browserSetupHint(browser);
+    if (hint) window.toastFrontendInfo?.(hint, "Set up browser", 12, "dm-host-browser-setup");
+    else watchBrowserSetupFailure(tab.id);
+    window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "prepare_browser");
+  });
   dialog.querySelector("[data-rearm]")?.addEventListener("click", () => window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "rearm_computer_use"));
   dialog.querySelector("form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -452,5 +482,7 @@ export {
   scopeFieldsHtml,
   bindScopeDependency,
   bindHostAccessState,
+  browserSetupHint,
+  watchBrowserSetupFailure,
   switchLineHtml
 };

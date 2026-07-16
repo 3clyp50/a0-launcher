@@ -5,12 +5,14 @@ import { test } from 'node:test';
 const {
   bindHostAccessState,
   bindScopeDependency,
+  browserSetupHint,
   capabilityStatusLabel,
   computerUseNeedsArm,
   configForTarget,
   normalizeConfig,
   normalizeScopes,
-  scopeFieldsHtml
+  scopeFieldsHtml,
+  watchBrowserSetupFailure
 } = await import('./host-access-dialog.js');
 
 test('scope dependency binding tolerates non-parsing test and fallback DOMs', () => {
@@ -160,6 +162,58 @@ test('Host capability statuses are human labels and arm only when actionable', (
   assert.equal(computerUseNeedsArm('rearm required'), true);
   assert.equal(computerUseNeedsArm('approval_required'), true);
   assert.equal(computerUseNeedsArm('unsupported'), false);
+});
+
+test('Browser setup explains how to enable remote debugging when no endpoint is open', () => {
+  const hint = browserSetupHint({
+    available_browsers: [{ label: 'Google Chrome - Default', cdp_endpoint: '' }]
+  });
+
+  assert.match(hint, /Chrome or Chromium at chrome:\/\/inspect\/#remote-debugging/);
+  assert.match(hint, /Edge at edge:\/\/inspect\/#remote-debugging/);
+  assert.match(hint, /Opera at opera:\/\/inspect\/#remote-debugging/);
+  assert.match(hint, /Brave and Vivaldi are supported too/);
+  assert.match(hint, /Allow remote debugging for this browser instance/);
+  assert.equal(browserSetupHint({ cdp_endpoint: 'ws://localhost:9222/devtools/browser/test' }), '');
+  assert.equal(browserSetupHint({
+    available_browsers: [{ cdp_endpoint: 'ws://localhost:9333/devtools/browser/test' }]
+  }), '');
+});
+
+test('Browser setup explains a stale debugging endpoint after the gateway command fails', () => {
+  let stateListener;
+  let toast;
+  let removed = false;
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    addEventListener(type, listener) {
+      if (type === 'dm:state') stateListener = listener;
+    },
+    removeEventListener(type, listener) {
+      if (type === 'dm:state' && listener === stateListener) removed = true;
+    },
+    setTimeout() { return 1; },
+    clearTimeout() {},
+    toastFrontendInfo(...args) { toast = args; }
+  };
+
+  try {
+    watchBrowserSetupFailure('instance-tab-1');
+    stateListener({
+      detail: {
+        instanceTabs: {
+          tabs: [{ id: 'instance-tab-1', hostAccess: { code: 'GATEWAY_COMMAND_FAILED' } }]
+        }
+      }
+    });
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+
+  assert.match(toast[0], /chrome:\/\/inspect\/#remote-debugging/);
+  assert.deepEqual(toast.slice(1), ['Set up browser', 12, 'dm-host-browser-setup']);
+  assert.equal(removed, true);
 });
 
 test('Host access UI uses five friendly permissions and explains the command boundary', async () => {

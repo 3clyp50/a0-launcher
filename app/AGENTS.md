@@ -137,7 +137,9 @@ This scope owns:
 - Instance tab chrome, including the Launcher tab that returns to the launcher,
   is renderer-owned, but embedded Agent Zero pages are not. The renderer
   computes the tab viewport bounds and sends them through preload; the shell
-  owns the `WebContentsView` attached to that rectangle.
+  owns the `WebContentsView` attached to that rectangle. Register window resize
+  handling independently of the asynchronously loaded tab component so native
+  Instance views keep their bounds when the Launcher is maximized or restored.
 
 ## Work Guidance
 

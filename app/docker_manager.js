@@ -1794,10 +1794,10 @@ function syncInstanceTabBounds() {
 }
 
 function initInstanceTabBoundsObserver() {
+  window.addEventListener("resize", syncInstanceTabBounds);
   const el = document.getElementById("dmInstanceTabViewport");
   if (!el) return;
   syncInstanceTabBounds();
-  window.addEventListener("resize", syncInstanceTabBounds);
   if (typeof ResizeObserver === "function") {
     const observer = new ResizeObserver(syncInstanceTabBounds);
     observer.observe(el);

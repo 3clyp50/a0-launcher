@@ -12,6 +12,7 @@ const {
   isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
+  instanceTabLoginRecoveryTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
   findInstanceTabByWebContents,
@@ -138,6 +139,23 @@ test('web UI login request ignores unsafe remote or incomplete credential target
       { username: 'jan', password: '' }
     ),
     null
+  );
+});
+
+test('instance tab login recovery returns to the previous same-origin page', () => {
+  assert.equal(
+    instanceTabLoginRecoveryTarget(
+      { kind: 'local', containerId: 'abc123', url: 'http://127.0.0.1:32080/chats?tab=1#current' },
+      'http://127.0.0.1:32080/login'
+    ).url,
+    'http://127.0.0.1:32080/chats?tab=1#current'
+  );
+  assert.equal(
+    instanceTabLoginRecoveryTarget(
+      { kind: 'local', containerId: 'abc123', url: 'http://127.0.0.1:32080/login' },
+      'http://127.0.0.1:32080/login'
+    ).url,
+    'http://127.0.0.1:32080/'
   );
 });
 

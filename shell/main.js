@@ -18,6 +18,7 @@ const {
   isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
+  instanceTabLoginRecoveryTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
   findInstanceTabByWebContents,
@@ -2065,6 +2066,38 @@ function attachInstanceTabEvents(tab) {
     void openExternalIfSafe(url);
   };
 
+  const handleNavigation = (url) => {
+    const normalized = normalizeHttpUrl(url);
+    if (!normalized || !isNavigationAllowedForTab(tab, normalized)) return;
+
+    const recoveryTarget = instanceTabLoginRecoveryTarget(tab, normalized);
+    tab.url = normalized;
+    if (recoveryTarget) {
+      update();
+      if (tab.loginRecoveryAttempted || tab.loginRecoveryInFlight) return;
+      tab.loginRecoveryAttempted = true;
+      tab.loginRecoveryInFlight = true;
+      void (async () => {
+        try {
+          const login = await loginInstanceWebUiSession(recoveryTarget, wc);
+          if (!login.succeeded || !instanceTabs.has(tab.id) || wc.isDestroyed?.()) return;
+          tab.url = recoveryTarget.url;
+          tab.loading = true;
+          update();
+          await wc.loadURL(recoveryTarget.url);
+        } catch {
+          // Leave the login page visible when the recovery request cannot complete.
+        } finally {
+          tab.loginRecoveryInFlight = false;
+        }
+      })();
+      return;
+    }
+
+    tab.loginRecoveryAttempted = false;
+    update();
+  };
+
   wc.setWindowOpenHandler(({ url }) => {
     if (isNavigationAllowedForTab(tab, url)) {
       void wc.loadURL(normalizeHttpUrl(url));
@@ -2099,18 +2132,10 @@ function attachInstanceTabEvents(tab) {
     }
   });
   wc.on('did-navigate', (_event, url) => {
-    const normalized = normalizeHttpUrl(url);
-    if (normalized && isNavigationAllowedForTab(tab, normalized)) {
-      tab.url = normalized;
-      update();
-    }
+    handleNavigation(url);
   });
   wc.on('did-navigate-in-page', (_event, url) => {
-    const normalized = normalizeHttpUrl(url);
-    if (normalized && isNavigationAllowedForTab(tab, normalized)) {
-      tab.url = normalized;
-      update();
-    }
+    handleNavigation(url);
   });
   wc.once('destroyed', () => {
     if (tab.detached) return;
@@ -2869,16 +2894,19 @@ async function loginInstanceWebUiSession(target, webContents) {
   if (!request) return { attempted: false };
 
   try {
-    await webContents.session.fetch(request.url, {
+    const response = await webContents.session.fetch(request.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: request.body,
       redirect: 'manual',
       credentials: 'include'
     });
-    return { attempted: true };
+    return {
+      attempted: true,
+      succeeded: response.status === 0 || (response.status >= 300 && response.status < 400)
+    };
   } catch {
-    return { attempted: true };
+    return { attempted: true, succeeded: false };
   }
 }
 

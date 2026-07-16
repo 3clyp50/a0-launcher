@@ -97,12 +97,14 @@ This scope owns:
   anchor. If a local Instance or saved remote Instance has
   launcher-saved credentials, `Open UI` may POST them to the same-origin Agent
   Zero `/login` route in the shell-owned browser session before loading the
-  tab; remote credential POSTs must stay on `https:` URLs unless the target is
-  local loopback. Do not put credentials in URLs or expose decrypted passwords
-  to the renderer. After a tab starts from a validated Instance URL, in-tab
-  navigation may stay on that Agent Zero origin, including same-origin anchors
-  and callbacks; safe off-origin `http:` and `https:` URLs should open through
-  the user's external browser. Embedded and detached Agent Zero UI web contents
+  tab, and an already-open tab may repeat that recovery when a restart sends
+  it back to `/login`; remote credential POSTs must stay on `https:` URLs
+  unless the target is local loopback. Do not put credentials in URLs or expose
+  decrypted passwords to the renderer. After a tab starts from a validated
+  Instance URL, in-tab navigation may stay on that Agent Zero origin, including
+  same-origin anchors and callbacks; safe off-origin `http:` and `https:` URLs
+  should open through the user's external browser. Embedded and detached Agent Zero UI
+  web contents
   should attach the same shell-owned edit context menu so selected text and
   editable fields keep normal copy/paste behavior. Instance-tab refreshes must
   bypass the HTTP cache so an Agent Zero restart cannot strand aborted UI assets

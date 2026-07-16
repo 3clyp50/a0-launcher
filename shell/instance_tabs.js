@@ -150,6 +150,18 @@ function webUiLoginRequestForTarget(target, credentials) {
   };
 }
 
+function instanceTabLoginRecoveryTarget(tab, loginUrl) {
+  const safeTab = tab && typeof tab === 'object' ? tab : {};
+  const login = parseHttpUrl(loginUrl);
+  if (!login || login.pathname !== '/login') return null;
+
+  const previous = parseHttpUrl(safeTab.url);
+  const returnUrl = previous && previous.origin === login.origin && previous.pathname !== '/login'
+    ? previous
+    : new URL('/', login);
+  return { ...safeTab, url: returnUrl.href };
+}
+
 function cliCredentialsAllowedForTarget(target) {
   const safeTarget = target && typeof target === 'object' ? target : {};
   const kind = typeof safeTarget.kind === 'string' ? safeTarget.kind : '';
@@ -236,6 +248,7 @@ module.exports = {
   isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
+  instanceTabLoginRecoveryTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
   findInstanceTabByWebContents,

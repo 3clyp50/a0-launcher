@@ -3263,6 +3263,37 @@ function sanitizeDockerManagerState(state) {
     const tag = typeof value === 'string' ? value.trim() : '';
     return dockerManager.isSemverReleaseTag(tag) ? tag : '';
   };
+  const cleanRuntimeText = (value, maxLength) => typeof value === 'string'
+    ? value.trim().replace(/[\0-\x1F\x7F]/g, '').slice(0, maxLength)
+    : '';
+  const copyRuntimeIdentity = (out, source) => {
+    const runtimeTag = cleanMatchedReleaseTag(source?.runtimeTag);
+    if (runtimeTag) out.runtimeTag = runtimeTag;
+    const runtimeVersion = cleanRuntimeText(source?.runtimeVersion, 80);
+    if (runtimeVersion) out.runtimeVersion = runtimeVersion;
+    const runtimeBranch = cleanRuntimeText(source?.runtimeBranch, 120);
+    if (runtimeBranch) out.runtimeBranch = runtimeBranch;
+    const runtimeCommit = cleanRuntimeText(source?.runtimeCommit, 64).toLowerCase();
+    if (/^[0-9a-f]{7,64}$/.test(runtimeCommit)) out.runtimeCommit = runtimeCommit;
+    const runtimeShortCommit = cleanRuntimeText(source?.runtimeShortCommit, 12).toLowerCase();
+    if (/^[0-9a-f]{7,12}$/.test(runtimeShortCommit)) out.runtimeShortCommit = runtimeShortCommit;
+    if (!isPlainObject(source?.runtimeSource)) return;
+    const runtimeSource = {};
+    if (source.runtimeSource.type === 'health') runtimeSource.type = 'health';
+    const tag = cleanMatchedReleaseTag(source.runtimeSource.tag);
+    if (tag) runtimeSource.tag = tag;
+    const version = cleanRuntimeText(source.runtimeSource.version, 80);
+    if (version) runtimeSource.version = version;
+    const describe = cleanRuntimeText(source.runtimeSource.describe, 160);
+    if (describe) runtimeSource.describe = describe;
+    const branch = cleanRuntimeText(source.runtimeSource.branch, 120);
+    if (branch) runtimeSource.branch = branch;
+    const commit = cleanRuntimeText(source.runtimeSource.commit, 64).toLowerCase();
+    if (/^[0-9a-f]{7,64}$/.test(commit)) runtimeSource.commit = commit;
+    const shortCommit = cleanRuntimeText(source.runtimeSource.shortCommit, 12).toLowerCase();
+    if (/^[0-9a-f]{7,12}$/.test(shortCommit)) runtimeSource.shortCommit = shortCommit;
+    if (Object.keys(runtimeSource).length) out.runtimeSource = runtimeSource;
+  };
 
   const versions = [];
   for (const v of versionsIn) {
@@ -3382,28 +3413,7 @@ function sanitizeDockerManagerState(state) {
       const matchedReleaseTag = cleanMatchedReleaseTag(c.matchedReleaseTag);
       if (matchedReleaseTag) out.matchedReleaseTag = matchedReleaseTag;
     }
-    {
-      const runtimeTag = cleanMatchedReleaseTag(c.runtimeTag);
-      if (runtimeTag) out.runtimeTag = runtimeTag;
-    }
-    if (typeof c.runtimeBranch === 'string' || c.runtimeBranch === null) out.runtimeBranch = c.runtimeBranch || null;
-    if (typeof c.runtimeCommit === 'string' || c.runtimeCommit === null) out.runtimeCommit = c.runtimeCommit || null;
-    if (typeof c.runtimeShortCommit === 'string' || c.runtimeShortCommit === null) out.runtimeShortCommit = c.runtimeShortCommit || null;
-    if (isPlainObject(c.runtimeSource)) {
-      const runtimeSource = {};
-      if (c.runtimeSource.type === 'git') runtimeSource.type = 'git';
-      if (typeof c.runtimeSource.workdir === 'string') runtimeSource.workdir = c.runtimeSource.workdir;
-      {
-        const runtimeTag = cleanMatchedReleaseTag(c.runtimeSource.tag);
-        if (runtimeTag) runtimeSource.tag = runtimeTag;
-      }
-      if (typeof c.runtimeSource.branch === 'string' || c.runtimeSource.branch === null) runtimeSource.branch = c.runtimeSource.branch || null;
-      if (typeof c.runtimeSource.commit === 'string' || c.runtimeSource.commit === null) runtimeSource.commit = c.runtimeSource.commit || null;
-      if (typeof c.runtimeSource.shortCommit === 'string' || c.runtimeSource.shortCommit === null) {
-        runtimeSource.shortCommit = c.runtimeSource.shortCommit || null;
-      }
-      if (Object.keys(runtimeSource).length) out.runtimeSource = runtimeSource;
-    }
+    copyRuntimeIdentity(out, c);
     if (typeof c.state === 'string' || c.state === null) out.state = c.state || null;
     if (typeof c.status === 'string' || c.status === null) out.status = c.status || null;
     if (Number.isFinite(Number(c.createdAt))) out.createdAt = Number(c.createdAt);
@@ -3501,6 +3511,7 @@ function sanitizeDockerManagerState(state) {
         }
       }
     }
+    copyRuntimeIdentity(out, r);
     remoteInstances.push(out);
   }
 

@@ -29,6 +29,10 @@ function installabilityCacheFile() {
   return path.join(cacheDir(), 'installability.json');
 }
 
+function runtimeIdentityCacheFile() {
+  return path.join(cacheDir(), 'runtime-identities.json');
+}
+
 async function readJson(filePath, fallbackValue) {
   try {
     const raw = await fs.readFile(filePath, 'utf8');
@@ -75,6 +79,18 @@ async function writeInstallabilityCache(cache) {
   const payload = cache && typeof cache === 'object' ? cache : { entries: {} };
   const entries = payload && typeof payload.entries === 'object' ? payload.entries : {};
   await writeJson(installabilityCacheFile(), { ...payload, entries });
+}
+
+async function readRuntimeIdentityCache() {
+  const cache = await readJson(runtimeIdentityCacheFile(), { entries: {} });
+  const entries = cache && typeof cache.entries === 'object' && !Array.isArray(cache.entries) ? cache.entries : {};
+  return { ...cache, entries };
+}
+
+async function writeRuntimeIdentityCache(cache) {
+  const payload = cache && typeof cache === 'object' ? cache : { entries: {} };
+  const entries = payload && typeof payload.entries === 'object' && !Array.isArray(payload.entries) ? payload.entries : {};
+  await writeJson(runtimeIdentityCacheFile(), { ...payload, entries });
 }
 
 const DEFAULT_PORT_PREFERENCES = Object.freeze({
@@ -889,6 +905,7 @@ module.exports = {
   stateFile,
   releasesCacheFile,
   installabilityCacheFile,
+  runtimeIdentityCacheFile,
 
   // JSON helpers
   readJson,
@@ -948,5 +965,7 @@ module.exports = {
 
   // Installability cache
   readInstallabilityCache,
-  writeInstallabilityCache
+  writeInstallabilityCache,
+  readRuntimeIdentityCache,
+  writeRuntimeIdentityCache
 };

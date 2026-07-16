@@ -199,6 +199,9 @@ This scope owns:
   report progress through Docker Manager events instead of blocking the renderer.
   The sanitized progress bridge should preserve explicit product state flags
   such as `uiReady` when the renderer depends on them for handoff behavior.
+- Sanitized Docker Manager state may expose bounded health-derived runtime
+  identity fields for local and saved remote Instances; never forward arbitrary
+  health response content.
 - Install image removal is a named Docker Manager IPC intent. The renderer may
   pass a release tag, but shell code must validate the IPC body and Docker
   Manager must perform a non-forced image removal so Docker can refuse images

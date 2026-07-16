@@ -94,6 +94,9 @@ This scope owns:
 - Per-Instance color selection is launcher identity metadata for local and saved
   remote Instances. It should use bounded palette IDs from Docker Manager state,
   tint only the card visual, and never imply Docker or Agent Zero runtime state.
+- Local and saved remote Instance cards should render the same health-derived
+  runtime identity, including branch and commits since the nearest release;
+  image tags remain fallback provenance when no runtime identity has been seen.
 - Removing a Version is a named renderer action from the Versions view. The
   renderer should present it as image cleanup and let Docker Manager report
   Docker's in-use refusal rather than trying to infer container/image bindings

@@ -22,8 +22,8 @@ const {
   normalizeDeleteLocalInstanceOptions,
   waitForUiReachable,
   waitForStartedLocalInstanceUi,
-  remoteHealthUrl,
-  requestRemoteHealth,
+  instanceHealthUrl,
+  requestInstanceHealth,
   parsePortMappings,
   settlePortMappings,
   replacementPortMappingsFromInspect,
@@ -273,28 +273,47 @@ test('local instance start readiness can be aborted while the UI hangs', async (
 
 test('remote health URL preserves saved base paths', () => {
   assert.equal(
-    remoteHealthUrl('https://example.com/agent-zero/?tab=home').href,
+    instanceHealthUrl('https://example.com/agent-zero/?tab=home').href,
     'https://example.com/agent-zero/api/health'
   );
   assert.equal(
-    remoteHealthUrl('http://127.0.0.1:5080/').href,
+    instanceHealthUrl('http://127.0.0.1:5080/').href,
     'http://127.0.0.1:5080/api/health'
   );
 });
 
-test('remote health check uses the Agent Zero health endpoint', async () => {
+test('instance health check returns the Agent Zero runtime identity', async () => {
   let requestedPath = '';
   const server = http.createServer((req, res) => {
     requestedPath = req.url || '';
     res.statusCode = requestedPath === '/api/health' ? 200 : 404;
-    res.end('ok');
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      gitinfo: {
+        branch: 'ready',
+        commit_hash: '6a7178af91c6d8f2114e359dcd4e368fb803b568',
+        tag: 'v2.4-18-g6a7178af',
+        short_tag: 'v2.4',
+        version: 'R v2.4+18'
+      },
+      error: null
+    }));
   });
   const address = await listenLocalServer(server);
 
   try {
-    const result = await requestRemoteHealth(`http://127.0.0.1:${address.port}/api/health`, 500);
+    const result = await requestInstanceHealth(`http://127.0.0.1:${address.port}/api/health`, 500);
     assert.equal(result.online, true);
     assert.equal(requestedPath, '/api/health');
+    assert.deepEqual(result.runtimeSource, {
+      type: 'health',
+      tag: 'v2.4',
+      branch: 'ready',
+      commit: '6a7178af91c6d8f2114e359dcd4e368fb803b568',
+      shortCommit: '6a7178af91c6',
+      describe: 'v2.4-18-g6a7178af',
+      version: 'v2.4+18'
+    });
   } finally {
     await closeServer(server);
   }

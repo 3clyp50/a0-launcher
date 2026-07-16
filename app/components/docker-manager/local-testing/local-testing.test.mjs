@@ -68,37 +68,51 @@ function fakeClassList(initial = []) {
   };
 }
 
-test('instance chips prefer Git release tags over channel labels', () => {
+test('instance chips prefer health runtime identity over image provenance', () => {
   assert.equal(
     instanceVisualBadge({
       versionTag: 'ready',
-      runtimeTag: 'v2.0',
+      runtimeTag: 'v2.4',
+      runtimeVersion: 'v2.4+18',
       runtimeBranch: 'ready',
-      matchedReleaseTag: 'v1.20'
+      matchedReleaseTag: 'v2.0'
     }),
-    '2.0'
+    'ready · 2.4+18'
   );
 
   assert.equal(
     dockerInstanceRuntimeSummary({
-      runtimeSource: { tag: 'v2.0', branch: 'ready' },
-      runtimeShortCommit: '5c914bc49ebd'
+      runtimeSource: { tag: 'v2.4', version: 'v2.4+18', branch: 'ready' },
+      runtimeShortCommit: '6a7178af91c6'
     }),
-    '2.0 @ 5c914bc49ebd'
+    'ready @ 6a7178af91c6'
   );
 });
 
-test('custom image identity remains visible after an in-container update', () => {
+test('custom Agent Zero images use health identity when available', () => {
   const instance = {
     imageRef: 'my-agent-zero:dev',
     versionTag: 'dev',
     isBackendImage: false,
     runtimeTag: 'v2.0',
+    runtimeVersion: 'v2.0+3',
+    runtimeBranch: 'ready',
     runtimeShortCommit: 'abcdef123456'
   };
 
+  assert.equal(instanceVisualBadge(instance), 'ready · 2.0+3');
+  assert.equal(dockerInstanceRuntimeSummary(instance), 'ready @ abcdef123456');
+});
+
+test('custom images without Agent Zero health metadata retain image identity', () => {
+  const instance = {
+    imageRef: 'my-runtime:dev',
+    versionTag: 'dev',
+    isBackendImage: false
+  };
+
   assert.equal(instanceVisualBadge(instance), 'dev');
-  assert.equal(dockerInstanceRuntimeSummary(instance), 'my-agent-zero:dev');
+  assert.equal(dockerInstanceRuntimeSummary(instance), 'my-runtime:dev');
 });
 
 test('channel instance chips show matched concrete release without channel text', () => {
@@ -138,7 +152,7 @@ test('version-like instance names use compact visual text', () => {
   assert.equal(createInstanceVisual('agent-zero-v2.0').className.includes('is-compact'), true);
 });
 
-test('instance chips prefer concrete image tags over runtime branch names', () => {
+test('instances without a health version retain image provenance as fallback', () => {
   assert.equal(
     instanceVisualBadge({
       imageRef: 'agent0ai/agent-zero:v2.0',
@@ -153,7 +167,7 @@ test('instance chips prefer concrete image tags over runtime branch names', () =
       runtimeBranch: 'ready',
       runtimeShortCommit: '5c914bc49ebd'
     }),
-    '2.0 @ 5c914bc49ebd'
+    'ready @ 5c914bc49ebd'
   );
 });
 
@@ -203,6 +217,21 @@ test('instance update model uses matched channel release when runtime tag is mis
       versions: [{ id: 'v2.2', displayVersion: '2.2' }]
     }).available,
     true
+  );
+});
+
+test('health runtime release prevents stale image provenance from offering an update', () => {
+  assert.equal(
+    instanceUpdateModel({
+      versionTag: 'ready',
+      matchedReleaseTag: 'v2.0',
+      runtimeTag: 'v2.4',
+      runtimeVersion: 'v2.4+18',
+      runtimeBranch: 'ready'
+    }, {
+      versions: [{ id: 'v2.4', displayVersion: '2.4' }]
+    }).available,
+    false
   );
 });
 

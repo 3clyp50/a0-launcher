@@ -70,6 +70,10 @@ function runtimeTag(c) {
   return c?.runtimeTag || c?.runtimeSource?.tag || "";
 }
 
+function runtimeVersion(c) {
+  return c?.runtimeVersion || c?.runtimeSource?.version || "";
+}
+
 function runtimeShortCommit(c) {
   const shortCommit = c?.runtimeShortCommit || c?.runtimeSource?.shortCommit || "";
   if (shortCommit) return shortCommit;
@@ -145,9 +149,14 @@ function instanceUpdateModel(c, state = {}) {
 }
 
 function instanceVisualBadge(c) {
-  if (c?.isBackendImage === false) return imageTagForContainer(c);
+  const sourceVersion = releaseTagLabel(runtimeVersion(c));
+  if (sourceVersion) {
+    const branch = runtimeBranch(c);
+    return branch ? `${branch} · ${sourceVersion}` : sourceVersion;
+  }
   const sourceTag = releaseTagLabel(runtimeTag(c));
   if (sourceTag) return sourceTag;
+  if (c?.isBackendImage === false) return imageTagForContainer(c);
 
   const imageTag = imageTagForContainer(c);
   const matchedReleaseTag = releaseTagLabel(c?.matchedReleaseTag);
@@ -159,12 +168,13 @@ function instanceVisualBadge(c) {
 }
 
 function dockerInstanceRuntimeSummary(c) {
-  if (c?.isBackendImage === false && c?.imageRef) return c.imageRef;
-  const imageTag = imageTagForContainer(c);
-  const branch = releaseTagLabel(runtimeTag(c)) || (isReleaseTag(imageTag) ? releaseTagLabel(imageTag) : runtimeBranch(c));
+  const branch = runtimeBranch(c) || releaseTagLabel(runtimeTag(c));
   const shortCommit = runtimeShortCommit(c);
   if (branch && shortCommit) return `${branch} @ ${shortCommit}`;
-  return branch || shortCommit || "";
+  if (branch || shortCommit) return branch || shortCommit;
+  if (c?.isBackendImage === false && c?.imageRef) return c.imageRef;
+  const imageTag = imageTagForContainer(c);
+  return isReleaseTag(imageTag) ? releaseTagLabel(imageTag) : "";
 }
 
 function workspaceMigrationAvailable(c) {
@@ -299,6 +309,7 @@ function logInstanceCardDiagnostics(containers, state) {
       versionTag: imageTagForContainer(c),
       matchedReleaseTag: c?.matchedReleaseTag || "",
       runtimeTag: runtimeTag(c),
+      runtimeVersion: runtimeVersion(c),
       runtimeBranch: runtimeBranch(c),
       runtimeCommit: runtimeShortCommit(c),
       uiUrl: c?.uiUrl || ""
@@ -1729,6 +1740,7 @@ function renderRemoteInstance(list, remote, state) {
   card.className = "dm-card";
 
   const visual = createInstanceVisual(displayName, {
+    badge: instanceVisualBadge(remote),
     seed: remoteInstanceVisualSeed(remote),
     color: remote?.color || ""
   });
@@ -1742,7 +1754,17 @@ function renderRemoteInstance(list, remote, state) {
 
   const meta = document.createElement("div");
   meta.className = "dm-card-meta";
-  meta.textContent = remote?.url || "";
+  const runtimeSummary = dockerInstanceRuntimeSummary(remote);
+  if (runtimeSummary) {
+    const summary = document.createElement("div");
+    summary.className = "dm-card-meta-line";
+    summary.textContent = runtimeSummary;
+    meta.appendChild(summary);
+  }
+  const url = document.createElement("div");
+  url.className = "dm-card-meta-line dm-card-meta-url";
+  url.textContent = remote?.url || "";
+  meta.appendChild(url);
   body.appendChild(meta);
 
   const footer = document.createElement("div");

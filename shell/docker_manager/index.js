@@ -33,10 +33,11 @@ const UI_READY_ATTEMPT_TIMEOUT_MS = 2_000;
 const REMOTE_HEALTH_PATH = '/api/health';
 const REMOTE_HEALTH_TIMEOUT_MS = 1_500;
 const REMOTE_HEALTH_CACHE_TTL_MS = 30_000;
+const INSTANCE_HEALTH_BODY_MAX_BYTES = 32 * 1024;
+const RUNTIME_IDENTITY_CACHE_MAX_ENTRIES = 512;
 const CONTAINER_LOG_DEFAULT_LINES = 400;
 const CONTAINER_LOG_MAX_LINES = 1500;
 const CONTAINER_LOG_MAX_CHARS = 12_000;
-const CONTAINER_SOURCE_MAX_BYTES = 256 * 1024;
 const RUNTIME_SETUP_RESUME_ARG = '--a0-resume-runtime-setup';
 const RUNTIME_SETUP_RUNONCE_VALUE = 'AgentZeroLauncherResumeRuntimeSetup';
 const execFileAsync = promisify(execFile);
@@ -166,9 +167,10 @@ const CLONE_SETTINGS_FIELDS = Object.freeze({
 
 const CHANNEL_TAGS = Object.freeze(['latest', 'ready', 'testing']);
 const CANONICAL_LOCAL_TAGS = Object.freeze(['local', 'development', 'main']);
-const CONTAINER_SOURCE_WORKDIRS = Object.freeze(['/a0', '/app', '/agent-zero']);
-const remoteHealthCache = new Map();
-const remoteHealthPending = new Map();
+const instanceHealthCache = new Map();
+const instanceHealthPending = new Map();
+let runtimeIdentityCacheLoadPromise = null;
+let runtimeIdentityCacheWritePromise = Promise.resolve();
 let lastInstanceInventoryDiagnosticsKey = '';
 
 function logDockerManagerError(op, error, details = {}) {
@@ -214,6 +216,7 @@ function logInstanceInventoryDiagnostics(containers, localByTag) {
     versionTag: imageTagForContainer(container),
     matchedReleaseTag: container?.matchedReleaseTag || '',
     runtimeTag: container?.runtimeTag || container?.runtimeSource?.tag || '',
+    runtimeVersion: container?.runtimeVersion || container?.runtimeSource?.version || '',
     runtimeBranch: container?.runtimeBranch || container?.runtimeSource?.branch || '',
     runtimeCommit: container?.runtimeShortCommit || container?.runtimeSource?.shortCommit || '',
     uiUrl: container?.uiUrl || '',
@@ -414,198 +417,57 @@ function sanitizeGitCommit(value) {
   return /^[0-9a-f]{7,64}$/.test(commit) ? commit : '';
 }
 
-function parseGitHead(text) {
-  const line = String(text || '').split(/\r?\n/u).map((item) => item.trim()).find(Boolean) || '';
-  if (!line) return null;
-
-  if (line.startsWith('ref:')) {
-    const refPath = line.slice(4).trim();
-    const branch = refPath.startsWith('refs/heads/') ? sanitizeGitBranchName(refPath.slice('refs/heads/'.length)) : '';
-    return { refPath, branch, commit: '' };
-  }
-
-  const commit = sanitizeGitCommit(line);
-  return commit ? { refPath: '', branch: '', commit } : null;
+function sanitizeRuntimeText(value, maxLength = 120) {
+  return String(value || '').trim().replace(/[\0-\x1F\x7F]/g, '').slice(0, maxLength);
 }
 
-function safeGitRefPath(value) {
-  const refPath = String(value || '').trim();
-  if (!refPath || refPath.length > 240) return '';
-  if (!refPath.startsWith('refs/')) return '';
-  if (/[\0-\x20\x7F]/.test(refPath)) return '';
-  if (refPath.startsWith('/') || refPath.endsWith('/') || refPath.includes('//')) return '';
-  if (refPath.includes('..') || refPath.includes('@{') || refPath.includes('\\')) return '';
-  return refPath;
+function normalizeRuntimeSource(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const branch = sanitizeGitBranchName(value.branch);
+  const commit = sanitizeGitCommit(value.commit);
+  const tag = isSemverReleaseTag(value.tag) ? String(value.tag).trim() : '';
+  const describe = sanitizeRuntimeText(value.describe, 160);
+  const version = sanitizeRuntimeText(value.version, 80);
+  if (!branch && !commit && !tag && !version) return null;
+  return {
+    type: 'health',
+    tag: tag || null,
+    branch: branch || null,
+    commit: commit || null,
+    shortCommit: commit ? commit.slice(0, 12) : null,
+    describe: describe || null,
+    version: version || null
+  };
 }
 
-function parsePackedRefs(text, refPath) {
-  const safeRef = safeGitRefPath(refPath);
-  if (!safeRef) return '';
+function runtimeSourceFromHealth(value) {
+  const gitinfo = value && typeof value === 'object' && !Array.isArray(value) ? value.gitinfo : null;
+  if (!gitinfo || typeof gitinfo !== 'object' || Array.isArray(gitinfo)) return null;
+  return normalizeRuntimeSource({
+    branch: gitinfo.branch,
+    commit: gitinfo.commit_hash,
+    tag: gitinfo.short_tag,
+    describe: gitinfo.tag,
+    version: sanitizeRuntimeText(gitinfo.version, 80).replace(/^[A-Z]\s+/u, '')
+  });
+}
 
-  for (const line of String(text || '').split(/\r?\n/u)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('^')) continue;
-    const parts = trimmed.split(/\s+/u);
-    if (parts.length < 2) continue;
-    if (parts[1] === safeRef) {
-      const commit = sanitizeGitCommit(parts[0]);
-      if (commit) return commit;
-    }
-  }
-
-  return '';
+function applyRuntimeSource(instance, source) {
+  if (!source) return instance;
+  return {
+    ...instance,
+    runtimeSource: source,
+    runtimeTag: source.tag || null,
+    runtimeVersion: source.version || null,
+    runtimeBranch: source.branch || null,
+    runtimeCommit: source.commit || null,
+    runtimeShortCommit: source.shortCommit || null
+  };
 }
 
 function sortedReleaseTags(tags) {
   return [...new Set((Array.isArray(tags) ? tags : []).filter(isSemverReleaseTag))]
     .sort(compareReleaseTagsDescending);
-}
-
-function parsePackedRefsTagsForCommit(text, commit) {
-  const target = sanitizeGitCommit(commit);
-  if (!target) return [];
-
-  const tags = [];
-  let peeledTag = '';
-  for (const line of String(text || '').split(/\r?\n/u)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    if (trimmed.startsWith('^')) {
-      if (peeledTag && sanitizeGitCommit(trimmed.slice(1)) === target) tags.push(peeledTag);
-      peeledTag = '';
-      continue;
-    }
-
-    peeledTag = '';
-    const parts = trimmed.split(/\s+/u);
-    if (parts.length < 2 || !parts[1].startsWith('refs/tags/')) continue;
-    const tag = parts[1].slice('refs/tags/'.length);
-    if (!isSemverReleaseTag(tag)) continue;
-    if (sanitizeGitCommit(parts[0]) === target) tags.push(tag);
-    peeledTag = tag;
-  }
-
-  return sortedReleaseTags(tags);
-}
-
-function parseGitDirFile(text, workdir) {
-  const line = String(text || '').split(/\r?\n/u).map((item) => item.trim()).find(Boolean) || '';
-  const match = /^gitdir:\s*(.+)$/i.exec(line);
-  if (!match) return '';
-
-  const raw = match[1].trim();
-  if (!raw || /[\0\r\n]/.test(raw)) return '';
-  const candidate = raw.startsWith('/') ? raw : path.posix.join(workdir, raw);
-  const normalized = path.posix.normalize(candidate);
-  if (!normalized.startsWith('/')) return '';
-  return normalized;
-}
-
-async function readContainerGitText(docker, containerId, filePath, maxBytes = CONTAINER_SOURCE_MAX_BYTES) {
-  if (!docker || typeof docker.readContainerTextFile !== 'function') return null;
-  try {
-    return await docker.readContainerTextFile(containerId, filePath, { maxBytes });
-  } catch {
-    return null;
-  }
-}
-
-async function looseGitTagsForCommit(docker, containerId, gitDir, commit) {
-  const target = sanitizeGitCommit(commit);
-  if (!target || !docker || typeof docker.listContainerDirectory !== 'function') return [];
-
-  let entries = [];
-  try {
-    entries = await docker.listContainerDirectory(containerId, `${gitDir}/refs/tags`, { maxBytes: 64 * 1024 });
-  } catch {
-    return [];
-  }
-
-  const tags = [];
-  for (const entry of entries) {
-    const tag = String(entry?.name || '').trim();
-    if (entry?.type !== 'file' || !isSemverReleaseTag(tag)) continue;
-    const ref = sanitizeGitCommit(await readContainerGitText(docker, containerId, `${gitDir}/refs/tags/${tag}`, 8192));
-    if (ref === target) tags.push(tag);
-  }
-  return sortedReleaseTags(tags);
-}
-
-async function gitReleaseTagForCommit(docker, containerId, gitDir, commit, packedRefsText = null) {
-  const target = sanitizeGitCommit(commit);
-  if (!target) return '';
-  const packed = packedRefsText ?? await readContainerGitText(docker, containerId, `${gitDir}/packed-refs`, CONTAINER_SOURCE_MAX_BYTES);
-  return sortedReleaseTags([
-    ...parsePackedRefsTagsForCommit(packed, target),
-    ...await looseGitTagsForCommit(docker, containerId, gitDir, target)
-  ])[0] || '';
-}
-
-async function inspectContainerRuntimeSource(docker, container) {
-  const containerId = typeof container?.containerId === 'string' ? container.containerId.trim() : '';
-  if (!containerId) return null;
-
-  for (const workdir of CONTAINER_SOURCE_WORKDIRS) {
-    let gitDir = `${workdir}/.git`;
-    let headText = await readContainerGitText(docker, containerId, `${gitDir}/HEAD`, 8192);
-
-    if (!headText) {
-      const gitFile = await readContainerGitText(docker, containerId, `${workdir}/.git`, 8192);
-      const redirectedGitDir = parseGitDirFile(gitFile, workdir);
-      if (redirectedGitDir) {
-        gitDir = redirectedGitDir;
-        headText = await readContainerGitText(docker, containerId, `${gitDir}/HEAD`, 8192);
-      }
-    }
-
-    const head = parseGitHead(headText);
-    if (!head) continue;
-
-    let commit = head.commit;
-    let packedRefsText = null;
-    const refPath = safeGitRefPath(head.refPath);
-    if (!commit && refPath) {
-      commit = sanitizeGitCommit(await readContainerGitText(docker, containerId, `${gitDir}/${refPath}`, 8192));
-      if (!commit) {
-        packedRefsText = await readContainerGitText(docker, containerId, `${gitDir}/packed-refs`, CONTAINER_SOURCE_MAX_BYTES);
-        commit = parsePackedRefs(packedRefsText, refPath);
-      }
-    }
-
-    const branch = sanitizeGitBranchName(head.branch);
-    if (!branch && !commit) continue;
-    const tag = await gitReleaseTagForCommit(docker, containerId, gitDir, commit, packedRefsText);
-
-    return {
-      type: 'git',
-      workdir,
-      tag: tag || null,
-      branch: branch || null,
-      commit: commit || null,
-      shortCommit: commit ? commit.slice(0, 12) : null
-    };
-  }
-
-  return null;
-}
-
-async function enrichContainersWithRuntimeSource(docker, containers) {
-  const list = Array.isArray(containers) ? containers : [];
-  if (!list.length || !docker || typeof docker.readContainerTextFile !== 'function') return list;
-
-  return await Promise.all(list.map(async (container) => {
-    const source = await inspectContainerRuntimeSource(docker, container);
-    if (!source) return container;
-
-    return {
-      ...container,
-      runtimeSource: source,
-      runtimeTag: source.tag || null,
-      runtimeBranch: source.branch || null,
-      runtimeCommit: source.commit || null,
-      runtimeShortCommit: source.shortCommit || null
-    };
-  }));
 }
 
 function assertCustomImageRepo(value) {
@@ -1465,6 +1327,7 @@ async function collectRuntimeDiagnostics(docker, env = null) {
 }
 
 async function buildUnavailableState(runtime) {
+  await ensureRuntimeIdentityCacheLoaded();
   const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, hostAccess, remoteInstances] = await Promise.all([
     stateStore.readRetentionPolicy().catch(() => ({ keepCount: 1 })),
     stateStore.readPortPreferences().catch(() => ({ ui: 8880, ssh: 55022 })),
@@ -1574,12 +1437,8 @@ function isHttpPortReachable(host, port, timeoutMs) {
   });
 }
 
-function remoteHealthKey(remote = {}) {
-  return `${String(remote?.id || '').trim()}\n${String(remote?.url || '').trim()}`;
-}
-
-function remoteHealthUrl(remoteUrl) {
-  const url = new URL(String(remoteUrl || ''));
+function instanceHealthUrl(instanceUrl) {
+  const url = new URL(String(instanceUrl || ''));
   const basePath = String(url.pathname || '/').replace(/\/+$/, '');
   url.pathname = `${basePath || ''}${REMOTE_HEALTH_PATH}`;
   url.search = '';
@@ -1587,7 +1446,7 @@ function remoteHealthUrl(remoteUrl) {
   return url;
 }
 
-function remoteHealthSnapshot(entry = null, fallbackStatus = 'checking') {
+function healthSnapshot(entry = null, fallbackStatus = 'checking') {
   const status = entry?.status === 'online' || entry?.status === 'offline' || entry?.status === 'checking'
     ? entry.status
     : fallbackStatus;
@@ -1597,7 +1456,7 @@ function remoteHealthSnapshot(entry = null, fallbackStatus = 'checking') {
   return out;
 }
 
-function requestRemoteHealth(url, timeoutMs = REMOTE_HEALTH_TIMEOUT_MS) {
+function requestInstanceHealth(url, timeoutMs = REMOTE_HEALTH_TIMEOUT_MS) {
   let parsed;
   try {
     parsed = url instanceof URL ? url : new URL(String(url || ''));
@@ -1625,16 +1484,36 @@ function requestRemoteHealth(url, timeoutMs = REMOTE_HEALTH_TIMEOUT_MS) {
         }
       },
       (res) => {
-        try {
-          res.resume();
-        } catch {
-          // ignore
-        }
         const status = Number(res.statusCode);
-        finish({
-          online: Number.isFinite(status) && status >= 200 && status < 400,
-          statusCode: Number.isFinite(status) ? status : null,
-          error: Number.isFinite(status) && status >= 400 ? `HTTP ${status}` : ''
+        const chunks = [];
+        let bytes = 0;
+        let tooLarge = false;
+        res.on('data', (chunk) => {
+          if (tooLarge) return;
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          bytes += buffer.length;
+          if (bytes > INSTANCE_HEALTH_BODY_MAX_BYTES) {
+            tooLarge = true;
+            chunks.length = 0;
+            return;
+          }
+          chunks.push(buffer);
+        });
+        res.once('end', () => {
+          let payload = null;
+          if (!tooLarge && chunks.length) {
+            try {
+              payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            } catch {
+              // Health status remains useful when an older Instance returns no JSON metadata.
+            }
+          }
+          finish({
+            online: Number.isFinite(status) && status >= 200 && status < 400,
+            statusCode: Number.isFinite(status) ? status : null,
+            error: Number.isFinite(status) && status >= 400 ? `HTTP ${status}` : '',
+            runtimeSource: runtimeSourceFromHealth(payload)
+          });
         });
       }
     );
@@ -1653,61 +1532,134 @@ function requestRemoteHealth(url, timeoutMs = REMOTE_HEALTH_TIMEOUT_MS) {
   });
 }
 
-async function probeRemoteHealth(remote = {}) {
-  const key = remoteHealthKey(remote);
+function instanceHealthTarget(kind, instance = {}) {
+  const id = String(kind === 'local' ? instance?.containerId : instance?.id || '').trim();
+  if (!id) return null;
+  const rawUrl = String(kind === 'local' ? instance?.uiUrl : instance?.url || '').trim();
+  let url = '';
   try {
-    const healthUrl = remoteHealthUrl(remote?.url || '');
-    const result = await requestRemoteHealth(healthUrl, REMOTE_HEALTH_TIMEOUT_MS);
+    if (rawUrl) url = instanceHealthUrl(rawUrl).href;
+  } catch {
+    // Invalid URLs are reported by the existing Instance state paths.
+  }
+  return { key: `${kind}:${id}`, kind, url };
+}
+
+async function ensureRuntimeIdentityCacheLoaded() {
+  if (!runtimeIdentityCacheLoadPromise) {
+    runtimeIdentityCacheLoadPromise = stateStore.readRuntimeIdentityCache()
+      .then((cache) => {
+        for (const [key, value] of Object.entries(cache?.entries || {})) {
+          if (!/^(?:local|remote):[^\s]{1,256}$/u.test(key)) continue;
+          const source = normalizeRuntimeSource(value?.runtimeSource);
+          if (!source) continue;
+          instanceHealthCache.set(key, {
+            status: 'checking',
+            url: sanitizeRuntimeText(value?.url, 2048),
+            runtimeSource: source,
+            seenAt: typeof value?.seenAt === 'string' ? value.seenAt : ''
+          });
+        }
+      })
+      .catch((error) => logDockerManagerError('runtime identity cache read', error));
+  }
+  await runtimeIdentityCacheLoadPromise;
+}
+
+function persistRuntimeIdentityCache() {
+  const entries = Object.fromEntries(
+    [...instanceHealthCache.entries()]
+      .filter(([, entry]) => entry?.runtimeSource)
+      .sort((a, b) => String(b[1]?.seenAt || '').localeCompare(String(a[1]?.seenAt || '')))
+      .slice(0, RUNTIME_IDENTITY_CACHE_MAX_ENTRIES)
+      .map(([key, entry]) => [key, {
+        url: entry.url || '',
+        runtimeSource: entry.runtimeSource,
+        seenAt: entry.seenAt || ''
+      }])
+  );
+  runtimeIdentityCacheWritePromise = runtimeIdentityCacheWritePromise
+    .catch(() => {})
+    .then(() => stateStore.writeRuntimeIdentityCache({ entries, updatedAt: new Date().toISOString() }))
+    .catch((error) => logDockerManagerError('runtime identity cache write', error));
+}
+
+async function probeInstanceHealth(target) {
+  const stored = instanceHealthCache.get(target.key) || null;
+  const previous = stored && (target.kind === 'local' || stored.url === target.url) ? stored : null;
+  try {
+    const result = await requestInstanceHealth(target.url, REMOTE_HEALTH_TIMEOUT_MS);
+    const runtimeSource = result?.runtimeSource || previous?.runtimeSource || null;
+    const changed = !!result?.runtimeSource && JSON.stringify(result.runtimeSource) !== JSON.stringify(previous?.runtimeSource || null);
     const entry = {
       status: result?.online ? 'online' : 'offline',
       checkedAt: new Date().toISOString(),
-      error: result?.online ? '' : String(result?.error || 'Health check failed').slice(0, 160)
+      error: result?.online ? '' : String(result?.error || 'Health check failed').slice(0, 160),
+      url: target.url,
+      runtimeSource,
+      seenAt: result?.runtimeSource ? new Date().toISOString() : previous?.seenAt || ''
     };
-    remoteHealthCache.set(key, entry);
+    instanceHealthCache.set(target.key, entry);
+    if (changed || stored?.url !== target.url) persistRuntimeIdentityCache();
     return entry;
   } catch (error) {
     const entry = {
       status: 'offline',
       checkedAt: new Date().toISOString(),
-      error: error?.message || 'Health check failed'
+      error: error?.message || 'Health check failed',
+      url: target.url,
+      runtimeSource: previous?.runtimeSource || null,
+      seenAt: previous?.seenAt || ''
     };
-    remoteHealthCache.set(key, entry);
+    instanceHealthCache.set(target.key, entry);
     return entry;
   } finally {
-    remoteHealthPending.delete(key);
+    instanceHealthPending.delete(target.key);
   }
 }
 
-function enrichRemoteInstancesWithHealth(remoteInstances = [], options = {}) {
-  const remotes = Array.isArray(remoteInstances) ? remoteInstances : [];
+function enrichInstancesWithHealth(instances = [], kind, options = {}) {
+  const list = Array.isArray(instances) ? instances : [];
   const now = Date.now();
   const forceRefresh = options?.forceRefresh === true;
-  return remotes.map((remote) => {
-    const key = remoteHealthKey(remote);
-    const cached = remoteHealthCache.get(key) || null;
+  return list.map((instance) => {
+    const target = instanceHealthTarget(kind, instance);
+    if (!target) return instance;
+    const stored = instanceHealthCache.get(target.key) || null;
+    const cached = stored && (!target.url || stored.url === target.url) ? stored : null;
     const checkedAtMs = isoToMs(cached?.checkedAt);
     const fresh = !forceRefresh && Number.isFinite(checkedAtMs) && now - checkedAtMs < REMOTE_HEALTH_CACHE_TTL_MS;
-    const pending = remoteHealthPending.has(key);
-    if ((!cached || !fresh) && !pending) {
-      const pendingProbe = probeRemoteHealth(remote)
+    const canProbe = !!target.url && (kind === 'remote' || String(instance?.state || '').toLowerCase() === 'running');
+    const pending = instanceHealthPending.has(target.key);
+    if (canProbe && (!cached || !fresh) && !pending) {
+      const pendingProbe = probeInstanceHealth(target)
         .then(() => {
-          if (_cachedState?.remoteInstances) {
+          const stateKey = kind === 'local' ? 'containers' : 'remoteInstances';
+          if (_cachedState?.[stateKey]) {
             _cachedState = {
               ..._cachedState,
-              remoteInstances: enrichRemoteInstancesWithHealth(_cachedState.remoteInstances)
+              [stateKey]: enrichInstancesWithHealth(_cachedState[stateKey], kind)
             };
             events.emit('state', _cachedState);
           }
         })
         .catch(() => {});
-      remoteHealthPending.set(key, pendingProbe);
+      instanceHealthPending.set(target.key, pendingProbe);
     }
 
-    return {
-      ...remote,
-      health: remoteHealthSnapshot(cached, cached ? cached.status : 'checking')
-    };
+    const enriched = applyRuntimeSource(instance, cached?.runtimeSource || null);
+    return kind === 'remote'
+      ? { ...enriched, health: healthSnapshot(cached, cached ? cached.status : 'checking') }
+      : enriched;
   });
+}
+
+function enrichRemoteInstancesWithHealth(remoteInstances = [], options = {}) {
+  return enrichInstancesWithHealth(remoteInstances, 'remote', options);
+}
+
+function enrichLocalInstancesWithHealth(containers = [], options = {}) {
+  return enrichInstancesWithHealth(containers, 'local', options);
 }
 
 function applyRemoteInstanceCredentials(remoteInstances, remoteInstanceCredentials) {
@@ -1728,6 +1680,7 @@ function applyRemoteInstanceCredentials(remoteInstances, remoteInstanceCredentia
 }
 
 async function remoteInstancesForState(options = {}) {
+  await ensureRuntimeIdentityCacheLoaded();
   const [remoteInstances, remoteInstanceCredentials] = await Promise.all([
     stateStore.readRemoteInstances(),
     stateStore.readRemoteInstanceCredentialsMetadata()
@@ -2221,6 +2174,7 @@ async function buildDerivedState(options = {}) {
   const forceRefresh = !!options.forceRefresh;
   const imageRepo = getBackendImageRepo();
   const githubRepo = getBackendGithubRepo();
+  await ensureRuntimeIdentityCacheLoaded();
 
   const docker = await getManagedDocker(imageRepo, { forceRefresh });
 
@@ -2255,12 +2209,12 @@ async function buildDerivedState(options = {}) {
       bestEffortFreeBytesForUserData(),
       docker.listRemoteTags(imageRepo).catch(() => null)
     ]);
-  let containers = applyLocalInstanceIdentity(
-    await enrichContainersWithWorkspaceStorage(docker, await enrichContainersWithRuntimeSource(docker, rawContainers)),
+  let containers = enrichLocalInstancesWithHealth(applyLocalInstanceIdentity(
+    await enrichContainersWithWorkspaceStorage(docker, rawContainers),
     localInstanceNames,
     localInstanceColors,
     localInstanceCredentials
-  );
+  ), { forceRefresh });
 
   const releases = Array.isArray(releasesResult?.releases) ? releasesResult.releases : [];
   const offline = !!releasesResult?.offline;
@@ -6029,6 +5983,7 @@ async function cancelOperation(opId) {
 
 async function getDockerInventory() {
   const imageRepo = getBackendImageRepo();
+  await ensureRuntimeIdentityCacheLoaded();
   const [remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceCredentials, hostAccess] = await Promise.all([
     stateStore.readRemoteInstances(),
     stateStore.readRemoteInstanceCredentialsMetadata(),
@@ -6059,15 +6014,12 @@ async function getDockerInventory() {
       ...image,
       isBackendImage: String(image?.imageRepo || '').trim() === imageRepo
     }));
-    containers = applyLocalInstanceIdentity(
-      await enrichContainersWithWorkspaceStorage(
-        docker,
-        await enrichContainersWithRuntimeSource(docker, Array.isArray(results[1]) ? results[1] : [])
-      ),
+    containers = enrichLocalInstancesWithHealth(applyLocalInstanceIdentity(
+      await enrichContainersWithWorkspaceStorage(docker, Array.isArray(results[1]) ? results[1] : []),
       localInstanceNames,
       localInstanceColors,
       localInstanceCredentials
-    );
+    ));
     volumes = Array.isArray(results[2]) ? results[2] : [];
     listingSucceeded = images.length > 0 || containers.length > 0 || volumes.length > 0;
   } catch {
@@ -6267,8 +6219,9 @@ module.exports = {
     normalizeDeleteLocalInstanceOptions,
     waitForUiReachable,
     waitForStartedLocalInstanceUi,
-    remoteHealthUrl,
-    requestRemoteHealth,
+    instanceHealthUrl,
+    requestInstanceHealth,
+    runtimeSourceFromHealth,
     parsePortMappings,
     settlePortMappings,
     replacementPortMappingsFromInspect,
@@ -6294,8 +6247,6 @@ module.exports = {
     releaseTagLabel,
     matchedSemverReleaseTagForDigest,
     matchedReleaseTagForLocalTag,
-    parsePackedRefsTagsForCommit,
-    inspectContainerRuntimeSource,
     imageTagForContainer,
     applyContainerMatchedReleaseTags
   },

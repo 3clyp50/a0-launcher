@@ -102,6 +102,10 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
 - Docker images default to `agent0ai/agent-zero`.
 - Tagged user images discovered in the selected Docker runtime may also create
   local Instances; retain their exact repository and tag as Instance identity.
+- Local and saved remote Instance cards derive their running code identity from
+  Agent Zero's `/api/health` Git metadata. Cache the last valid identity by
+  Instance ID so stopped or temporarily offline Instances keep their last-seen
+  version until a later successful health check replaces it.
 - A saved runtime endpoint is a preference, not a lock: use it while reachable,
   temporarily fall back to another reachable endpoint, and return to it later.
   Explicitly starting or selecting a runtime makes that endpoint preferred.

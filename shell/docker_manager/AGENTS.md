@@ -48,10 +48,11 @@ This scope owns:
   container configuration and launcher labels.
 - UI URLs should be derived from inspected port bindings and verified where
   practical before opening.
-- Containers may be enriched with bounded runtime source metadata from the
-  Agent Zero checkout inside the container. Keep the Docker image tag as
-  provenance, and expose runtime Git release tag, branch, and commit as
-  separate structured state.
+- Local and saved remote Instances use the same bounded `/api/health` Git
+  metadata for runtime identity. Cache the last valid identity by stable
+  Instance ID so stopped or temporarily offline Instances retain their
+  last-seen version; replace it only after a later successful health response.
+  Keep Docker image tags as separate fallback provenance.
 - Channel-tagged images and containers may expose `matchedReleaseTag` when the
   local tag can be tied to a concrete semver release through digest matching or
   local evidence for the current `latest` release tag. For containers, channel
@@ -149,7 +150,7 @@ This scope owns:
   by remote Instance id and removed when that remote Instance is deleted.
   Remote instance online/offline status is transient renderer state from a
   bounded `/api/health` probe and must not be persisted into saved remote
-  instance records.
+  instance records. Only the sanitized last-seen runtime identity is cached.
 - Retained local containers are rollback targets and should keep enough metadata
   for the renderer to display them without re-inspecting every container
   needlessly.

@@ -1667,7 +1667,7 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
   if (!cli) {
     setTabHostAccess(tab, hostAccessStatus('needs_action', {
       code: 'CLI_UPDATE_REQUIRED',
-      message: 'Launcher Host access could not be prepared. Retry, or use Install / Update A0 CLI from the Instance menu.'
+      message: 'Launcher Host access could not be prepared. Update A0 CLI, then retry.'
     }), config);
     return null;
   }

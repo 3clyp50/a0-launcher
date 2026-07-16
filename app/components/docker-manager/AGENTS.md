@@ -228,11 +228,11 @@ This scope owns:
   The card overflow menu should choose its up/down direction from available
   viewport space, reserve any fixed bottom launcher chrome, and use bounded
   internal scrolling when the window is short.
-  `Install / Update A0 CLI` remains available on local and saved remote Instance
-  cards. Add the separate `Open A0 CLI` action only when the shell reports a
-  system CLI installed. Open should let the shell show the native working-folder
-  picker before terminal launch; canceling that picker should not display an
-  error. Disable it while CLI maintenance is running.
+  Show `Install A0 CLI` on local and saved remote Instance cards only while the
+  system CLI is missing, then replace it with `Open A0 CLI`. Open should let the
+  shell show the native working-folder picker before terminal launch; canceling
+  that picker should not display an error. Disable it while CLI maintenance is
+  running.
   Clone opens a quiet confirmation dialog with `/a0/usr` category choices hidden
   in a disclosure by default; all categories are selected by default to match
   Agent Zero backup behavior, while clearing all categories intentionally

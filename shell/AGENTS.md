@@ -23,7 +23,7 @@ This scope owns:
 - `shell/host_gateway.js`: supervised, newline-delimited JSON bridge to the
   installed `a0 gateway` child process.
 - `shell/a0_cli_install.js`: official A0 CLI installer command and release
-  version policy shared by automatic and manual CLI maintenance.
+  version policy used by Launcher CLI maintenance.
 - `shell/loading.html`: loading/error shell while content initializes.
 - `shell/launcher_update.js`: launcher update version formatting and legacy
   platform release-asset selection helpers.
@@ -71,8 +71,8 @@ This scope owns:
   system A0 CLI is installed, advertises the Launcher gateway contract, and is
   current with the latest discoverable `a0-connector` release. Use only the
   official fixed installer endpoint, keep failures non-blocking for the rest of
-  Launcher, and expose checking/installing state to the renderer. The
-  named `Install / Update A0 CLI` intent reruns the same maintenance path and
+  Launcher, and expose checking/installing state to the renderer. The named
+  `Install A0 CLI` intent is visible only while the system CLI is missing and
   must report completion instead of merely opening a terminal. Do not expose
   generic command execution. Installing or updating the CLI is not Host access
   consent; gateway startup still requires an enabled saved choice and an open

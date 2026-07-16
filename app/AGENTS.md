@@ -85,12 +85,12 @@ This scope owns:
   on a saved remote card only when that card points at a loopback URL backed by
   a discovered local container. Pass a local card's UI URL or a saved remote
   Instance ID through the shell-owned terminal action; the shell prompts for the
-  CLI working folder before opening the terminal. Show `Open A0 CLI` only when
-  the system CLI is installed, and keep `Install / Update A0 CLI` as a separate
-  per-Instance action; disable Open while CLI maintenance is running. First-run
-  and Host access onboarding must not present CLI installation as an extra step,
-  permission, or dependency. Do not add a global footer or ambiguous
-  active-instance CLI button.
+  CLI working folder before opening the terminal. Show `Install A0 CLI` while
+  the system CLI is missing and replace it with `Open A0 CLI` once installed;
+  disable Open while CLI maintenance is running. First-run and Host access
+  onboarding must not present CLI installation as an extra step, permission, or
+  dependency. Do not add a global footer or ambiguous active-instance CLI
+  button.
 - Local Instance Backup and Restore belong with the other card-local actions.
   They must call named renderer actions that delegate host path selection and
   container archive work to the shell and Docker Manager.

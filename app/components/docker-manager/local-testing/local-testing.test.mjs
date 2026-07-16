@@ -543,10 +543,11 @@ test('remote CLI menu disables opening without a saved remote id or during block
   );
 });
 
-test('Instance menus keep Install or Update separate from installed-only Open', async () => {
+test('Instance menus replace Install with Open once the CLI is installed', async () => {
   const source = await readFile(new URL('./local-testing.js', import.meta.url), 'utf8');
   assert.match(source, /cliInstalled \? menuButton\("terminal", "Open A0 CLI"/);
-  assert.equal(source.match(/"Install \/ Update A0 CLI"/g)?.length, 2);
+  assert.equal(source.match(/"Install A0 CLI"/g)?.length, 2);
+  assert.doesNotMatch(source, /Install \/ Update A0 CLI/);
 });
 
 test('first-Instance onboarding does not offer a CLI installer step', async () => {

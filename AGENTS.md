@@ -68,10 +68,10 @@ Architecture contracts:
   missing or lacks the Launcher gateway contract, and updates it when a newer
   release is available. Installing the CLI grants no host capability by itself:
   only an explicitly enabled Host access choice on an open Instance tab may
-  start a gateway lease. An Instance menu shows `Open A0 CLI` only when a
-  system CLI is installed, and keeps `Install / Update A0 CLI` as the recovery
-  and maintenance action. First-run and Host access onboarding do not include a
-  separate CLI installer step.
+  start a gateway lease. An Instance menu shows `Install A0 CLI` while the
+  system CLI is missing and replaces it with `Open A0 CLI` once installed.
+  First-run and Host access onboarding do not include a separate CLI installer
+  step.
 - A0 CLI v2.5 is the first connector release with the Launcher gateway
   contract. Continue capability-gating gateway candidates rather than replacing
   that contract check with a version comparison; an unreleased sibling

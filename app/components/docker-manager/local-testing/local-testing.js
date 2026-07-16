@@ -1700,12 +1700,11 @@ function renderDockerInstance(list, c, state) {
           : cliHost
             ? "Choose a folder and open A0 CLI for this instance"
             : "A0 CLI requires a running local Web UI"
-    }) : null,
-    menuButton("download", "Install / Update A0 CLI", () => {
+    }) : menuButton("download", "Install A0 CLI", () => {
       window.dockerManagerActions?.installCli?.();
     }, {
       disabled: cliInstalling,
-      title: cliInstalling ? "A0 CLI is being prepared" : "Install or update A0 CLI on this computer"
+      title: cliInstalling ? "A0 CLI is being prepared" : "Install A0 CLI on this computer"
     }),
     menuButton(powerMenuItem.icon, powerMenuItem.label, () => {
       if (powerMenuItem.action === "start") {
@@ -1839,15 +1838,16 @@ function renderRemoteInstance(list, remote, state) {
       disabled: cliMenu.disabled,
       title: cliMenu.title
     }));
+  } else {
+    menuItems.push(menuButton("download", "Install A0 CLI", () => {
+      window.dockerManagerActions?.installCli?.();
+    }, {
+      disabled: state?.cli?.installing === true,
+      title: state?.cli?.installing === true
+        ? "A0 CLI is being prepared"
+        : "Install A0 CLI on this computer"
+    }));
   }
-  menuItems.push(menuButton("download", "Install / Update A0 CLI", () => {
-    window.dockerManagerActions?.installCli?.();
-  }, {
-    disabled: state?.cli?.installing === true,
-    title: state?.cli?.installing === true
-      ? "A0 CLI is being prepared"
-      : "Install or update A0 CLI on this computer"
-  }));
 
   if (cloneTarget?.containerId) {
     menuItems.push(menuButton("content_copy", "Clone locally", () => {

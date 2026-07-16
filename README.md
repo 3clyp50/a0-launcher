@@ -110,9 +110,9 @@ Launcher checks the official A0 CLI in the background at startup, installing it
 when missing or incompatible and updating it when a newer release is available.
 This does not enable Host access: a gateway runs only for an Instance whose Host
 access setting was explicitly enabled while its Launcher tab or detached window
-is open. Each local and saved remote Instance menu keeps `Install / Update A0
-CLI`; `Open A0 CLI` appears once the system CLI is installed. A0 CLI v2.5 is the
-first release carrying the Launcher gateway contract.
+is open. Each local and saved remote Instance menu shows `Install A0 CLI` while
+the system CLI is missing, then replaces it with `Open A0 CLI`. A0 CLI v2.5 is
+the first release carrying the Launcher gateway contract.
 
 ## Validation
 

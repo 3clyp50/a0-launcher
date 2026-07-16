@@ -322,10 +322,13 @@ This scope owns:
 - Each Instance tab shows a noninteractive Host access state glyph and a
   separately accessible settings button. Supported states are Connecting,
   Connected, Paused, Needs action, Error, and Disconnected; the controls must
-  remain usable at compact widths. Instance cards must not repeat the Host
-  access icon or settings button; intentional connection and scope changes
-  belong in an open Launcher Instance tab or Agent Zero Core. Remote Instances
-  stay configured off by default, but an unset folder in their Host access
+  remain usable at compact widths. Opening its settings must keep that Instance
+  selected, temporarily hiding only the shell-owned view while the Launcher
+  modal is open and restoring it when the modal closes. Instance cards must not
+  repeat the Host access icon or settings button; intentional connection and
+  scope changes belong in an open Launcher Instance tab or Agent Zero Core.
+  Remote Instances stay configured off by default, but an unset folder in their
+  Host access
   dialog is prefilled from the Launcher default for a first opt-in.
 - File read and file write are separate permissions. Write depends on read,
   and Code execution depends on write. Permission choices render as a compact

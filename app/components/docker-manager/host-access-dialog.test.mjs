@@ -179,3 +179,11 @@ test('Host access UI uses five friendly permissions and explains the command bou
   assert.match(source, /candidate\?\.browser_id \|\| candidate\?\.id/);
   assert.match(source, /candidate\?\.browser_label \|\| candidate\?\.label/);
 });
+
+test('Host access settings temporarily hide the active Instance view without selecting Launcher home', async () => {
+  const dialogSource = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
+  const tabsSource = await readFile(new URL('./instance-tabs/instance-tabs.js', import.meta.url), 'utf8');
+  assert.match(dialogSource, /hideInstanceTabView\?\.\(\)/);
+  assert.match(dialogSource, /syncInstanceTabBounds\?\.\(\)/);
+  assert.doesNotMatch(tabsSource, /hostAccess\.addEventListener[\s\S]{0,240}selectInstanceHome/);
+});

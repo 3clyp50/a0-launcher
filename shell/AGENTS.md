@@ -15,6 +15,8 @@ This scope owns:
   protocol, main windows, IPC handlers, shell actions, and Docker Manager event
   forwarding.
 - `shell/preload.js`: safe renderer bridge exposed through `contextBridge`.
+- `shell/instance_preload.js`: the isolated Instance-page bridge for querying
+  and reconnecting only its own disconnected Host access lease.
 - `shell/host_access.js`: normalized Launcher Host access defaults, per-Instance
   configuration, scope dependencies, and stable Instance keys.
 - `shell/host_gateway.js`: supervised, newline-delimited JSON bridge to the
@@ -111,7 +113,8 @@ This scope owns:
   rather than a release number so a capable sibling development checkout can
   follow an older installed CLI. Contract, authentication, and runtime exits
   stay stopped until an explicit Retry; a user-requested Disconnect is
-  suppressed until that tab closes.
+  suppressed until Agent Zero Core explicitly reconnects that same lease or
+  its owning tab/window closes.
   Keep gateway identity stable for the Launcher installation across tabs,
   preserve saved reverse-proxy base paths, reject URL credentials, and bound
   JSONL input before it enters renderer state. Treat stdout as a strict JSONL
@@ -122,6 +125,9 @@ This scope owns:
 - Embedded and detached Launcher-owned Agent Zero web contents must append
   `A0-Launcher/<version>` to the user agent. This tag identifies the shell-owned
   browsing surface; it does not grant authentication or gateway authority.
+  Their dedicated preload may expose only the current lease's reconnect state
+  and reconnect intent, and main-process handlers must resolve the caller back
+  to its owning embedded or detached WebContents before acting.
 - Local development content is selected by `A0_LAUNCHER_LOCAL_REPO`,
   `A0_LAUNCHER_USE_LOCAL_CONTENT`, a repo-shaped default-app current working
   directory, a repo-shaped unpackaged-app current working directory, or the

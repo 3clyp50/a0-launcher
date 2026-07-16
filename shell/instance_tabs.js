@@ -188,6 +188,16 @@ function makeTabsSnapshot(tabs, activeTabId) {
   };
 }
 
+function findInstanceTabByWebContents(tabs, webContents) {
+  const source = tabs instanceof Map ? tabs.values() : [];
+  for (const tab of source) {
+    if (tab?.view?.webContents === webContents || tab?.detachedWindow?.webContents === webContents) {
+      return tab;
+    }
+  }
+  return null;
+}
+
 function instanceContextMenuActions(params) {
   const safeParams = params && typeof params === 'object' ? params : {};
   const editFlags = safeParams.editFlags && typeof safeParams.editFlags === 'object' ? safeParams.editFlags : {};
@@ -228,6 +238,7 @@ module.exports = {
   webUiLoginRequestForTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
+  findInstanceTabByWebContents,
   instanceContextMenuActions,
   reloadInstanceWebContents
 };

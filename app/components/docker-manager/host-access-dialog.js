@@ -230,6 +230,7 @@ function browserOptions(browser = {}, selected = "") {
 
 function closeDialog(dialog) {
   dialog?.remove();
+  window.dockerManagerActions?.syncInstanceTabBounds?.();
 }
 
 function openHostAccessOnboarding(state = {}) {
@@ -306,7 +307,7 @@ function maybeOpenHostAccessOnboarding(state = {}) {
 
 function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   if (!instanceKey(tab)) return false;
-  document.getElementById("hostAccessDialog")?.remove();
+  closeDialog(document.getElementById("hostAccessDialog"));
   const config = configForTarget(state, tab);
   const runtime = tab.hostAccess || {};
   const gateway = runtime.gateway || {};
@@ -434,6 +435,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     if (saved !== false) closeDialog(dialog);
   });
   document.body.appendChild(dialog);
+  if (tab.active === true) window.dockerManagerActions?.hideInstanceTabView?.();
   window.setTimeout(() => dialog.querySelector("#hostAccessConfigured")?.focus(), 0);
   return true;
 }

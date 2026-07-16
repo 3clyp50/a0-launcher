@@ -255,7 +255,7 @@ test('contract failures remain actionable after the child exits', () => {
   assert.equal(statuses.at(-1).retryable, true);
 });
 
-test('Disconnect clears live metadata and suppresses the current lease until tab reopen', () => {
+test('Disconnect clears live metadata and suppresses the current lease until it is explicitly released', () => {
   const children = [fakeChild(), fakeChild()];
   let spawns = 0;
   const supervisor = new HostGatewaySupervisor({
@@ -285,7 +285,7 @@ test('Disconnect clears live metadata and suppresses the current lease until tab
   assert.equal(spawns, 1);
   assert.equal(supervisor.retry('tab-1').suppressed, true);
   assert.equal(spawns, 1);
-  supervisor.stop('tab-1', 'tab_closed');
+  supervisor.stop('tab-1', 'user_reconnect');
   assert.equal(supervisor.start('tab-1', launch()).state, 'connecting');
   assert.equal(spawns, 2);
 });

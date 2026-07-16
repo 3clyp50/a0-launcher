@@ -144,9 +144,8 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
   hostAccess.setAttribute("aria-label", selected ? `${hostStatusLabel(selected?.hostAccess?.state)}. Open settings.` : "Open Host access settings");
   hostAccess.disabled = !selected;
   hostAccess.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">computer</span>';
-  hostAccess.addEventListener("click", async () => {
+  hostAccess.addEventListener("click", () => {
     if (!selected) return;
-    await window.dockerManagerActions?.selectInstanceHome?.();
     openHostAccessDialog(selected, window.__dmLastState || state);
   });
 

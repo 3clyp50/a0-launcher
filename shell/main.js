@@ -20,6 +20,7 @@ const {
   webUiLoginRequestForTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
+  findInstanceTabByWebContents,
   instanceContextMenuActions,
   reloadInstanceWebContents
 } = require('./instance_tabs');
@@ -1714,7 +1715,7 @@ async function restartHostGatewayForTab(tab) {
     const config = identity ? resolveInstanceHostAccess(settings, identity) : tab.hostAccessConfig;
     const status = {
       ...hostGatewaySupervisor.statusFor(leaseKey),
-      message: 'Disconnected for this tab. Close and reopen the tab to reconnect.',
+      message: 'Disconnected for this tab. Reconnect from Agent Zero or close and reopen the tab.',
       suppressed: true
     };
     setTabHostAccess(tab, status, config);
@@ -1723,6 +1724,17 @@ async function restartHostGatewayForTab(tab) {
   hostGatewaySupervisor.stop(leaseKey, 'settings_changed');
   setTabHostAccess(tab, hostAccessStatus('connecting', {
     message: 'Updating Host access…'
+  }), tab.hostAccessConfig || null);
+  return await startHostGatewayForTab(tab, { force: true });
+}
+
+async function reconnectHostGatewayForTab(tab) {
+  if (!tab || !instanceTabs.has(tab.id)) return null;
+  const leaseKey = hostGatewayLeaseKey(tab);
+  if (!hostGatewaySupervisor.isSuppressed(leaseKey)) return null;
+  hostGatewaySupervisor.stop(leaseKey, 'user_reconnect');
+  setTabHostAccess(tab, hostAccessStatus('connecting', {
+    message: 'Reconnecting this computer…'
   }), tab.hostAccessConfig || null);
   return await startHostGatewayForTab(tab, { force: true });
 }
@@ -1736,11 +1748,7 @@ async function openAgentZeroUiWindow(url, title = 'Agent Zero', target = null) {
     height: 900,
     title,
     icon: iconPath,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
+    webPreferences: createInstanceWebPreferences()
   });
   tagLauncherWebContents(uiWindow.webContents);
   attachInstanceContextMenu(uiWindow.webContents);
@@ -1805,7 +1813,8 @@ function createInstanceWebPreferences() {
   return {
     contextIsolation: true,
     nodeIntegration: false,
-    sandbox: true
+    sandbox: true,
+    preload: path.join(__dirname, 'instance_preload.js')
   };
 }
 
@@ -3867,6 +3876,25 @@ ipcMain.handle('docker-manager:retryHostGateway', async (_event, body) => {
     if (!tab) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
     const status = await restartHostGatewayForTab(tab);
     return status || tab.hostAccess;
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('launcher-host:get-state', async (event) => {
+  const tab = findInstanceTabByWebContents(instanceTabs, event.sender);
+  return {
+    reconnectAvailable: Boolean(tab && hostGatewaySupervisor.isSuppressed(hostGatewayLeaseKey(tab)))
+  };
+});
+
+ipcMain.handle('launcher-host:reconnect', async (event) => {
+  try {
+    const tab = findInstanceTabByWebContents(instanceTabs, event.sender);
+    if (!tab) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Launcher Instance tab not found.');
+    const status = await reconnectHostGatewayForTab(tab);
+    if (!status) throw createTabTargetError('RECONNECT_UNAVAILABLE', 'Host access is not waiting to reconnect.');
+    return { ok: true, status };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

@@ -1768,6 +1768,7 @@ async function openRemoteInstance(id) {
 let instanceTabBoundsTimer = 0;
 
 function readInstanceTabViewportBounds() {
+  if (document.getElementById("hostAccessDialog")) return null;
   const el = document.getElementById("dmInstanceTabViewport");
   if (!el) return null;
   const rect = el.getBoundingClientRect();
@@ -1777,6 +1778,11 @@ function readInstanceTabViewportBounds() {
     width: Math.round(rect.width),
     height: Math.round(rect.height)
   };
+}
+
+function hideInstanceTabView() {
+  window.clearTimeout(instanceTabBoundsTimer);
+  void window.dockerManagerAPI?.setInstanceTabBounds?.(null);
 }
 
 function syncInstanceTabBounds() {
@@ -1852,6 +1858,7 @@ window.dockerManagerActions = {
   closeInstanceTab,
   reloadInstanceTab,
   detachInstanceTab,
+  hideInstanceTabView,
   syncInstanceTabBounds,
   setInstanceDefaults,
   setHostAccessSettings,

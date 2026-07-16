@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { test } = require('node:test');
 
 const {
@@ -12,6 +14,7 @@ const {
   webUiLoginRequestForTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
+  findInstanceTabByWebContents,
   instanceContextMenuActions,
   reloadInstanceWebContents
 } = require('./instance_tabs');
@@ -261,6 +264,27 @@ test('makeTabsSnapshot keeps a detached Host access lease available to Instance 
     }],
     activeTabId: ''
   });
+});
+
+test('Launcher host IPC resolves only the owning embedded or detached Instance WebContents', () => {
+  const embedded = {};
+  const detached = {};
+  const tabs = new Map([
+    ['embedded', { id: 'embedded', view: { webContents: embedded } }],
+    ['detached', { id: 'detached', detachedWindow: { webContents: detached } }]
+  ]);
+
+  assert.equal(findInstanceTabByWebContents(tabs, embedded)?.id, 'embedded');
+  assert.equal(findInstanceTabByWebContents(tabs, detached)?.id, 'detached');
+  assert.equal(findInstanceTabByWebContents(tabs, {}), null);
+});
+
+test('Instance preload exposes only the bounded Launcher host reconnect bridge', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'instance_preload.js'), 'utf8');
+  assert.match(source, /exposeInMainWorld\('a0LauncherHost'/);
+  assert.match(source, /launcher-host:get-state/);
+  assert.match(source, /launcher-host:reconnect/);
+  assert.doesNotMatch(source, /dockerManagerAPI|exec|credentials/);
 });
 
 test('instance context menu exposes copy for selected page text', () => {

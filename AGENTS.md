@@ -60,8 +60,10 @@ Architecture contracts:
   owns Docker mechanics.
 - Launcher Host access is an outbound, tab-leased `a0 gateway` child supervised
   by the Electron shell. It is not an inbound app server or background daemon:
-  close, detach, destroyed web contents, and app cleanup end the lease, while
-  Launcher-home selection and in-tab reload keep it alive.
+  closing the owning tab or detached window, destroyed web contents, and app
+  cleanup end the lease. Detaching transfers the same lease, while
+  Launcher-home selection and in-tab reload keep it alive. Disconnect suppresses
+  that lease until the user reconnects from Agent Zero Core or closes it.
 
 Runtime and release contracts:
 

@@ -3900,6 +3900,19 @@ ipcMain.handle('launcher-host:reconnect', async (event) => {
   }
 });
 
+ipcMain.handle('launcher-host:rearm-computer-use', async (event) => {
+  try {
+    const tab = findInstanceTabByWebContents(instanceTabs, event.sender);
+    if (!tab) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Launcher Instance tab not found.');
+    if (!hostGatewaySupervisor.send(hostGatewayLeaseKey(tab), { action: 'rearm_computer_use' })) {
+      throw createTabTargetError('GATEWAY_NOT_RUNNING', 'Host gateway is not running.');
+    }
+    return { ok: true };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
 ipcMain.handle('docker-manager:hostGatewayCommand', async (_event, body) => {
   try {
     if (!isPlainObject(body)) {

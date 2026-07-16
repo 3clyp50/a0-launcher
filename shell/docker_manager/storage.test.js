@@ -28,6 +28,7 @@ const {
   settlePortMappings,
   replacementPortMappingsFromInspect,
   buildCloneCreateOptions,
+  sourceCloneImageRef,
   normalizeCloneWorkspaceSelection,
   selectedCloneWorkspaceCategoryIds,
   cloneWorkspaceSelectionIsAll,
@@ -676,14 +677,14 @@ test('clone create options replace source workspace mounts with a fresh workspac
     HostConfig: {
       PortBindings: { '80/tcp': [{ HostIp: '127.0.0.1', HostPort: '32080' }] },
       Mounts: [{ Type: 'bind', Source: '/old/usr', Target: WORKSPACE_MOUNT_TARGET }],
-      Binds: ['/old/other:/a0/other:rw', '/old/usr:/a0/usr:rw']
+      Binds: ['/repo:/a0', '/old/other:/a0/other:rw', '/old/usr:/a0/usr:rw']
     }
   };
 
   const options = await buildCloneCreateOptions(
     inspect,
     'container-id',
-    'a0-launcher-clone:clone-test',
+    `sha256:${'a'.repeat(64)}`,
     { mode: 'host_directory', hostRoot: root, volumePrefix: 'a0-launcher' },
     {
       containerName: 'a0-inst-main-clone-test',
@@ -696,11 +697,23 @@ test('clone create options replace source workspace mounts with a fresh workspac
   assert.equal(options.HostConfig.Mounts.length, 1);
   assert.equal(options.HostConfig.Mounts[0].Target, WORKSPACE_MOUNT_TARGET);
   assert.equal(options.HostConfig.Mounts[0].Source, path.join(root, 'Main-clone', 'usr'));
-  assert.deepEqual(options.HostConfig.Binds, ['/old/other:/a0/other:rw']);
+  assert.deepEqual(options.HostConfig.Binds, ['/repo:/a0', '/old/other:/a0/other:rw']);
   assert.equal(options.HostConfig.PortBindings['80/tcp'][0].HostPort, '32123');
   assert.equal(options.Labels['a0.launcher.port.map'], '32123:80');
   assert.equal(options.Labels['a0.launcher.port.ui'], '32123');
   assert.equal(options.Labels['a0.launcher.cloneWorkspaceFull'], 'true');
+  assert.equal(options.Image, `sha256:${'a'.repeat(64)}`);
+  assert.equal(Object.prototype.hasOwnProperty.call(options.Labels, 'a0.launcher.cloneImageRef'), false);
+  assert.ok(options.Env.includes('GIT_CONFIG_COUNT=1'));
+  assert.ok(options.Env.includes('GIT_CONFIG_KEY_0=safe.directory'));
+  assert.ok(options.Env.includes('GIT_CONFIG_VALUE_0=/a0'));
+});
+
+test('clone reuses the configured source image and falls back to its image id', () => {
+  const imageId = `sha256:${'b'.repeat(64)}`;
+  assert.equal(sourceCloneImageRef({ Image: imageId, Config: { Image: 'agent0ai/agent-zero:latest' } }), 'agent0ai/agent-zero:latest');
+  assert.equal(sourceCloneImageRef({ Image: imageId }), imageId);
+  assert.throws(() => sourceCloneImageRef({}), /source Instance image is unavailable/i);
 });
 
 test('migration replacement preserves a running source container settled port', async () => {
@@ -746,6 +759,7 @@ test('migration replacement preserves a running source container settled port', 
   assert.equal(options.HostConfig.PortBindings['80/tcp'][0].HostPort, '32769');
   assert.equal(options.Labels['a0.launcher.port.map'], '32769:80');
   assert.equal(options.Labels['a0.launcher.port.ui'], '32769');
+  assert.equal(options.Labels['a0.launcher.cloneImageRef'], 'a0-launcher-clone:clone-test');
 });
 
 test('clone workspace selection defaults to the full Agent Zero backup scope', () => {

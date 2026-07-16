@@ -123,6 +123,9 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   storage at `/a0/usr` by default. The default backing store is a per-instance
   host directory under `~/agent-zero`; named Docker volumes are an advanced
   alternative, and explicit no-volume runs are ephemeral.
+- Cloning an Instance should reuse its configured image reference, falling back
+  to the source image ID, and copy selected `/a0/usr` data into fresh storage.
+  Do not create a committed snapshot image for ordinary clones.
 - `v*` tags are release inputs for executable builds.
 - Public release tags and launcher metadata use two-segment versions such as
   `v1.2` / `1.2` when the patch is zero. Packaging normalizes them to full

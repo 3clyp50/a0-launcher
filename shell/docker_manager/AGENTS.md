@@ -167,6 +167,10 @@ This scope owns:
   `Open storage folder` action. Named Docker volumes should stay represented as
   Docker volumes rather than guessed host paths.
 - Long-running operations return an operation id and emit progress.
+- Concurrent state refreshes are newest-wins. Before publishing a refreshed
+  state, reapply the latest cached local and remote runtime identity so an older
+  Docker/image snapshot cannot make an Instance disappear or replace a
+  health-confirmed version with image provenance.
 - Image installs may target Docker channel tags (`latest`, `ready`, `testing`)
   in addition to semver releases and local development tags, because first-run
   setup uses `latest` as the default image choice.
@@ -239,15 +243,18 @@ This scope owns:
   copy `/a0/usr` from the selected container into a core-compatible `.zip` with
   metadata; Restore should accept that backup shape, map only workspace entries
   back into `/a0/usr`, and report progress as a long-running operation.
-- Cloning an instance should snapshot the source container, create a new
-  launcher-managed container from that snapshot, remap published ports to
-  Docker-assigned open host ports, and copy the selected `/a0/usr` workspace
-  categories into the clone's fresh workspace. With all categories selected,
-  clone should copy the full `/a0/usr` tree to match Agent Zero backup behavior.
+- Cloning an instance should reuse the source container's configured image
+  reference, falling back to its image ID, remap published ports to
+  Docker-assigned open host ports, and copy the
+  selected `/a0/usr` workspace categories into fresh storage. Do not commit the
+  source container into a clone-only image. With all categories selected, clone
+  should copy the full `/a0/usr` tree to match Agent Zero backup behavior.
   `/a0/usr/agents` is the Agent profiles category and should stay separate from
-  generic workspace files. Clone and persistence-migration entry points should
-  warn that snapshotting pauses and resumes the source container, and running AI
-  work stops and must be resumed manually.
+  generic workspace files. When a clone inherits a host mount at `/a0`, add a
+  process-scoped Git `safe.directory` entry so health metadata can read the
+  checkout without copying host or source-container Git configuration.
+  Persistence migration may still snapshot and pause a legacy source because it
+  replaces that container while preserving its state.
 - Persisting `/a0/usr` data for a legacy or intentional ephemeral instance
   should be explicit. Create a persistent replacement, preserve the old
   container until the replacement starts successfully, copy `/a0/usr` through

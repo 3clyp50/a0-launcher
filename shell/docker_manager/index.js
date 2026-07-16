@@ -1899,6 +1899,7 @@ const events = new EventEmitter();
 events.setMaxListeners(50);
 
 let _cachedState = null;
+let _refreshRequestSequence = 0;
 let _currentOperation = null;
 const _abortControllers = new Map();
 const _warmLayerSizes = { running: false, lastImageRepo: '', lastStartedAtMs: 0 };
@@ -2610,14 +2611,15 @@ async function buildDerivedState(options = {}) {
 
 async function refreshDockerManager(options = {}) {
   const forceRefresh = !!options.forceRefresh;
+  const requestSequence = ++_refreshRequestSequence;
   const state = await buildDerivedState({ forceRefresh });
-  _cachedState = stateWithBackgroundOperations(state);
-  if (Array.isArray(_cachedState.remoteInstances)) {
-    _cachedState = {
-      ..._cachedState,
-      remoteInstances: enrichRemoteInstancesWithHealth(_cachedState.remoteInstances)
-    };
-  }
+  if (requestSequence !== _refreshRequestSequence && _cachedState) return _cachedState;
+
+  _cachedState = stateWithBackgroundOperations({
+    ...state,
+    containers: enrichLocalInstancesWithHealth(state.containers),
+    remoteInstances: enrichRemoteInstancesWithHealth(state.remoteInstances)
+  });
   events.emit('state', _cachedState);
   return _cachedState;
 }
@@ -3148,6 +3150,35 @@ function cloneImageRefForContainer(containerId) {
   const suffix = Date.now().toString(36);
   const shortId = String(containerId || '').slice(0, 12).toLowerCase() || 'container';
   return `${CLONE_IMAGE_REPO}:clone-${suffix}-${shortId}`;
+}
+
+function sourceCloneImageRef(inspect) {
+  const imageRef = String(inspect?.Config?.Image || '').trim();
+  if (imageRef) return imageRef;
+  const imageId = String(inspect?.Image || '').trim();
+  if (imageId) return imageId;
+  throw makeDockerManagerError('SOURCE_IMAGE_NOT_FOUND', 'The source Instance image is unavailable.');
+}
+
+function cloneEnvironment(env, hostConfig) {
+  const list = Array.isArray(env) ? [...env] : [];
+  const mountsSourceTree = (Array.isArray(hostConfig?.Mounts) && hostConfig.Mounts.some((mount) =>
+    String(mount?.Target || mount?.Destination || '').replace(/\/+$/, '') === '/a0')) ||
+    (Array.isArray(hostConfig?.Binds) && hostConfig.Binds.some((bind) => /:\/a0(?::[^:]*)?$/u.test(String(bind))));
+  if (!mountsSourceTree) return list;
+
+  const countEntry = [...list].reverse().find((entry) => String(entry).startsWith('GIT_CONFIG_COUNT='));
+  const count = countEntry ? Number(countEntry.slice('GIT_CONFIG_COUNT='.length)) : 0;
+  if (!Number.isInteger(count) || count < 0 || count >= 64) return list;
+  for (let i = 0; i < count; i += 1) {
+    if (list.includes(`GIT_CONFIG_KEY_${i}=safe.directory`) && list.includes(`GIT_CONFIG_VALUE_${i}=/a0`)) return list;
+  }
+  return [
+    ...list.filter((entry) => !String(entry).startsWith('GIT_CONFIG_COUNT=')),
+    `GIT_CONFIG_COUNT=${count + 1}`,
+    `GIT_CONFIG_KEY_${count}=safe.directory`,
+    `GIT_CONFIG_VALUE_${count}=/a0`
+  ];
 }
 
 function normalizeDockerLabels(labels) {
@@ -3903,7 +3934,7 @@ function setIfPresent(target, key, value) {
   target[key] = value;
 }
 
-async function buildCloneCreateOptions(inspect, containerId, cloneImageRef, storagePreferences = null, options = {}) {
+async function buildCloneCreateOptions(inspect, containerId, imageRef, storagePreferences = null, options = {}) {
   const config = isPlainObject(inspect?.Config) ? inspect.Config : {};
   const host = isPlainObject(inspect?.HostConfig) ? inspect.HostConfig : {};
   const sourceLabels = normalizeDockerLabels(config.Labels);
@@ -3930,10 +3961,12 @@ async function buildCloneCreateOptions(inspect, containerId, cloneImageRef, stor
     'a0.launcher.cloneSourceContainerId': String(containerId || ''),
     'a0.launcher.cloneSourceName': containerNameFromInspect(inspect) || sourceName,
     'a0.launcher.cloneCreatedAt': nowIso(),
-    'a0.launcher.cloneImageRef': cloneImageRef,
     'a0.launcher.cloneWorkspaceCategories': cloneWorkspaceSelectionLabel(workspaceSelection),
     'a0.launcher.cloneWorkspaceFull': cloneWorkspaceSelectionIsAll(workspaceSelection) ? 'true' : 'false'
   };
+  if (String(imageRef || '').startsWith(`${CLONE_IMAGE_REPO}:`)) {
+    labels['a0.launcher.cloneImageRef'] = imageRef;
+  }
   if (versionTag) labels['a0.launcher.versionTag'] = versionTag;
   if (sourceImage) labels['a0.launcher.imageRef'] = sourceImage;
   if (portMapLabel) labels['a0.launcher.port.map'] = portMapLabel;
@@ -3985,12 +4018,12 @@ async function buildCloneCreateOptions(inspect, containerId, cloneImageRef, stor
 
   const createOptions = {
     name: containerName,
-    Image: cloneImageRef,
+    Image: imageRef,
     Labels: labels,
     HostConfig: stripWorkspaceMounts(hostConfig)
   };
 
-  setIfPresent(createOptions, 'Env', Array.isArray(config.Env) ? [...config.Env] : null);
+  setIfPresent(createOptions, 'Env', cloneEnvironment(config.Env, hostConfig));
   setIfPresent(createOptions, 'Cmd', Array.isArray(config.Cmd) ? [...config.Cmd] : config.Cmd);
   setIfPresent(createOptions, 'Entrypoint', Array.isArray(config.Entrypoint) ? [...config.Entrypoint] : config.Entrypoint);
   setIfPresent(createOptions, 'WorkingDir', typeof config.WorkingDir === 'string' ? config.WorkingDir : '');
@@ -4880,7 +4913,7 @@ async function cloneLocalInstance(containerId, options = {}) {
   (async () => {
     /** @type {any} */
     let docker = null;
-    let cloneImageRef = '';
+    let sourceImageRef = '';
     let createdContainerId = '';
     let cloneHeadline = cloneOperationHeadline('');
 
@@ -4901,20 +4934,13 @@ async function cloneLocalInstance(containerId, options = {}) {
       updateOperationProgress({ headline: cloneHeadline, message: 'Preparing clone', progress: null });
       const inspect = await docker.inspectContainer(target.containerId);
       cloneHeadline = cloneOperationHeadline(sourceInstanceNameFromInspect(inspect, targetName));
-      cloneImageRef = cloneImageRefForContainer(target.containerId);
-
-      updateOperationProgress({ headline: cloneHeadline, message: 'Snapshotting container', progress: null });
-      await docker.commitContainer(target.containerId, cloneImageRef, {
-        pause: true,
-        comment: 'Agent Zero Launcher instance clone',
-        author: 'Agent Zero Launcher'
-      });
+      sourceImageRef = sourceCloneImageRef(inspect);
 
       updateOperationProgress({ headline: cloneHeadline, message: 'Creating clone on open ports', progress: null });
       const createOptions = await buildCloneCreateOptions(
         inspect,
         target.containerId,
-        cloneImageRef,
+        sourceImageRef,
         await stateStore.readStoragePreferences(),
         {
           workspaceCategories: workspaceSelection,
@@ -4950,7 +4976,7 @@ async function cloneLocalInstance(containerId, options = {}) {
       finishOperation('completed', null);
       updateOperationProgress({ headline: cloneHeadline, progress: 100, message: 'Cloned' });
     } catch (error) {
-      logDockerManagerError('cloneLocalInstance', error, { opId, containerId: id, cloneImageRef });
+      logDockerManagerError('cloneLocalInstance', error, { opId, containerId: id, sourceImageRef });
       try {
         if (docker && createdContainerId) {
           await docker.deleteContainer(createdContainerId, { force: true });
@@ -4958,14 +4984,6 @@ async function cloneLocalInstance(containerId, options = {}) {
       } catch {
         // ignore cleanup failure
       }
-      try {
-        if (docker && cloneImageRef) {
-          await docker.removeLocalImage(cloneImageRef);
-        }
-      } catch {
-        // ignore cleanup failure
-      }
-
       const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Clone failed';
       finishOperation('failed', message, error?.code || null);
     } finally {
@@ -6227,6 +6245,7 @@ module.exports = {
     replacementPortMappingsFromInspect,
     shouldKeepCreatedManagedInstanceOnError,
     buildCloneCreateOptions,
+    sourceCloneImageRef,
     normalizeCloneWorkspaceSelection,
     selectedCloneWorkspaceCategoryIds,
     cloneWorkspaceSelectionIsAll,

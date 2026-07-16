@@ -284,6 +284,8 @@ This scope owns:
   A saved remote card may show `Clone locally` only when its URL is loopback
   (`localhost`, `127.0.0.1`, or IPv6 loopback) and the port matches a discovered
   local Docker container; the action must clone that local container.
+- Clone should explain that it reuses the source image and copies selected
+  `/a0/usr` data; ordinary cloning does not pause or snapshot the source.
 - The local instance log viewer is a bottom popover panel driven by bounded
   Docker Manager log snapshots. It must stay read-only and must not expose a
   generic Docker command surface.

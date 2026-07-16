@@ -1132,7 +1132,7 @@ function openCloneInstanceDialog(instance) {
         <button class="button dm-dialog-close" type="button" data-dialog-close aria-label="Close">×</button>
       </div>
       <div class="dm-dialog-body">
-        <p class="dm-dialog-copy">Create a new instance from <strong>${escapeHtml(displayName)}</strong> with its current /a0/usr workspace. The source pauses during the snapshot; resume any running AI work manually afterward.</p>
+        <p class="dm-dialog-copy">Create a new instance from <strong>${escapeHtml(displayName)}</strong> with its current image and selected /a0/usr workspace data.</p>
         <details class="dm-clone-details">
           <summary class="dm-clone-details-summary">
             <span class="dm-clone-details-label">Workspace copy</span>

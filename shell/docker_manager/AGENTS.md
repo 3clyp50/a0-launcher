@@ -157,6 +157,11 @@ This scope owns:
   activation/removal and from container deletion. Deleting an instance must not
   remove its host workspace directory or named volume unless the renderer sends
   an explicit storage-removal option from the deletion dialog.
+- Explicit host-workspace deletion removes the Instance container first, then
+  empties root-owned bind-mount contents through Docker using the Instance's
+  existing image before removing the empty host directory. If storage cleanup
+  fails, finish Instance metadata and clone-image cleanup and report that the
+  Instance was deleted while its folder remains.
 - Host-directory workspace paths may be resolved for the shell-owned
   `Open storage folder` action. Named Docker volumes should stay represented as
   Docker volumes rather than guessed host paths.

@@ -255,6 +255,56 @@ test('removeLocalImage preserves Docker in-use protection unless force is explic
   ]);
 });
 
+test('removeBindMountContents uses the existing image and always removes its helper', async () => {
+  const calls = [];
+  const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
+  docker.docker = {
+    createContainer: async (options) => {
+      calls.push(['create', options]);
+      return {
+        start: async () => calls.push(['start']),
+        wait: async () => ({ StatusCode: 0 }),
+        remove: async (options) => calls.push(['remove', options])
+      };
+    }
+  };
+
+  const result = await docker.removeBindMountContents('sha256:image-id', '/tmp/a0-workspace');
+
+  assert.deepEqual(result, { removed: true });
+  assert.deepEqual(calls, [
+    ['create', {
+      Image: 'sha256:image-id',
+      Entrypoint: ['/bin/sh', '-c'],
+      Cmd: ['find /workspace -mindepth 1 -delete'],
+      HostConfig: {
+        NetworkMode: 'none',
+        Mounts: [{ Type: 'bind', Source: '/tmp/a0-workspace', Target: '/workspace', ReadOnly: false }]
+      }
+    }],
+    ['start'],
+    ['remove', { force: true }]
+  ]);
+});
+
+test('removeBindMountContents removes its helper after a cleanup failure', async () => {
+  let removed = false;
+  const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
+  docker.docker = {
+    createContainer: async () => ({
+      start: async () => {},
+      wait: async () => ({ StatusCode: 7 }),
+      remove: async () => { removed = true; }
+    })
+  };
+
+  await assert.rejects(
+    docker.removeBindMountContents('sha256:image-id', '/tmp/a0-workspace'),
+    /Workspace cleanup container failed/
+  );
+  assert.equal(removed, true);
+});
+
 test('copyContainerPathToContainer streams a container archive into another container', async () => {
   const archive = Readable.from(tarArchiveForFile('usr/marker.txt', 'hello'));
   const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });

@@ -1270,6 +1270,8 @@ async function removeWorkspaceStorageAfterContainerDelete(docker, inspect) {
   const plan = workspaceStorageRemovalPlanFromInspect(inspect);
   if (!plan) return null;
   if (plan.type === STORAGE_MODE_HOST_DIRECTORY) {
+    const imageRef = String(inspect?.Image || inspect?.Config?.Image || '').trim();
+    await docker.removeBindMountContents(imageRef, plan.hostPath);
     await fs.rm(plan.hostPath, { recursive: true, force: true });
     return plan;
   }
@@ -5502,13 +5504,26 @@ async function deleteLocalInstance(containerId, options = {}) {
       const inspect = deleteOptions.removeStorage ? await docker.inspectContainer(target.containerId) : null;
 
       await docker.deleteContainer(target.containerId, { force: true });
-      if (inspect) await removeWorkspaceStorageAfterContainerDelete(docker, inspect);
+      let storageError = null;
+      if (inspect) {
+        try {
+          await removeWorkspaceStorageAfterContainerDelete(docker, inspect);
+        } catch (error) {
+          storageError = error;
+        }
+      }
       if (cloneImageRef && cloneImageRef.startsWith(`${CLONE_IMAGE_REPO}:`)) {
         await docker.removeLocalImage(cloneImageRef).catch(() => {});
       }
       await stateStore.deleteLocalInstanceName(target.containerId).catch(() => {});
       await stateStore.deleteLocalInstanceColor(target.containerId).catch(() => {});
       await stateStore.deleteLocalInstanceCredentials(target.containerId).catch(() => {});
+      if (storageError) {
+        const error = new Error('Instance deleted, but its /a0/usr folder could not be removed.');
+        error.code = 'INSTANCE_DELETED_STORAGE_REMAINS';
+        error.cause = storageError;
+        throw error;
+      }
     }
   });
 }
@@ -6248,6 +6263,7 @@ module.exports = {
     workspaceStorageFromInspect,
     workspaceHostPathFromInspect,
     workspaceStorageRemovalPlanFromInspect,
+    removeWorkspaceStorageAfterContainerDelete,
     normalizeDeleteLocalInstanceOptions,
     waitForUiReachable,
     waitForStartedLocalInstanceUi,

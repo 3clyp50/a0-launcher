@@ -178,6 +178,10 @@ This scope owns:
 - Container commit support is a low-level snapshot primitive for product-layer
   clone workflows. Keep clone naming, labels, and port-policy decisions in
   `shell/docker_manager`.
+- Root-owned bind-mount contents may be removed through a one-shot container
+  created from an already-local image. Use a fixed cleanup command and a
+  structured bind mount without networking, wait for success, and always
+  remove the helper.
 - Log processing should normalize stream events into stable progress messages and
   preserve enough detail for cancellation/failure diagnosis.
 

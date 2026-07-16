@@ -1060,6 +1060,37 @@ export class DockerodeDocker extends DockerInterface {
     }
   }
 
+  async removeBindMountContents(imageRef, sourcePath) {
+    const image = String(imageRef || '').trim();
+    const source = String(sourcePath || '').trim();
+    if (!image) throw makeDockerInterfaceError('INVALID_INPUT', 'imageRef is required');
+    if (!source) throw makeDockerInterfaceError('INVALID_INPUT', 'sourcePath is required');
+
+    let helper = null;
+    try {
+      helper = await Promise.resolve(this.docker.createContainer({
+        Image: image,
+        Entrypoint: ['/bin/sh', '-c'],
+        Cmd: ['find /workspace -mindepth 1 -delete'],
+        HostConfig: {
+          NetworkMode: 'none',
+          Mounts: [{ Type: 'bind', Source: source, Target: '/workspace', ReadOnly: false }]
+        }
+      }));
+      await Promise.resolve(helper.start());
+      const result = await Promise.resolve(helper.wait());
+      const statusCode = Number(result?.StatusCode);
+      if (statusCode !== 0) {
+        throw makeDockerInterfaceError('DOCKER_ERROR', 'Workspace cleanup container failed', { statusCode });
+      }
+      return { removed: true };
+    } catch (error) {
+      throw normalizeDockerError(error, { op: 'removeBindMountContents', env: this.#envSummary() });
+    } finally {
+      if (helper) await Promise.resolve(helper.remove({ force: true })).catch(() => {});
+    }
+  }
+
   async pruneVolumes() {
     try {
       return await Promise.resolve(this.docker.pruneVolumes());

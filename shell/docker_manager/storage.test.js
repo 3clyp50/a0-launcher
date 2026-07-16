@@ -18,6 +18,7 @@ const {
   workspaceStorageFromInspect,
   workspaceHostPathFromInspect,
   workspaceStorageRemovalPlanFromInspect,
+  removeWorkspaceStorageAfterContainerDelete,
   normalizeDeleteLocalInstanceOptions,
   waitForUiReachable,
   waitForStartedLocalInstanceUi,
@@ -615,6 +616,28 @@ test('workspace storage removal plans only target explicit persistent storage', 
     }),
     null
   );
+});
+
+test('host workspace deletion empties the bind mount through Docker before removing its directory', async () => {
+  const root = await tempRoot();
+  const hostPath = path.join(root, 'usr');
+  await fs.mkdir(hostPath);
+  const calls = [];
+  const docker = {
+    async removeBindMountContents(imageRef, sourcePath) {
+      calls.push([imageRef, sourcePath]);
+    }
+  };
+
+  await removeWorkspaceStorageAfterContainerDelete(docker, {
+    Image: 'sha256:image-id',
+    Config: { Labels: {} },
+    Mounts: [{ Type: 'bind', Source: hostPath, Destination: WORKSPACE_MOUNT_TARGET }]
+  });
+
+  assert.deepEqual(calls, [['sha256:image-id', hostPath]]);
+  await assert.rejects(fs.stat(hostPath), { code: 'ENOENT' });
+  await fs.rm(root, { recursive: true, force: true });
 });
 
 test('clone create options replace source workspace mounts with a fresh workspace', async () => {

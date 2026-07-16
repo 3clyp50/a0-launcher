@@ -77,6 +77,8 @@ function mapDockerInterfaceErrorToUiMessage(error) {
       return 'This version is not available yet. Please try again later.';
     case 'INSTANCE_NOT_FOUND':
       return 'Instance not found.';
+    case 'INSTANCE_DELETED_STORAGE_REMAINS':
+      return 'Instance deleted, but its /a0/usr folder could not be removed.';
     case 'CANNOT_DELETE_ACTIVE':
       return 'You cannot delete the active instance.';
     case 'NO_RELEASES':

@@ -75,7 +75,8 @@ This scope owns:
 - Local instance card `Start`, `Stop`, and `Delete` are background queued
   actions. They must not open the global operation modal or make the page inert;
   show queue/running state on the affected card and surface failures with toast
-  feedback.
+  feedback. If the Instance was deleted but its workspace folder remains, label
+  the toast as a folder cleanup failure rather than a failed Instance deletion.
 - Running an installed Version from Versions must keep the operation modal until
   the Docker Manager reports the new Instance UI ready, then hand off to the
   Instances tab so the created Instance is visible.

@@ -247,6 +247,7 @@ function snapshot() {
 function backgroundOperationFailureLabel(operation = {}) {
   if (operation.type === "start") return "Start failed";
   if (operation.type === "stop") return "Stop failed";
+  if (operation.errorCode === "INSTANCE_DELETED_STORAGE_REMAINS") return "Folder cleanup failed";
   if (operation.type === "delete_instance") return "Delete failed";
   return "Instance action failed";
 }

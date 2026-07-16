@@ -459,6 +459,16 @@ export class DockerInterface {
   }
 
   /**
+   * Remove every entry from a host bind mount through a one-shot container.
+   * @param {string} _imageRef
+   * @param {string} _sourcePath
+   * @returns {Promise<{removed: boolean}>}
+   */
+  async removeBindMountContents(_imageRef, _sourcePath) {
+    throw new Error('DockerInterface.removeBindMountContents is abstract');
+  }
+
+  /**
    * Prune dangling Docker volumes.
    * @returns {Promise<Object>}
    */

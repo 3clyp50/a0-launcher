@@ -209,6 +209,10 @@ This scope owns:
   `shell/docker_adapter`. Color selection may accept only bounded palette IDs
   and must stay launcher metadata. Long-running container mutations report
   progress.
+- Per-instance deletion may remove persistent workspace storage only after an
+  explicit renderer choice. Root-owned host-workspace contents must be cleaned
+  through the Docker adapter, and a cleanup failure after container deletion
+  must report that partial result instead of claiming the Instance still exists.
 - Per-instance Backup and Restore are named Docker Manager intents. The shell
   owns native save/open dialogs for `.zip` files; Docker Manager owns the
   `/a0/usr` archive semantics and progress events.

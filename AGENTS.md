@@ -149,8 +149,8 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   Do not create a committed snapshot image for ordinary clones.
 - `v*` tags are release inputs for executable builds.
 - Public release tags and launcher metadata use two-segment versions such as
-  `v1.2` / `1.2` when the patch is zero. Packaging normalizes them to full
-  semver such as `1.2.0` only where Electron tooling or updater comparisons
+  `v1.3` / `1.3` when the patch is zero. Packaging normalizes them to full
+  semver such as `1.3.0` only where Electron tooling or updater comparisons
   require it.
 - Release executable artifacts are macOS x64/arm64 DMG plus updater ZIP,
   Windows x64/arm64 NSIS setup EXE, Linux x64/arm64 AppImage, and

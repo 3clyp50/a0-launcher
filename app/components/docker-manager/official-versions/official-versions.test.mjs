@@ -21,11 +21,25 @@ const {
   filterInstallEntries,
   installCardsRenderKey,
   isInstalledEntry,
+  normalizeVersionEntries,
   metaPartsForEntry,
   releaseMatchBadgeLabel,
   updateActionLabel,
   statusForEntry
 } = await import('./official-versions.js');
+
+test('Version cards ignore unrelated Docker images', () => {
+  assert.deepEqual(
+    normalizeVersionEntries({
+      versions: [{ id: 'latest', displayVersion: 'latest', availability: 'installed' }],
+      images: [
+        { imageRef: 'mcp/sqlite-mcp-server:latest', tag: 'latest', isBackendImage: false },
+        { imageRef: 'surrealdb/surrealdb:v2', tag: 'v2', isBackendImage: false }
+      ]
+    }).map((entry) => entry.tag),
+    ['latest']
+  );
+});
 
 test('installed active entries still expose Run for additional instances', () => {
   const action = actionForEntry({

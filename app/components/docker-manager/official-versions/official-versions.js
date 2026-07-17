@@ -226,65 +226,24 @@ function buildInstallCatalogModel(entries) {
 
 function normalizeVersionEntries(state) {
   const versions = Array.isArray(state?.versions) ? state.versions : [];
-  const images = Array.isArray(state?.images) ? state.images : [];
-  if (versions.length) {
-    const entries = versions.map((v) => ({
-      tag: v?.id || "",
-      title: v?.displayVersion || v?.id || "unknown",
-      category: v?.category || "",
-      availability: v?.availability || "available",
-      installability: v?.installability || null,
-      badges: Array.isArray(v?.channelBadges) ? v.channelBadges : [],
-      isActive: !!v?.isActive,
-      activeState: v?.activeState || null,
-      publishedAt: v?.publishedAt || null,
-      sizeBytes: v?.sizeBytes || null,
-      matchHint: v?.matchHint || "",
-      matchedReleaseTag: v?.matchedReleaseTag || "",
-      publishedReleaseTag: v?.publishedReleaseTag || "",
-      digestHint: v?.digestHint || "",
-      differsFromPublished: !!v?.differsFromPublished,
-      updatedAt: v?.updatedAt || null
-    })).filter((entry) => entry.tag);
-
-    const knownTags = new Set(entries.map((entry) => entry.tag));
-    for (const img of images) {
-      const tag = img?.tag || img?.imageRef || "";
-      const key = img?.isBackendImage === false ? img?.imageRef : tag;
-      if (!tag || !key || knownTags.has(key)) continue;
-      knownTags.add(key);
-      entries.push({
-        tag,
-        title: img?.isBackendImage === false ? img?.imageRef || tag : tag,
-        imageRef: img?.imageRef || "",
-        imageRepo: img?.imageRepo || "",
-        isBackendImage: img?.isBackendImage !== false,
-        category: "local_build",
-        availability: "installed",
-        isActive: !!img?.isActive,
-        publishedAt: img?.createdAt || null,
-        updatedAt: null,
-        sizeBytes: img?.size || img?.sizeBytes || null,
-        badges: []
-      });
-    }
-
-    return entries;
-  }
-
-  return images.map((img) => ({
-    tag: img?.tag || img?.imageRef || "unknown",
-    title: img?.isBackendImage === false ? img?.imageRef || "unknown" : img?.tag || img?.imageRef || "unknown",
-    imageRef: img?.imageRef || "",
-    imageRepo: img?.imageRepo || "",
-    isBackendImage: img?.isBackendImage !== false,
-    availability: "installed",
-    isActive: !!img?.isActive,
-    publishedAt: img?.createdAt || null,
-    updatedAt: null,
-    sizeBytes: img?.size || img?.sizeBytes || null,
-    badges: []
-  }));
+  return versions.map((v) => ({
+    tag: v?.id || "",
+    title: v?.displayVersion || v?.id || "unknown",
+    category: v?.category || "",
+    availability: v?.availability || "available",
+    installability: v?.installability || null,
+    badges: Array.isArray(v?.channelBadges) ? v.channelBadges : [],
+    isActive: !!v?.isActive,
+    activeState: v?.activeState || null,
+    publishedAt: v?.publishedAt || null,
+    sizeBytes: v?.sizeBytes || null,
+    matchHint: v?.matchHint || "",
+    matchedReleaseTag: v?.matchedReleaseTag || "",
+    publishedReleaseTag: v?.publishedReleaseTag || "",
+    digestHint: v?.digestHint || "",
+    differsFromPublished: !!v?.differsFromPublished,
+    updatedAt: v?.updatedAt || null
+  })).filter((entry) => entry.tag);
 }
 
 function statusForEntry(entry) {
@@ -604,6 +563,7 @@ export {
   installCardsRenderKey,
   isInstalledEntry,
   metaPartsForEntry,
+  normalizeVersionEntries,
   releaseMatchBadgeLabel,
   updateActionLabel,
   statusForEntry

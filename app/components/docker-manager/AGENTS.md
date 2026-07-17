@@ -26,7 +26,7 @@ This scope owns:
   credential dialog used by the startup runtime gate and the Instances tab.
 - `host-access-dialog.js`: one-time Host access onboarding, existing-Instance
   settings, scope dependency UI, folder selection, browser-profile selection,
-  diagnostics, Retry, and disconnected state.
+  diagnostics, Retry, Disconnect, Reconnect, and disconnected state.
 - `first-instance-setup/`: retired first image-pull defaults panel retained for
   compatibility while normal creation owns first Instance launch choices.
 - `setup-showcase/`: Agent Zero capability slideshow helper shown during the
@@ -46,9 +46,9 @@ This scope owns:
   Compose composer, diagnostics, and storage-volume maintenance.
 - `settings/`: port, workspace, Host access, and saved Instance provider/model
   defaults.
-- `instance-tabs/`: browser-style tab chrome, Launcher tab, active-tab
-  controls, Host access status/settings affordances, empty state, and viewport
-  bounds reporting for shell-owned Agent Zero UI views.
+- `instance-tabs/`: browser-style attached and detached tab chrome, Launcher
+  tab, name collapse, per-Instance Host access buttons, reload/detach/reattach,
+  empty state, and viewport bounds reporting for shell-owned Agent Zero views.
 
 ## Local Contracts
 
@@ -310,24 +310,25 @@ This scope owns:
   Its single visible save action should persist every Settings sub-tab, including
   edited fields in inactive panels.
 - `Open UI` opens local and remote instances in a launcher tab by default.
-  Reopening the same target focuses the existing tab. Detach moves the target
-  into a standalone secure Electron window without stopping the instance or
-  its live Host access lease; closing that window ends the lease.
+  Reopening the same target focuses the existing tab. Detach moves the existing
+  page view below the same Launcher header in a standalone secure Electron
+  window without stopping the instance or its live Host access lease; reattach
+  moves it back without reload, and closing that window ends the lease.
 - Instance tab chrome keeps a Launcher tab as the first tab whenever any
   instance UI tab is open. Selecting Launcher clears the active shell-owned
   view and leaves the launcher surface usable below the tab strip.
   Connected instance tabs should display only the tab/instance name, not the
   URL, so short names stay compact in the tab strip.
-- Each Instance tab shows a noninteractive Host access state glyph and a
-  separately accessible settings button. Supported states are Connecting,
-  Connected, Paused, Needs action, Error, and Disconnected; the controls must
-  remain usable at compact widths. Opening its settings must keep that Instance
+- Each Instance tab shows a separately accessible computer button immediately
+  after its name. The icon is green only while Connected and grey otherwise;
+  clicking it opens the Launcher-owned settings modal. A header control may
+  collapse Instance names to the globe and computer icons. Opening settings
+  must keep that Instance
   selected, temporarily hiding only the shell-owned view while the Launcher
-  modal is open and restoring it when the modal closes. Agent Zero Core may
-  request this same Launcher-owned modal for its current tab, but it must not
-  re-enable a saved Host access choice directly. Instance cards must not repeat
-  the Host access icon or settings button; intentional connection and scope
-  changes belong in an open Launcher Instance tab or Agent Zero Core.
+  modal is open and restoring it when the modal closes. Agent Zero pages expose
+  no Host access menu or controls. Instance cards must not repeat the Host access
+  icon or settings button; connection and scope changes belong in an open
+  Launcher Instance tab or its detached Launcher window.
   Remote Instances stay configured off by default, but an unset folder in their
   Host access
   dialog is prefilled from the Launcher default for a first opt-in.
@@ -337,16 +338,17 @@ This scope owns:
   its summary must always identify whether Browser and Computer Use are on or
   off so those opt-in controls remain discoverable. Summarize all five
   permissions while Host access is on, show only that Host access is off when
-  the master switch is off, and keep the folder field inside the same
-  disclosure and use Agent Zero-style switch controls in every Host access
-  view. The one-time onboarding is the exception only to collapsing: keep its
-  full permission list visible.
+  the master switch is off, place that master switch and the folder field inside
+  the same disclosure, and keep live Disconnect/Reconnect beside the connection
+  status. Use Agent Zero-style switch controls in every Host access view. The
+  one-time onboarding is the exception only to collapsing: keep its full
+  permission list visible.
   Host access starts off for new local and remote setups, with the local default
   master switch available in both onboarding and Settings. Browser and Computer
   Use start opt-in. Do not add a CLI installation helper to first-Instance or
   Host access onboarding; Launcher owns CLI preparation independently of
   permission opt-in.
-  One Agent Zero-style switch owns both connection and permission state and
+  One Agent Zero-style switch owns the persisted master permission state and
   visibly disables its dependent permissions. Call the selected path the folder
   for files and commands, explain both roles in plain language, and make
   clear that commands may use other locations available to the Launcher user.

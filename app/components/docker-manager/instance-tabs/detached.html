@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' a0app:; script-src 'self' a0app:; style-src 'self' a0app:; font-src 'self' a0app: data:; img-src 'self' a0app: data:;">
+  <title>Agent Zero</title>
+  <link rel="stylesheet" href="../../../a0ui/index.css">
+  <link rel="stylesheet" href="../../../a0ui/css/buttons.css">
+  <link rel="stylesheet" href="../../../a0ui/css/modals.css">
+  <link rel="stylesheet" href="../../../a0ui/vendor/google/google-icons.css">
+  <link rel="stylesheet" href="../../../docker_manager.css">
+</head>
+<body class="dark-mode device-pointer">
+  <section class="dm-instance-tabs dm-detached-instance-tabs has-tabs" aria-label="Detached Instance UI">
+    <div class="dm-instance-tab-strip">
+      <div class="dm-instance-tab active" role="tab" aria-selected="true">
+        <span class="dm-instance-tab-select" aria-hidden="true">
+          <span class="material-symbols-outlined">language</span>
+          <span class="dm-instance-tab-copy">
+            <span id="detachedInstanceName" class="dm-instance-tab-title">Agent Zero</span>
+          </span>
+        </span>
+        <button id="detachedHostAccess" class="dm-instance-tab-host" type="button" aria-label="Open Host access settings">
+          <span class="material-symbols-outlined" aria-hidden="true">computer</span>
+        </button>
+      </div>
+      <div class="dm-instance-tab-controls">
+        <button id="detachedCollapse" class="button icon-button dm-icon-button" type="button" aria-label="Collapse Instance name" title="Collapse Instance name">
+          <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+        </button>
+        <button id="detachedReload" class="button icon-button dm-icon-button" type="button" aria-label="Reload Instance UI" title="Reload">
+          <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+        </button>
+        <button id="detachedReattach" class="button icon-button dm-icon-button dm-instance-reattach" type="button" aria-label="Reattach to Launcher" title="Reattach to Launcher">
+          <span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>
+        </button>
+      </div>
+    </div>
+  </section>
+  <script type="module" src="detached.js"></script>
+</body>
+</html>

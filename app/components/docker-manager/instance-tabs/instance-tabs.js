@@ -1,5 +1,7 @@
 import { openHostAccessDialog } from "../host-access-dialog.js";
 
+let namesCollapsed = false;
+
 function byId(id) {
   return document.getElementById(id);
 }
@@ -47,6 +49,7 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
     // shell behind it stays scrollable and clickable.
     if (section) section.classList.remove("has-tabs");
     if (section) section.classList.remove("home-active");
+    if (section) section.classList.remove("names-collapsed");
     document.body.classList.remove("dm-instance-home-active");
     viewport.classList.remove("has-tab");
     if (empty) empty.classList.remove("hidden");
@@ -56,6 +59,7 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
 
   if (section) section.classList.add("has-tabs");
   if (section) section.classList.toggle("home-active", homeActive);
+  if (section) section.classList.toggle("names-collapsed", namesCollapsed);
   document.body.classList.toggle("dm-instance-home-active", homeActive);
   viewport.classList.toggle("has-tab", !homeActive);
   if (empty) empty.classList.add("hidden");
@@ -82,12 +86,17 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
 
   for (const tab of tabs) {
     const tabTitle = tab?.title || "Agent Zero";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `dm-instance-tab${tab?.id === selected?.id ? " active" : ""}`;
-    button.title = tabTitle;
-    button.setAttribute("aria-label", tabTitle);
-    button.addEventListener("click", () => window.dockerManagerActions?.selectInstanceTab?.(tab.id));
+    const item = document.createElement("div");
+    item.className = `dm-instance-tab${tab?.id === selected?.id ? " active" : ""}`;
+    item.setAttribute("role", "tab");
+    item.setAttribute("aria-selected", String(tab?.id === selected?.id));
+
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = "dm-instance-tab-select";
+    select.title = tabTitle;
+    select.setAttribute("aria-label", `Show ${tabTitle}`);
+    select.addEventListener("click", () => window.dockerManagerActions?.selectInstanceTab?.(tab.id));
 
     const icon = document.createElement("span");
     icon.className = "material-symbols-outlined";
@@ -102,27 +111,29 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
     label.textContent = tabTitle;
 
     const hostState = String(tab?.hostAccess?.state || "disconnected");
-    const hostStatus = document.createElement("span");
-    hostStatus.className = `dm-host-status-dot ${hostState}`;
-    hostStatus.setAttribute("role", "img");
-    hostStatus.setAttribute("aria-label", hostStatusLabel(hostState));
-    hostStatus.title = hostStatusLabel(hostState);
+    const hostAccess = document.createElement("button");
+    hostAccess.type = "button";
+    hostAccess.className = `dm-instance-tab-host${hostState === "connected" ? " connected" : ""}`;
+    hostAccess.title = hostStatusLabel(hostState);
+    hostAccess.setAttribute("aria-label", `${hostStatusLabel(hostState)}. Open settings.`);
+    hostAccess.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">computer</span>';
+    hostAccess.addEventListener("click", () => openHostAccessDialog(tab, window.__dmLastState || state));
 
-    const close = document.createElement("span");
-    close.className = "material-symbols-outlined dm-instance-tab-close";
-    close.setAttribute("aria-hidden", "true");
-    close.textContent = "close";
-    close.addEventListener("click", (event) => {
-      event.stopPropagation();
-      window.dockerManagerActions?.closeInstanceTab?.(tab.id);
-    });
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "dm-instance-tab-close";
+    close.title = `Close ${tabTitle}`;
+    close.setAttribute("aria-label", `Close ${tabTitle}`);
+    close.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">close</span>';
+    close.addEventListener("click", () => window.dockerManagerActions?.closeInstanceTab?.(tab.id));
 
-    button.appendChild(icon);
+    select.appendChild(icon);
     copy.appendChild(label);
-    button.appendChild(copy);
-    button.appendChild(hostStatus);
-    button.appendChild(close);
-    strip.appendChild(button);
+    select.appendChild(copy);
+    item.appendChild(select);
+    item.appendChild(hostAccess);
+    item.appendChild(close);
+    strip.appendChild(item);
   }
 
   const controls = document.createElement("div");
@@ -137,16 +148,15 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
   reload.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">refresh</span>';
   reload.addEventListener("click", () => window.dockerManagerActions?.reloadInstanceTab?.(selected?.id || ""));
 
-  const hostAccess = document.createElement("button");
-  hostAccess.type = "button";
-  hostAccess.className = "button icon-button dm-icon-button dm-host-access-button";
-  hostAccess.title = selected ? hostStatusLabel(selected?.hostAccess?.state) : "Host access";
-  hostAccess.setAttribute("aria-label", selected ? `${hostStatusLabel(selected?.hostAccess?.state)}. Open settings.` : "Open Host access settings");
-  hostAccess.disabled = !selected;
-  hostAccess.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">computer</span>';
-  hostAccess.addEventListener("click", () => {
-    if (!selected) return;
-    openHostAccessDialog(selected, window.__dmLastState || state);
+  const collapse = document.createElement("button");
+  collapse.type = "button";
+  collapse.className = "button icon-button dm-icon-button";
+  collapse.title = namesCollapsed ? "Show Instance names" : "Collapse Instance names";
+  collapse.setAttribute("aria-label", collapse.title);
+  collapse.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${namesCollapsed ? "chevron_right" : "chevron_left"}</span>`;
+  collapse.addEventListener("click", () => {
+    namesCollapsed = !namesCollapsed;
+    render(window.__dmLastState || state);
   });
 
   const detach = document.createElement("button");
@@ -158,7 +168,7 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
   detach.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">open_in_new</span>';
   detach.addEventListener("click", () => window.dockerManagerActions?.detachInstanceTab?.(selected?.id || ""));
 
-  controls.appendChild(hostAccess);
+  controls.appendChild(collapse);
   controls.appendChild(reload);
   controls.appendChild(detach);
   strip.appendChild(controls);
@@ -166,14 +176,6 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
 }
 
 window.addEventListener("dm:state", (event) => render(event.detail));
-window.addEventListener("dm:open-host-access", (event) => {
-  const state = window.__dmLastState || {};
-  const snapshot = instanceTabsFromState(state);
-  const tabId = typeof event.detail?.tabId === "string" ? event.detail.tabId : "";
-  const tab = (Array.isArray(snapshot.tabs) ? snapshot.tabs : []).find((item) => item?.id === tabId);
-  if (tab) openHostAccessDialog(tab, state);
-});
-
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => render());
 } else {

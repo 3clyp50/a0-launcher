@@ -248,6 +248,14 @@ class HostGatewaySupervisor {
     }
   }
 
+  disconnect(tabId) {
+    const id = String(tabId || '').trim();
+    const record = this.records.get(id);
+    if (!record) return false;
+    record.suppressed = true;
+    return this.stop(id, 'user_disconnect', { preserveSuppression: true });
+  }
+
   stop(tabId, reason = 'closed', options = {}) {
     const id = String(tabId || '').trim();
     const record = this.records.get(id);

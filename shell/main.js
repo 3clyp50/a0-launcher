@@ -26,7 +26,8 @@ const {
   makeTabsSnapshot,
   findInstanceTabByWebContents,
   instanceContextMenuActions,
-  reloadInstanceWebContents
+  reloadInstanceWebContents,
+  detachedInstanceContentBounds
 } = require('./instance_tabs');
 const { formatLauncherVersion } = require('./launcher_update');
 const {
@@ -1733,7 +1734,7 @@ async function restartHostGatewayForTab(tab) {
     const config = identity ? resolveInstanceHostAccess(settings, identity) : tab.hostAccessConfig;
     const status = {
       ...hostGatewaySupervisor.statusFor(leaseKey),
-      message: 'Disconnected for this tab. Reconnect from Agent Zero or close and reopen the tab.',
+      message: 'Disconnected for this tab. Reconnect here or close and reopen the tab.',
       suppressed: true
     };
     setTabHostAccess(tab, status, config);
@@ -1744,6 +1745,13 @@ async function restartHostGatewayForTab(tab) {
     message: 'Updating Host access…'
   }), tab.hostAccessConfig || null);
   return await startHostGatewayForTab(tab, { force: true });
+}
+
+function disconnectHostGatewayForTab(tab) {
+  if (!tab || !instanceTabs.has(tab.id)) return null;
+  const leaseKey = hostGatewayLeaseKey(tab);
+  if (!hostGatewaySupervisor.disconnect(leaseKey)) return null;
+  return hostGatewaySupervisor.statusFor(leaseKey);
 }
 
 async function reconnectHostGatewayForTab(tab) {
@@ -1757,22 +1765,47 @@ async function reconnectHostGatewayForTab(tab) {
   return await startHostGatewayForTab(tab, { force: true });
 }
 
-async function openAgentZeroUiWindow(url, title = 'Agent Zero', target = null) {
+function applyDetachedInstanceBounds(tab) {
+  const detachedWindow = tab?.detachedWindow;
+  if (!detachedWindow || detachedWindow.isDestroyed() || !tab?.view) return;
+  try {
+    tab.view.setBounds(detachedInstanceContentBounds(
+      detachedWindow.getContentBounds(),
+      tab.detachedContentVisible !== false
+    ));
+  } catch {
+    // The window or view may be closing.
+  }
+}
+
+async function openDetachedInstanceWindow(tab) {
   const iconPath = path.join(__dirname, 'assets',
     process.platform === 'win32' ? 'icon.ico' : 'icon.png'
   );
-  const uiWindow = new BrowserWindow({
+  const detachedWindow = new BrowserWindow({
     width: 1280,
     height: 900,
-    title,
+    minWidth: 640,
+    minHeight: 480,
+    title: tab.title,
     icon: iconPath,
-    webPreferences: createInstanceWebPreferences()
+    show: false,
+    backgroundColor: '#131313',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
   });
-  tagLauncherWebContents(uiWindow.webContents);
-  attachInstanceContextMenu(uiWindow.webContents);
-  await loginInstanceWebUiSession(target, uiWindow.webContents);
-  await uiWindow.loadURL(url);
-  return uiWindow;
+  attachWindowDiagnostics(detachedWindow);
+  detachedWindow.webContents.on('page-title-updated', (event) => event.preventDefault());
+  detachedWindow.on('resize', () => applyDetachedInstanceBounds(tab));
+  await detachedWindow.loadURL(
+    `a0app://content/components/docker-manager/instance-tabs/detached.html?tabId=${encodeURIComponent(tab.id)}`
+  );
+  detachedWindow.setTitle(tab.title);
+  return detachedWindow;
 }
 
 const INSTANCE_CONTEXT_MENU_ITEMS = Object.freeze({
@@ -1963,7 +1996,7 @@ function observeInstanceLoginRequests(webContents) {
         pending.set(details.id, {
           tabId: tab.id,
           credentials,
-          webContents: details.webContents || tab.detachedWindow?.webContents || tab.view?.webContents
+          webContents: details.webContents || tab.view?.webContents
         });
       }
     } catch {
@@ -1990,7 +2023,12 @@ function getInstanceTabsSnapshot() {
 }
 
 function sendInstanceTabsEvent() {
-  sendDockerManagerEvent('docker-manager:instanceTabs', getInstanceTabsSnapshot());
+  const snapshot = getInstanceTabsSnapshot();
+  sendDockerManagerEvent('docker-manager:instanceTabs', snapshot);
+  for (const tab of instanceTabs.values()) {
+    const wc = tab.detachedWindow?.webContents;
+    if (wc && !wc.isDestroyed()) wc.send('docker-manager:instanceTabs', snapshot);
+  }
 }
 
 function nextInstanceTabId() {
@@ -2002,8 +2040,7 @@ function createInstanceWebPreferences() {
   return {
     contextIsolation: true,
     nodeIntegration: false,
-    sandbox: true,
-    preload: path.join(__dirname, 'instance_preload.js')
+    sandbox: true
   };
 }
 
@@ -2049,17 +2086,15 @@ function applyActiveInstanceTabBounds() {
   }
 }
 
-function destroyInstanceTab(tab, reason = 'destroyed', { keepGateway = false } = {}) {
+function destroyInstanceTab(tab, reason = 'destroyed') {
   if (!tab) return;
-  if (!keepGateway) {
-    hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), reason);
-    const detachedWindow = tab.detachedWindow;
-    tab.detachedWindow = null;
-    try {
-      if (detachedWindow && !detachedWindow.isDestroyed()) detachedWindow.close();
-    } catch {
-      // ignore
-    }
+  hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), reason);
+  const detachedWindow = tab.detachedWindow;
+  tab.detachedWindow = null;
+  try {
+    if (detachedWindow && !detachedWindow.isDestroyed()) detachedWindow.close();
+  } catch {
+    // ignore
   }
 
   try {
@@ -2314,7 +2349,13 @@ function attachInstanceTabEvents(tab) {
     handleNavigation(url);
   });
   wc.once('destroyed', () => {
-    if (tab.detached) return;
+    const detachedWindow = tab.detachedWindow;
+    tab.detachedWindow = null;
+    try {
+      if (detachedWindow && !detachedWindow.isDestroyed()) detachedWindow.close();
+    } catch {
+      // ignore
+    }
     hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), 'web_contents_destroyed');
     if (!instanceTabs.has(tab.id)) return;
     instanceTabs.delete(tab.id);
@@ -2328,7 +2369,7 @@ function attachInstanceTabEvents(tab) {
 
 async function applyInstanceUiSection(tab, section) {
   const script = instanceUiSectionScript(section);
-  const wc = tab?.detachedWindow?.webContents || tab?.view?.webContents;
+  const wc = tab?.view?.webContents;
   if (!script || !wc || wc.isDestroyed?.()) return false;
   try {
     return await wc.executeJavaScript(script, true);
@@ -2348,6 +2389,7 @@ async function openInstanceTab(target) {
     if (detachedWindow && !detachedWindow.isDestroyed()) {
       existing.title = target.title || existing.title;
       existing.gatewayHost = gatewayHostUrl(target.url) || existing.gatewayHost || '';
+      detachedWindow.setTitle(existing.title);
       detachedWindow.show();
       detachedWindow.focus();
       await applyInstanceUiSection(existing, target.section);
@@ -2384,8 +2426,7 @@ async function openInstanceTab(target) {
   }
 
   if (!mainWindow.contentView || typeof mainWindow.contentView.addChildView !== 'function') {
-    await openAgentZeroUiWindow(target.url, target.title, target);
-    return { opened: true, detached: true };
+    throw createTabTargetError('UI_UNAVAILABLE', 'Launcher Instance tabs are not available.');
   }
 
   const previousActiveTabId = activeInstanceTabId;
@@ -2460,7 +2501,7 @@ function reloadInstanceTab(id) {
   if (!tab) {
     throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
   }
-  const wc = tab.detachedWindow?.webContents || tab.view?.webContents;
+  const wc = tab.view?.webContents;
   reloadInstanceWebContents(wc);
   return { reloaded: true, tabId };
 }
@@ -2471,8 +2512,13 @@ async function detachInstanceTab(id) {
   if (!tab) {
     throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
   }
+  if (tab.detached) {
+    tab.detachedWindow?.show();
+    tab.detachedWindow?.focus();
+    return { detached: true, tabId };
+  }
 
-  const detachedWindow = await openAgentZeroUiWindow(tab.url, tab.title, tab);
+  const detachedWindow = await openDetachedInstanceWindow(tab);
   if (!instanceTabs.has(tabId)) {
     detachedWindow.close();
     throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab was closed before it could be detached.');
@@ -2480,28 +2526,73 @@ async function detachInstanceTab(id) {
 
   tab.detached = true;
   tab.detachedWindow = detachedWindow;
+  tab.detachedContentVisible = true;
   const closeDetachedLease = () => {
     if (tab.detachedWindow !== detachedWindow) return;
     tab.detachedWindow = null;
     instanceTabs.delete(tabId);
-    hostGatewaySupervisor.stop(hostGatewayLeaseKey(tab), 'detached_window_closed');
+    destroyInstanceTab(tab, 'detached_window_closed');
     if (activeInstanceTabId === tabId) activeInstanceTabId = firstEmbeddedInstanceTabId();
     applyActiveInstanceTabBounds();
     sendInstanceTabsEvent();
+    try {
+      if (!detachedWindow.isDestroyed()) detachedWindow.close();
+    } catch {
+      // ignore
+    }
   };
   detachedWindow.once('closed', closeDetachedLease);
   detachedWindow.webContents.once('destroyed', closeDetachedLease);
 
-  destroyInstanceTab(tab, 'tab_detached', { keepGateway: true });
-  tab.view = null;
-  tab.loading = false;
-  tab.canReload = false;
+  try {
+    mainWindow.contentView.removeChildView(tab.view);
+    detachedWindow.contentView.addChildView(tab.view);
+    applyDetachedInstanceBounds(tab);
+  } catch (error) {
+    tab.detached = false;
+    tab.detachedWindow = null;
+    try { mainWindow.contentView.addChildView(tab.view); } catch { /* ignore */ }
+    detachedWindow.close();
+    throw error;
+  }
   if (activeInstanceTabId === tabId) {
     activeInstanceTabId = firstEmbeddedInstanceTabId();
   }
   applyActiveInstanceTabBounds();
   sendInstanceTabsEvent();
+  detachedWindow.show();
   return { detached: true, tabId };
+}
+
+function reattachInstanceTab(id) {
+  const tabId = typeof id === 'string' ? id : '';
+  const tab = tabId ? instanceTabs.get(tabId) : null;
+  if (!tab?.detached || !tab.detachedWindow || tab.detachedWindow.isDestroyed()) {
+    throw createTabTargetError('INSTANCE_NOT_FOUND', 'Detached Instance tab not found.');
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    throw createTabTargetError('UI_UNAVAILABLE', 'Launcher window is not available.');
+  }
+
+  const detachedWindow = tab.detachedWindow;
+  detachedWindow.contentView.removeChildView(tab.view);
+  try {
+    mainWindow.contentView.addChildView(tab.view);
+  } catch (error) {
+    try { detachedWindow.contentView.addChildView(tab.view); } catch { /* ignore */ }
+    throw error;
+  }
+  tab.detached = false;
+  tab.detachedWindow = null;
+  tab.detachedContentVisible = true;
+  activeInstanceTabId = tab.id;
+  applyActiveInstanceTabBounds();
+  sendInstanceTabsEvent();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  detachedWindow.close();
+  return { detached: false, tabId };
 }
 
 function shellSingleQuote(value) {
@@ -4071,55 +4162,6 @@ ipcMain.handle('docker-manager:retryHostGateway', async (_event, body) => {
   }
 });
 
-ipcMain.handle('launcher-host:get-state', async (event) => {
-  const tab = findInstanceTabByWebContents(instanceTabs, event.sender);
-  return {
-    reconnectAvailable: Boolean(tab && hostGatewaySupervisor.isSuppressed(hostGatewayLeaseKey(tab)))
-  };
-});
-
-ipcMain.handle('launcher-host:open-settings', async (event) => {
-  try {
-    const tab = findInstanceTabByWebContents(instanceTabs, event.sender);
-    if (!tab) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Launcher Instance tab not found.');
-    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.webContents || mainWindow.webContents.isDestroyed()) {
-      throw createTabTargetError('LAUNCHER_UNAVAILABLE', 'A0 Launcher is not available.');
-    }
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-    sendDockerManagerEvent('docker-manager:openHostAccess', { tabId: tab.id });
-    return { ok: true };
-  } catch (error) {
-    return dockerManager.toErrorResponse(error);
-  }
-});
-
-ipcMain.handle('launcher-host:reconnect', async (event) => {
-  try {
-    const tab = findInstanceTabByWebContents(instanceTabs, event.sender);
-    if (!tab) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Launcher Instance tab not found.');
-    const status = await reconnectHostGatewayForTab(tab);
-    if (!status) throw createTabTargetError('RECONNECT_UNAVAILABLE', 'Host access is not waiting to reconnect.');
-    return { ok: true, status };
-  } catch (error) {
-    return dockerManager.toErrorResponse(error);
-  }
-});
-
-ipcMain.handle('launcher-host:rearm-computer-use', async (event) => {
-  try {
-    const tab = findInstanceTabByWebContents(instanceTabs, event.sender);
-    if (!tab) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Launcher Instance tab not found.');
-    if (!hostGatewaySupervisor.send(hostGatewayLeaseKey(tab), { action: 'rearm_computer_use' })) {
-      throw createTabTargetError('GATEWAY_NOT_RUNNING', 'Host gateway is not running.');
-    }
-    return { ok: true };
-  } catch (error) {
-    return dockerManager.toErrorResponse(error);
-  }
-});
-
 ipcMain.handle('docker-manager:hostGatewayCommand', async (_event, body) => {
   try {
     if (!isPlainObject(body)) {
@@ -4128,10 +4170,20 @@ ipcMain.handle('docker-manager:hostGatewayCommand', async (_event, body) => {
     const tabId = String(body.tabId || '');
     if (!instanceTabs.has(tabId)) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance tab not found.');
     const action = String(body.action || '');
+    const tab = instanceTabs.get(tabId);
+    if (action === 'disconnect') {
+      const status = disconnectHostGatewayForTab(tab);
+      if (!status) throw createTabTargetError('GATEWAY_NOT_RUNNING', 'Host gateway is not running.');
+      return { accepted: true, status };
+    }
+    if (action === 'reconnect') {
+      const status = await reconnectHostGatewayForTab(tab);
+      if (!status) throw createTabTargetError('RECONNECT_UNAVAILABLE', 'Host access is not waiting to reconnect.');
+      return { accepted: true, status };
+    }
     if (!['prepare_browser', 'rearm_computer_use'].includes(action)) {
       return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Unsupported Host access command' });
     }
-    const tab = instanceTabs.get(tabId);
     if (!hostGatewaySupervisor.send(hostGatewayLeaseKey(tab), { action })) {
       return dockerManager.toErrorResponse({ code: 'GATEWAY_NOT_RUNNING', message: 'Host gateway is not running.' });
     }
@@ -4739,6 +4791,34 @@ ipcMain.handle('docker-manager:detachInstanceTab', async (_event, body) => {
   try {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     return detachInstanceTab(getInstanceTabIdFromRequest(body));
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:reattachInstanceTab', async (event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const tab = instanceTabs.get(getInstanceTabIdFromRequest(body));
+    if (!tab || tab.detachedWindow?.webContents !== event.sender) {
+      throw createTabTargetError('INSTANCE_NOT_FOUND', 'Detached Instance tab not found.');
+    }
+    return reattachInstanceTab(tab.id);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:setDetachedInstanceContentVisible', async (event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const tab = instanceTabs.get(getInstanceTabIdFromRequest(body));
+    if (!tab || tab.detachedWindow?.webContents !== event.sender) {
+      throw createTabTargetError('INSTANCE_NOT_FOUND', 'Detached Instance tab not found.');
+    }
+    tab.detachedContentVisible = body.visible !== false;
+    applyDetachedInstanceBounds(tab);
+    return { visible: tab.detachedContentVisible };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

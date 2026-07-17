@@ -63,7 +63,8 @@ Architecture contracts:
   closing the owning tab or detached window, destroyed web contents, and app
   cleanup end the lease. Detaching transfers the same lease, while
   Launcher-home selection and in-tab reload keep it alive. Disconnect suppresses
-  that lease until the user reconnects from Agent Zero Core or closes it.
+  that lease until the user reconnects from the Launcher Host access modal or
+  closes it. Agent Zero pages expose no Host access menu or Launcher bridge.
 - Launcher startup asynchronously installs the official A0 CLI when it is
   missing or lacks the Launcher gateway contract, and updates it when a newer
   release is available. Installing the CLI grants no host capability by itself:

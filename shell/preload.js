@@ -323,6 +323,12 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   closeInstanceTab: (id) => ipcRenderer.invoke('docker-manager:closeInstanceTab', { id }),
   reloadInstanceTab: (id) => ipcRenderer.invoke('docker-manager:reloadInstanceTab', { id }),
   detachInstanceTab: (id) => ipcRenderer.invoke('docker-manager:detachInstanceTab', { id }),
+  reattachInstanceTab: (id) => ipcRenderer.invoke('docker-manager:reattachInstanceTab', { id }),
+  setDetachedInstanceContentVisible: (id, visible) =>
+    ipcRenderer.invoke('docker-manager:setDetachedInstanceContentVisible', {
+      id,
+      visible: visible !== false
+    }),
   setInstanceTabBounds: (bounds) => {
     const b = bounds && typeof bounds === 'object' ? bounds : {};
     return ipcRenderer.invoke('docker-manager:setInstanceTabBounds', {
@@ -337,14 +343,6 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     const listener = (_event, snapshot) => callback(snapshot);
     ipcRenderer.on('docker-manager:instanceTabs', listener);
     return () => ipcRenderer.removeListener('docker-manager:instanceTabs', listener);
-  },
-  onOpenHostAccess: (callback) => {
-    if (typeof callback !== 'function') return () => {};
-    const listener = (_event, payload) => callback(
-      payload && typeof payload.tabId === 'string' ? payload.tabId : ''
-    );
-    ipcRenderer.on('docker-manager:openHostAccess', listener);
-    return () => ipcRenderer.removeListener('docker-manager:openHostAccess', listener);
   },
   onStateChange: (callback) => {
     if (typeof callback !== 'function') return () => {};

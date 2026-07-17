@@ -107,10 +107,13 @@ test('Host permissions use one collapsed native disclosure', () => {
     code_execution: true,
     browser: false,
     computer_use: false
-  }, { detailsContent: '<div data-folder>Folder</div>' });
+  }, {
+    masterContent: '<label data-master>All permissions</label>',
+    detailsContent: '<div data-folder>Folder</div>'
+  });
   assert.match(html, /<details class="dm-advanced dm-host-access-permissions">/);
   assert.match(html, /<summary>Host permissions <span data-host-scope-summary>On: Read, Write, Code · Off: Browser, Computer Use<\/span><\/summary>/);
-  assert.match(html, /<fieldset[\s\S]*<div data-folder>Folder<\/div>\s*<\/details>/);
+  assert.match(html, /<label data-master>[\s\S]*<fieldset[\s\S]*<div data-folder>Folder<\/div>\s*<\/details>/);
   assert.equal(html.match(/dm-host-access-toggler/g)?.length, 5);
   assert.doesNotMatch(html, /<details[^>]* open/);
 });
@@ -140,9 +143,11 @@ test('Advanced Host access details start collapsed with a short summary', async 
   assert.doesNotMatch(source, /<details[^>]*dm-host-access-advanced[^>]* open/);
 });
 
-test('Host access uses one switch for connection and permission state', async () => {
+test('Host access keeps its master switch inside Host permissions', async () => {
   const source = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /hostAccessMaster|Host access active/);
+  assert.doesNotMatch(source, /Allow this Instance to use this computer/);
+  assert.match(source, /masterContent: switchLineHtml\(\s*"hostAccessConfigured",\s*"All permissions",\s*"Master switch"/);
   assert.match(source, /configured: enabled,\s+masterEnabled: enabled/);
 });
 
@@ -238,11 +243,30 @@ test('Host access UI uses five friendly permissions and explains the command bou
 test('Host access settings temporarily hide the active Instance view without selecting Launcher home', async () => {
   const dialogSource = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
   const tabsSource = await readFile(new URL('./instance-tabs/instance-tabs.js', import.meta.url), 'utf8');
+  const detachedSource = await readFile(new URL('./instance-tabs/detached.js', import.meta.url), 'utf8');
   const rendererSource = await readFile(new URL('../../docker_manager.js', import.meta.url), 'utf8');
   assert.match(dialogSource, /hideInstanceTabView\?\.\(\)/);
   assert.match(dialogSource, /syncInstanceTabBounds\?\.\(\)/);
-  assert.match(rendererSource, /dm:open-host-access/);
-  assert.match(tabsSource, /dm:open-host-access/);
-  assert.match(tabsSource, /openHostAccessDialog\(tab, state\)/);
-  assert.doesNotMatch(tabsSource, /hostAccess\.addEventListener[\s\S]{0,240}selectInstanceHome/);
+  assert.match(tabsSource, /openHostAccessDialog\(tab, window\.__dmLastState \|\| state\)/);
+  assert.match(detachedSource, /openHostAccessDialog\(tab, window\.__dmLastState/);
+  assert.doesNotMatch(rendererSource, /dm:open-host-access/);
+});
+
+test('Instance headers own Host access, name collapse, and detached reattach controls', async () => {
+  const dialogSource = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
+  const tabsSource = await readFile(new URL('./instance-tabs/instance-tabs.js', import.meta.url), 'utf8');
+  const detachedHtml = await readFile(new URL('./instance-tabs/detached.html', import.meta.url), 'utf8');
+
+  assert.match(tabsSource, /dm-instance-tab-host/);
+  assert.match(tabsSource, /hostState === "connected"/);
+  assert.match(tabsSource, /Collapse Instance names/);
+  assert.doesNotMatch(tabsSource, /dm-host-status-dot/);
+  assert.match(dialogSource, /data-disconnect>Disconnect/);
+  assert.match(dialogSource, /data-reconnect>Reconnect/);
+  assert.match(dialogSource, /dm-host-access-summary[\s\S]*\$\{connectionAction\}/);
+  assert.match(dialogSource, /hostGatewayCommand\?\.\(tab\.id, "disconnect"\)/);
+  assert.match(dialogSource, /hostGatewayCommand\?\.\(tab\.id, "reconnect"\)/);
+  assert.match(detachedHtml, /detachedInstanceName/);
+  assert.match(detachedHtml, /detachedHostAccess/);
+  assert.match(detachedHtml, /detachedReattach/);
 });

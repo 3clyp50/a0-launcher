@@ -81,7 +81,7 @@ function configForTarget(state = {}, target = {}) {
   return config;
 }
 
-function scopeFieldsHtml(prefix, scopes, { compact = false, onboarding = false, detailsContent = "" } = {}) {
+function scopeFieldsHtml(prefix, scopes, { compact = false, onboarding = false, masterContent = "", detailsContent = "" } = {}) {
   const fields = `<fieldset class="dm-host-access-scopes${compact ? " compact" : ""}" aria-label="Host permissions">
       ${SCOPE_FIELDS.map(({ key, icon, label, hint }) => `
         <label class="dm-host-access-scope">
@@ -105,6 +105,7 @@ function scopeFieldsHtml(prefix, scopes, { compact = false, onboarding = false, 
   }
   return `<details class="dm-advanced dm-host-access-permissions">
     <summary>Host permissions <span data-host-scope-summary>${scopeSummaryText(scopes)}</span></summary>
+    ${masterContent}
     ${fields}
     ${detailsContent}
   </details>`;
@@ -341,12 +342,19 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const computer = details.computer_use || {};
   const canArmComputer = computerUseNeedsArm(computer.status);
   const stateName = String(runtime.state || "disconnected");
+  const reconnectAvailable = runtime.suppressed === true;
+  const disconnectAvailable = !reconnectAvailable && (runtime.connected === true || stateName === "connecting");
   const disconnectedWithoutTab = !tab.id && stateName === "disconnected";
   const configured = config.configured && config.masterEnabled;
   const connectionLabel = disconnectedWithoutTab && configured ? "Ready to connect" : statusLabel(stateName);
   const connectionDetail = disconnectedWithoutTab
     ? configured ? "Open this Instance in a Launcher tab to connect." : "Host access is off."
     : runtime.hostLabel || gateway.host_label || "This computer";
+  const connectionAction = reconnectAvailable
+    ? '<button class="button confirm dm-host-access-connection-action" type="button" data-reconnect>Reconnect</button>'
+    : disconnectAvailable
+      ? '<button class="button dm-host-access-connection-action" type="button" data-disconnect>Disconnect</button>'
+      : "";
   const compatibility = runtime.code === "CLI_UPDATE_REQUIRED"
     ? "Launcher setup needs attention"
     : ["CORE_UPDATE_REQUIRED", "CONTRACT_MISMATCH", "PLUGIN_MISSING"].includes(runtime.code)
@@ -375,15 +383,16 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
         <div class="dm-host-access-summary">
           <span class="dm-host-status-dot ${escapeHtml(stateName)}" aria-hidden="true"></span>
           <div><strong data-host-connection-label>${escapeHtml(connectionLabel)}</strong><small data-host-connection-detail>${escapeHtml(connectionDetail)}</small></div>
+          ${connectionAction}
         </div>
         ${runtime.message ? `<div class="dm-host-access-notice ${stateName === "error" ? "error" : ""}">${escapeHtml(runtime.message)}</div>` : ""}
-        ${switchLineHtml(
-          "hostAccessConfigured",
-          "Allow this Instance to use this computer",
-          "Access stays on with the Launcher while this Instance is open, either in a tab or detached window.",
-          configured
-        )}
         ${scopeFieldsHtml("hostAccessInstance", config.scopes, {
+          masterContent: switchLineHtml(
+            "hostAccessConfigured",
+            "All permissions",
+            "Master switch",
+            configured
+          ),
           detailsContent: `<div class="dm-field">
             <label for="hostAccessFolder">Folder for files and commands</label>
             <div class="dm-host-folder-row">
@@ -442,6 +451,12 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     if (event.target === dialog) closeDialog(dialog);
   });
   dialog.querySelector("[data-choose-folder]")?.addEventListener("click", () => chooseFolder(folder));
+  dialog.querySelector("[data-disconnect]")?.addEventListener("click", async () => {
+    if (await window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "disconnect") !== false) closeDialog(dialog);
+  });
+  dialog.querySelector("[data-reconnect]")?.addEventListener("click", async () => {
+    if (await window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "reconnect") !== false) closeDialog(dialog);
+  });
   dialog.querySelector("[data-retry]")?.addEventListener("click", () => window.dockerManagerActions?.retryHostGateway?.(tab.id));
   dialog.querySelector("[data-prepare-browser]")?.addEventListener("click", () => {
     const hint = browserSetupHint(browser);

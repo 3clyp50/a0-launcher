@@ -143,6 +143,9 @@ This scope owns:
   owns the `WebContentsView` attached to that rectangle. Register window resize
   handling independently of the asynchronously loaded tab component so native
   Instance views keep their bounds when the Launcher is maximized or restored.
+  Host access controls remain in attached or detached Launcher chrome: a
+  per-Instance grey/green computer button opens the shared modal, and Agent Zero
+  page content receives no duplicate menu or control bridge.
 
 ## Work Guidance
 

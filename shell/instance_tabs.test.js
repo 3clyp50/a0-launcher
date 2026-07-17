@@ -20,7 +20,8 @@ const {
   makeTabsSnapshot,
   findInstanceTabByWebContents,
   instanceContextMenuActions,
-  reloadInstanceWebContents
+  reloadInstanceWebContents,
+  detachedInstanceContentBounds
 } = require('./instance_tabs');
 
 test('local URLs allow only localhost-style HTTP URLs without credentials', () => {
@@ -362,7 +363,7 @@ test('makeTabsSnapshot keeps a detached Host access lease available to Instance 
   });
 });
 
-test('Launcher host IPC resolves only the owning embedded or detached Instance WebContents', () => {
+test('Instance tab lookup recognizes embedded page and detached header WebContents', () => {
   const embedded = {};
   const detached = {};
   const tabs = new Map([
@@ -375,19 +376,32 @@ test('Launcher host IPC resolves only the owning embedded or detached Instance W
   assert.equal(findInstanceTabByWebContents(tabs, {}), null);
 });
 
-test('Instance preload exposes only bounded Launcher host intents', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'instance_preload.js'), 'utf8');
+test('Agent Zero pages expose no Launcher Host access controls', () => {
   const rendererPreloadSource = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
   const mainSource = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
-  assert.match(source, /exposeInMainWorld\('a0LauncherHost'/);
-  assert.match(source, /launcher-host:get-state/);
-  assert.match(source, /launcher-host:open-settings/);
-  assert.match(source, /launcher-host:reconnect/);
-  assert.match(source, /launcher-host:rearm-computer-use/);
-  assert.match(rendererPreloadSource, /docker-manager:openHostAccess/);
-  assert.match(mainSource, /ipcMain\.handle\('launcher-host:open-settings'/);
-  assert.match(mainSource, /ipcMain\.handle\('launcher-host:rearm-computer-use'/);
-  assert.doesNotMatch(source, /dockerManagerAPI|exec|credentials/);
+  assert.equal(fs.existsSync(path.join(__dirname, 'instance_preload.js')), false);
+  assert.doesNotMatch(mainSource, /a0LauncherHost|launcher-host:/);
+  assert.match(rendererPreloadSource, /reattachInstanceTab/);
+  assert.match(rendererPreloadSource, /setDetachedInstanceContentVisible/);
+  assert.match(mainSource, /instance-tabs\/detached\.html/);
+  assert.match(mainSource, /detachedWindow\.setTitle\(tab\.title\)/);
+  assert.match(mainSource, /detachedWindow\.contentView\.addChildView\(tab\.view\)/);
+  assert.match(mainSource, /mainWindow\.contentView\.addChildView\(tab\.view\)/);
+});
+
+test('detached Instance content stays below the Launcher header and can hide for modals', () => {
+  assert.deepEqual(detachedInstanceContentBounds({ width: 1280, height: 900 }), {
+    x: 0,
+    y: 47,
+    width: 1280,
+    height: 853
+  });
+  assert.deepEqual(detachedInstanceContentBounds({ width: 1280, height: 900 }, false), {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0
+  });
 });
 
 test('instance context menu exposes copy for selected page text', () => {

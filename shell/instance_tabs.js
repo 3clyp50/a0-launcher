@@ -310,6 +310,14 @@ function reloadInstanceWebContents(webContents) {
   return true;
 }
 
+function detachedInstanceContentBounds(bounds, visible = true) {
+  if (!visible) return { x: 0, y: 0, width: 0, height: 0 };
+  const width = Math.max(0, Math.floor(Number(bounds?.width) || 0));
+  const height = Math.max(0, Math.floor(Number(bounds?.height) || 0));
+  const headerHeight = Math.min(47, height);
+  return { x: 0, y: headerHeight, width, height: height - headerHeight };
+}
+
 module.exports = {
   normalizeHttpUrl,
   instanceUiSectionUrl,
@@ -327,5 +335,6 @@ module.exports = {
   makeTabsSnapshot,
   findInstanceTabByWebContents,
   instanceContextMenuActions,
-  reloadInstanceWebContents
+  reloadInstanceWebContents,
+  detachedInstanceContentBounds
 };

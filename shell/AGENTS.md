@@ -15,9 +15,6 @@ This scope owns:
   protocol, main windows, IPC handlers, shell actions, and Docker Manager event
   forwarding.
 - `shell/preload.js`: safe renderer bridge exposed through `contextBridge`.
-- `shell/instance_preload.js`: the isolated Instance-page bridge for opening
-  the Launcher-owned Host access editor, querying or reconnecting its own
-  lease, and requesting Computer Use approval for that lease.
 - `shell/credential_prompt.html` and `shell/credential_prompt.css`: static
   content and native-window layout for the shell-owned credential consent
   modal. Reuse the Launcher's shared dialog styles and never receive credential
@@ -91,9 +88,11 @@ This scope owns:
   and Support should be exposed to the renderer as fixed resource IDs, not
   arbitrary URL strings.
 - Instance UI tabs are shell-owned `WebContentsView`s. Renderer code may request
-  open/select/select launcher home/close/reload/detach and report viewport
+  open/select/select launcher home/close/reload/detach/reattach and report viewport
   bounds, but URL resolution, URL validation, web contents lifecycle, and
-  detached windows stay in `shell/main.js`. Local `Open UI` requests should wait
+  detached windows stay in `shell/main.js`. Detach reparents the existing view
+  below a Launcher-owned header; reattach moves that same view back without a
+  page reload. Local `Open UI` requests should wait
   briefly for a freshly running container's HTTP UI before returning an
   unavailable error. Renderer open requests may pass a bounded Agent Zero
   section selector such as `self-update`; the shell validates the Instance URL,
@@ -139,7 +138,7 @@ This scope owns:
   rather than a release number so a capable sibling development checkout can
   follow an older installed CLI. Contract, authentication, and runtime exits
   stay stopped until an explicit Retry; a user-requested Disconnect is
-  suppressed until Agent Zero Core explicitly reconnects that same lease or
+  suppressed until the Launcher Host access modal reconnects that same lease or
   its owning tab/window closes.
   Keep gateway identity stable for the Launcher installation across tabs,
   preserve saved reverse-proxy base paths, reject URL credentials, and bound
@@ -150,12 +149,11 @@ This scope owns:
   reserves the older `files` argument for legacy read/write Launchers.
 - Embedded and detached Launcher-owned Agent Zero web contents must append
   `A0-Launcher/<version>` to the user agent. This tag identifies the shell-owned
-  browsing surface; it does not grant authentication or gateway authority.
-  Their dedicated preload may expose only the current lease's reconnect state,
-  Launcher-owned settings intent, reconnect intent, and Computer Use approval
-  intent. Main-process handlers must resolve the caller back to its owning
-  embedded or detached WebContents before acting. Opening settings may reveal
-  the trusted Launcher editor but must not directly re-enable access.
+  browsing surface; it does not grant authentication or gateway authority, and
+  Agent Zero pages receive no Launcher Host access preload. The detached
+  Launcher's own header may use the normal named renderer bridge for its tab,
+  modal visibility, reload, and reattach intents; main-process handlers must
+  resolve the caller back to its owning detached window before moving its view.
 - Local development content is selected by `A0_LAUNCHER_LOCAL_REPO`,
   `A0_LAUNCHER_USE_LOCAL_CONTENT`, a repo-shaped default-app current working
   directory, a repo-shaped unpackaged-app current working directory, or the

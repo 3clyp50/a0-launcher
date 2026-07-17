@@ -31,6 +31,8 @@ This scope owns:
 - `<x-component>` paths are app-relative static paths. Component loading must
   remain deterministic and compatible with both local-content mode and unpacked
   `content.json` mode.
+- A failed component asset must clear its transient loading placeholder instead
+  of leaving a perpetual shimmer.
 - Vendor files should be treated as bundled artifacts. Edit them only when the
   task is explicitly to update or repair the vendored dependency, and document
   the source/update path in the change.

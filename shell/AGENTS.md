@@ -18,8 +18,10 @@ This scope owns:
 - `shell/instance_preload.js`: the isolated Instance-page bridge for opening
   the Launcher-owned Host access editor, querying or reconnecting its own
   lease, and requesting Computer Use approval for that lease.
-- `shell/credential_prompt.html`: static branded content for the shell-owned
-  credential consent modal; it must never receive credential values.
+- `shell/credential_prompt.html` and `shell/credential_prompt.css`: static
+  content and native-window layout for the shell-owned credential consent
+  modal. Reuse the Launcher's shared dialog styles and never receive credential
+  values.
 - `shell/host_access.js`: normalized Launcher Host access defaults, per-Instance
   configuration, scope dependencies, and stable Instance keys.
 - `shell/host_gateway.js`: supervised, newline-delimited JSON bridge to the

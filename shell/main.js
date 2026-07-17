@@ -1831,8 +1831,8 @@ function instanceTabForWebRequest(details) {
 }
 
 function showCredentialSavePrompt(owner) {
-  const width = 520;
-  const height = 250;
+  const width = 496;
+  const height = 226;
   const ownerBounds = owner.getBounds();
   const promptWindow = new BrowserWindow({
     width,
@@ -1847,7 +1847,7 @@ function showCredentialSavePrompt(owner) {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    hasShadow: false,
+    hasShadow: true,
     skipTaskbar: true,
     resizable: false,
     minimizable: false,

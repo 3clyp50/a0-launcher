@@ -208,11 +208,16 @@ test('credential prompt accepts only its two exact shell-owned decisions', () =>
 
 test('credential prompt uses the Launcher surface with no credential surface', () => {
   const source = fs.readFileSync(path.join(__dirname, 'credential_prompt.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, 'credential_prompt.css'), 'utf8');
   assert.match(source, /Content-Security-Policy/);
-  assert.match(source, /background: #131313/);
+  assert.match(source, /\.\.\/app\/a0ui\/index\.css/);
+  assert.match(source, /\.\.\/app\/docker_manager\.css/);
+  assert.match(source, /class="dm-dialog"/);
+  assert.match(source, /class="button confirm"/);
   assert.match(source, /a0-credential-prompt:\/\/not-now/);
   assert.match(source, /a0-credential-prompt:\/\/save/);
-  assert.doesNotMatch(source, /linear-gradient|Agent Zero Launcher|assets\/icon\.png|<input|ipcRenderer|username|password/i);
+  assert.doesNotMatch(source, /<style|style=|'unsafe-inline'|linear-gradient|Agent Zero Launcher|assets\/icon\.png|<input|ipcRenderer|username|password/i);
+  assert.doesNotMatch(styles, /#[0-9a-f]{3,8}|rgba?\(|color-mix|font-family|font-size|border-radius|padding\s*:/i);
 });
 
 test('instance tab login recovery returns to the previous same-origin page', () => {

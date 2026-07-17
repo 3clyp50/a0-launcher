@@ -44,7 +44,6 @@ function openInstanceAppearanceDialog({ title, currentColor, currentIcon, onSave
         </section>
       </div>
       <div class="dm-dialog-footer">
-        <span></span>
         <button class="button" type="button" data-close>Cancel</button>
         <button class="button confirm" type="button" data-save>Save</button>
       </div>

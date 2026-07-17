@@ -76,6 +76,12 @@ Architecture contracts:
   contract. Continue capability-gating gateway candidates rather than replacing
   that contract check with a version comparison; an unreleased sibling
   development checkout may advertise the capability before the public release.
+- A successful manual login in an eligible Instance tab may offer one branded,
+  shell-owned modal child window with `Save credentials` / `Not now` when that
+  Instance has no launcher-saved credentials. Login detection and pending
+  passwords stay shell-owned and in-memory; the static modal receives no
+  credential values, and persistence still requires explicit consent through
+  the existing encrypted credential store.
 
 Runtime and release contracts:
 

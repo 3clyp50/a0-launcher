@@ -12,6 +12,9 @@ const {
   isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
+  loginCredentialsFromRequest,
+  instanceLoginRedirectSucceeded,
+  credentialSavePromptDecision,
   instanceTabLoginRecoveryTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
@@ -140,6 +143,76 @@ test('web UI login request ignores unsafe remote or incomplete credential target
     ),
     null
   );
+});
+
+test('successful Instance login captures bounded credentials and confirms a same-origin redirect', () => {
+  const tab = {
+    kind: 'local',
+    containerId: 'abc123',
+    url: 'http://127.0.0.1:32080/'
+  };
+  const request = {
+    method: 'POST',
+    resourceType: 'mainFrame',
+    url: 'http://127.0.0.1:32080/login?next=%2F',
+    uploadData: [{ bytes: Buffer.from('username=jan&password=secret+pass&next=%2F') }]
+  };
+
+  assert.deepEqual(loginCredentialsFromRequest(tab, request), {
+    username: 'jan',
+    password: 'secret pass'
+  });
+  assert.equal(instanceLoginRedirectSucceeded(tab, {
+    ...request,
+    statusCode: 302,
+    redirectURL: 'http://127.0.0.1:32080/'
+  }), true);
+  assert.equal(instanceLoginRedirectSucceeded(tab, {
+    ...request,
+    statusCode: 302,
+    redirectURL: 'https://example.com/'
+  }), false);
+});
+
+test('credential capture ignores unsuccessful and ineligible login requests', () => {
+  const localTab = { kind: 'local', containerId: 'abc123', url: 'http://127.0.0.1:32080/' };
+  const insecureRemoteTab = { kind: 'remote', instanceId: 'remote-1', url: 'http://example.com/' };
+  const request = {
+    method: 'POST',
+    resourceType: 'mainFrame',
+    url: 'http://127.0.0.1:32080/login',
+    uploadData: [{ bytes: Buffer.from('username=jan&password=secret') }]
+  };
+
+  assert.equal(loginCredentialsFromRequest(localTab, { ...request, resourceType: 'xhr' }), null);
+  assert.equal(loginCredentialsFromRequest(insecureRemoteTab, {
+    ...request,
+    url: 'http://example.com/login'
+  }), null);
+  assert.equal(instanceLoginRedirectSucceeded(localTab, {
+    ...request,
+    statusCode: 200,
+    redirectURL: 'http://127.0.0.1:32080/'
+  }), false);
+});
+
+test('credential prompt accepts only its two exact shell-owned decisions', () => {
+  assert.equal(credentialSavePromptDecision('a0-credential-prompt://save'), true);
+  assert.equal(credentialSavePromptDecision('a0-credential-prompt://save/'), true);
+  assert.equal(credentialSavePromptDecision('a0-credential-prompt://not-now'), false);
+  assert.equal(credentialSavePromptDecision('a0-credential-prompt:save'), null);
+  assert.equal(credentialSavePromptDecision('a0-credential-prompt://save/path'), null);
+  assert.equal(credentialSavePromptDecision('a0-credential-prompt://save?extra=1'), null);
+  assert.equal(credentialSavePromptDecision('https://save/'), null);
+});
+
+test('credential prompt uses the Launcher surface with no credential surface', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'credential_prompt.html'), 'utf8');
+  assert.match(source, /Content-Security-Policy/);
+  assert.match(source, /background: #131313/);
+  assert.match(source, /a0-credential-prompt:\/\/not-now/);
+  assert.match(source, /a0-credential-prompt:\/\/save/);
+  assert.doesNotMatch(source, /linear-gradient|Agent Zero Launcher|assets\/icon\.png|<input|ipcRenderer|username|password/i);
 });
 
 test('instance tab login recovery returns to the previous same-origin page', () => {

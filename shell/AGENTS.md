@@ -18,6 +18,8 @@ This scope owns:
 - `shell/instance_preload.js`: the isolated Instance-page bridge for opening
   the Launcher-owned Host access editor, querying or reconnecting its own
   lease, and requesting Computer Use approval for that lease.
+- `shell/credential_prompt.html`: static branded content for the shell-owned
+  credential consent modal; it must never receive credential values.
 - `shell/host_access.js`: normalized Launcher Host access defaults, per-Instance
   configuration, scope dependencies, and stable Instance keys.
 - `shell/host_gateway.js`: supervised, newline-delimited JSON bridge to the
@@ -100,7 +102,13 @@ This scope owns:
   tab, and an already-open tab may repeat that recovery when a restart sends
   it back to `/login`; remote credential POSTs must stay on `https:` URLs
   unless the target is local loopback. Do not put credentials in URLs or expose
-  decrypted passwords to the renderer. After a tab starts from a validated
+  decrypted passwords to the renderer. After a successful same-origin manual
+  `/login` redirect, an eligible Instance tab with no saved credentials may
+  show one branded modal child window with `Save credentials` / `Not now`.
+  Observe the form only in the shell, never pass credential values into the
+  static modal content, retain them only in memory until that choice, and
+  persist them through the existing secure store only after explicit consent.
+  After a tab starts from a validated
   Instance URL, in-tab navigation may stay on that Agent Zero origin, including
   same-origin anchors and callbacks; safe off-origin `http:` and `https:` URLs
   should open through the user's external browser. Embedded and detached Agent Zero UI

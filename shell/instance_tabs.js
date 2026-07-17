@@ -150,6 +150,77 @@ function webUiLoginRequestForTarget(target, credentials) {
   };
 }
 
+function loginCredentialsFromRequest(tab, details) {
+  const request = details && typeof details === 'object' ? details : {};
+  const loginUrl = parseHttpUrl(request.url);
+  if (
+    request.method !== 'POST' ||
+    request.resourceType !== 'mainFrame' ||
+    loginUrl?.pathname !== '/login' ||
+    !cliCredentialsAllowedForTarget(tab) ||
+    !isAllowedInstanceTabNavigationUrl(tab, loginUrl.href)
+  ) {
+    return null;
+  }
+
+  const chunks = [];
+  let size = 0;
+  for (const upload of Array.isArray(request.uploadData) ? request.uploadData : []) {
+    if (!Buffer.isBuffer(upload?.bytes)) return null;
+    size += upload.bytes.length;
+    if (size > 8192) return null;
+    chunks.push(upload.bytes);
+  }
+  if (!chunks.length) return null;
+
+  const form = new URLSearchParams(Buffer.concat(chunks, size).toString('utf8'));
+  const username = String(form.get('username') || '').trim();
+  const password = String(form.get('password') || '');
+  if (!username || username.length > 256 || !password || password.length > 4096) return null;
+  return { username, password };
+}
+
+function instanceLoginRedirectSucceeded(tab, details) {
+  const request = details && typeof details === 'object' ? details : {};
+  const loginUrl = parseHttpUrl(request.url);
+  const redirectUrl = parseHttpUrl(request.redirectURL);
+  const statusCode = Number(request.statusCode);
+  return Boolean(
+    request.method === 'POST' &&
+    request.resourceType === 'mainFrame' &&
+    loginUrl?.pathname === '/login' &&
+    statusCode >= 300 &&
+    statusCode < 400 &&
+    redirectUrl?.pathname !== '/login' &&
+    isAllowedInstanceTabNavigationUrl(tab, redirectUrl?.href)
+  );
+}
+
+function credentialSavePromptDecision(value) {
+  let url;
+  try {
+    url = new URL(String(value || ''));
+  } catch {
+    return null;
+  }
+
+  if (
+    url.protocol !== 'a0-credential-prompt:' ||
+    url.username ||
+    url.password ||
+    url.port ||
+    (url.pathname && url.pathname !== '/') ||
+    url.search ||
+    url.hash
+  ) {
+    return null;
+  }
+
+  if (url.hostname === 'save') return true;
+  if (url.hostname === 'not-now') return false;
+  return null;
+}
+
 function instanceTabLoginRecoveryTarget(tab, loginUrl) {
   const safeTab = tab && typeof tab === 'object' ? tab : {};
   const login = parseHttpUrl(loginUrl);
@@ -248,6 +319,9 @@ module.exports = {
   isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
+  loginCredentialsFromRequest,
+  instanceLoginRedirectSucceeded,
+  credentialSavePromptDecision,
   instanceTabLoginRecoveryTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,

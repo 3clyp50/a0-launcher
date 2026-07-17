@@ -18,6 +18,9 @@ const {
   isAllowedInstanceTabNavigationUrl,
   makeTabKey,
   webUiLoginRequestForTarget,
+  loginCredentialsFromRequest,
+  instanceLoginRedirectSucceeded,
+  credentialSavePromptDecision,
   instanceTabLoginRecoveryTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
@@ -187,6 +190,7 @@ let instanceTabs = new Map();
 let activeInstanceTabId = '';
 let instanceTabBounds = null;
 let instanceTabSeq = 0;
+const observedInstanceLoginSessions = new WeakSet();
 let launcherUpdateDismissed = false;
 let launcherAutoUpdater = null;
 let launcherUpdateCheckPromise = null;
@@ -1810,6 +1814,177 @@ function attachInstanceContextMenu(webContents) {
   });
 }
 
+function instanceTabForWebRequest(details) {
+  if (details?.webContents) {
+    const tab = findInstanceTabByWebContents(instanceTabs, details.webContents);
+    if (tab) return tab;
+  }
+
+  const webContentsId = Number(details?.webContentsId);
+  if (!Number.isInteger(webContentsId)) return null;
+  for (const tab of instanceTabs.values()) {
+    if (tab?.view?.webContents?.id === webContentsId || tab?.detachedWindow?.webContents?.id === webContentsId) {
+      return tab;
+    }
+  }
+  return null;
+}
+
+function showCredentialSavePrompt(owner) {
+  const width = 520;
+  const height = 250;
+  const ownerBounds = owner.getBounds();
+  const promptWindow = new BrowserWindow({
+    width,
+    height,
+    x: Math.round(ownerBounds.x + (ownerBounds.width - width) / 2),
+    y: Math.round(ownerBounds.y + (ownerBounds.height - height) / 2),
+    parent: owner,
+    modal: true,
+    title: 'Save credentials',
+    icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    skipTaskbar: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (save) => {
+      if (settled) return;
+      settled = true;
+      if (!promptWindow.isDestroyed()) promptWindow.close();
+      resolve(save);
+    };
+
+    promptWindow.setMenuBarVisibility(false);
+    promptWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    promptWindow.webContents.on('will-navigate', (event, url) => {
+      event.preventDefault();
+      const decision = credentialSavePromptDecision(url);
+      if (decision !== null) finish(decision);
+    });
+    promptWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown' && input.key === 'Escape') {
+        event.preventDefault();
+        finish(false);
+      }
+    });
+    promptWindow.webContents.on('render-process-gone', () => finish(false));
+    promptWindow.once('ready-to-show', () => {
+      if (owner.isDestroyed()) finish(false);
+      else promptWindow.show();
+    });
+    promptWindow.on('closed', () => {
+      if (settled) return;
+      settled = true;
+      resolve(false);
+    });
+    promptWindow.loadFile(path.join(__dirname, 'credential_prompt.html')).catch(() => finish(false));
+  });
+}
+
+async function offerToSaveInstanceCredentials(tabId, credentials, requestWebContents) {
+  const tab = instanceTabs.get(tabId);
+  if (!tab || tab.credentialSavePrompted) return;
+  tab.credentialSavePrompted = true;
+
+  try {
+    const saved = tab.kind === 'remote'
+      ? await dockerManager.getRemoteInstanceCredentials(tab.instanceId)
+      : await dockerManager.getLocalInstanceCredentials(tab.containerId);
+    if (saved) return;
+  } catch {
+    return;
+  }
+
+  const requestOwner = requestWebContents && !requestWebContents.isDestroyed?.()
+    ? BrowserWindow.fromWebContents(requestWebContents)
+    : null;
+  const owner = requestOwner ||
+    (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
+  if (!owner) return;
+
+  let shouldSave;
+  try {
+    shouldSave = await showCredentialSavePrompt(owner);
+  } catch {
+    return;
+  }
+  if (!shouldSave || !instanceTabs.has(tabId)) return;
+
+  try {
+    if (tab.kind === 'remote') {
+      await dockerManager.setRemoteInstanceCredentials(tab.instanceId, credentials);
+    } else {
+      await dockerManager.setLocalInstanceCredentials(tab.containerId, credentials);
+    }
+  } catch (error) {
+    const errorOptions = {
+      type: 'error',
+      title: 'Save credentials',
+      message: 'Credentials could not be saved.',
+      detail: error?.message || 'Secure credential storage is not available.',
+      buttons: ['OK']
+    };
+    try {
+      if (owner && !owner.isDestroyed()) await dialog.showMessageBox(owner, errorOptions);
+      else await dialog.showMessageBox(errorOptions);
+    } catch {
+      // The owning window may be closing.
+    }
+  }
+}
+
+function observeInstanceLoginRequests(webContents) {
+  const session = webContents?.session;
+  if (!session?.webRequest || observedInstanceLoginSessions.has(session)) return;
+  observedInstanceLoginSessions.add(session);
+
+  const pending = new Map();
+  const filter = { urls: ['http://*/login*', 'https://*/login*'] };
+  session.webRequest.onBeforeRequest(filter, (details, callback) => {
+    try {
+      const tab = instanceTabForWebRequest(details);
+      const credentials = loginCredentialsFromRequest(tab, details);
+      if (tab && credentials && !tab.credentialSavePrompted) {
+        pending.set(details.id, {
+          tabId: tab.id,
+          credentials,
+          webContents: details.webContents || tab.detachedWindow?.webContents || tab.view?.webContents
+        });
+      }
+    } catch {
+      // Never interrupt the user's login if credential detection fails.
+    } finally {
+      callback({});
+    }
+  });
+  session.webRequest.onBeforeRedirect(filter, (details) => {
+    const login = pending.get(details.id);
+    pending.delete(details.id);
+    if (!login) return;
+    const tab = instanceTabs.get(login.tabId);
+    if (instanceLoginRedirectSucceeded(tab, details)) {
+      void offerToSaveInstanceCredentials(login.tabId, login.credentials, login.webContents);
+    }
+  });
+  session.webRequest.onCompleted(filter, (details) => pending.delete(details.id));
+  session.webRequest.onErrorOccurred(filter, (details) => pending.delete(details.id));
+}
+
 function getInstanceTabsSnapshot() {
   return makeTabsSnapshot(instanceTabs, activeInstanceTabId);
 }
@@ -2054,6 +2229,7 @@ function getInstanceTabIdFromRequest(body) {
 
 function attachInstanceTabEvents(tab) {
   const wc = tab.view.webContents;
+  observeInstanceLoginRequests(wc);
   attachInstanceContextMenu(wc);
 
   const update = () => {

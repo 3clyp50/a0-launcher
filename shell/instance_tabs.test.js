@@ -282,6 +282,8 @@ test('makeTabsSnapshot exposes only sanitized tab fields', () => {
     title: 'Agent Zero',
     url: 'http://127.0.0.1:32080/',
     containerId: 'abc',
+    color: ' ROSE ',
+    icon: 'terminal',
     loading: false,
     canReload: true,
     view: { secret: true }
@@ -298,6 +300,8 @@ test('makeTabsSnapshot exposes only sanitized tab fields', () => {
       active: true,
       loading: false,
       canReload: true,
+      color: 'rose',
+      icon: 'terminal',
       hostAccess: { state: 'disconnected', connected: false }
     }],
     activeTabId: 'tab-1'
@@ -327,6 +331,8 @@ test('makeTabsSnapshot supports launcher home with no active instance tab', () =
       active: false,
       loading: false,
       canReload: true,
+      color: '',
+      icon: '',
       hostAccess: { state: 'disconnected', connected: false }
     }],
     activeTabId: ''
@@ -342,6 +348,7 @@ test('makeTabsSnapshot keeps a detached Host access lease available to Instance 
     url: 'http://127.0.0.1:32080/',
     containerId: 'abc',
     detached: true,
+    icon: 'not-an-icon',
     hostAccess: { state: 'connected', connected: true }
   });
 
@@ -356,6 +363,8 @@ test('makeTabsSnapshot keeps a detached Host access lease available to Instance 
       active: false,
       loading: false,
       canReload: false,
+      color: '',
+      icon: '',
       detached: true,
       hostAccess: { state: 'connected', connected: true }
     }],
@@ -402,6 +411,11 @@ test('detached Instance content stays below the Launcher header and can hide for
     width: 0,
     height: 0
   });
+});
+
+test('main-window bounds updates leave detached Instance views to their detached window', () => {
+  const mainSource = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  assert.match(mainSource, /for \(const tab of instanceTabs\.values\(\)\) \{\s+if \(tab\.detached\) continue;/);
 });
 
 test('instance context menu exposes copy for selected page text', () => {

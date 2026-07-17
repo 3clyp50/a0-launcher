@@ -1,8 +1,5 @@
-import {
-  INSTANCE_COLOR_OPTIONS,
-  createInstanceVisual,
-  normalizedInstanceColorId
-} from "../card-visuals.js";
+import { createInstanceVisual } from "../card-visuals.js";
+import { openInstanceAppearanceDialog } from "../instance-appearance-dialog.js";
 import { openAddRemoteInstanceDialog } from "../remote-instance-dialog.js";
 import {
   createLocalInstanceButtonModel,
@@ -1011,97 +1008,6 @@ function openDeleteRemoteInstanceDialog(remote) {
   window.setTimeout(() => dialog.querySelector("[data-dialog-close]")?.focus?.(), 0);
 }
 
-function openInstanceColorDialog({ title, currentColor, onSelect }) {
-  const existing = document.getElementById("instanceColorDialog");
-  if (existing) existing.remove();
-
-  const selectedColor = normalizedInstanceColorId(currentColor);
-  const dialog = document.createElement("div");
-  dialog.id = "instanceColorDialog";
-  dialog.className = "dm-dialog-backdrop";
-  dialog.setAttribute("role", "presentation");
-
-  const panel = document.createElement("div");
-  panel.className = "dm-dialog dm-color-dialog";
-  panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-modal", "true");
-  panel.setAttribute("aria-labelledby", "instanceColorTitle");
-
-  const header = document.createElement("div");
-  header.className = "dm-dialog-header";
-  const heading = document.createElement("h2");
-  heading.id = "instanceColorTitle";
-  heading.className = "dm-dialog-title";
-  heading.textContent = title || "Instance color";
-  const close = document.createElement("button");
-  close.className = "button dm-dialog-close";
-  close.type = "button";
-  close.setAttribute("aria-label", "Close");
-  close.textContent = "×";
-  close.addEventListener("click", () => closeDialog(dialog));
-  header.appendChild(heading);
-  header.appendChild(close);
-
-  const body = document.createElement("div");
-  body.className = "dm-dialog-body";
-  const swatches = document.createElement("div");
-  swatches.className = "dm-color-swatches";
-
-  for (const option of INSTANCE_COLOR_OPTIONS) {
-    const colorId = normalizedInstanceColorId(option.id);
-    const selected = colorId === selectedColor;
-    const button = document.createElement("button");
-    button.className = `dm-color-swatch-option${selected ? " is-selected" : ""}`;
-    button.type = "button";
-    button.setAttribute("aria-pressed", String(selected));
-    button.dataset.color = colorId;
-
-    const swatch = document.createElement("span");
-    swatch.className = `dm-color-swatch${colorId ? "" : " is-auto"}`;
-    swatch.style.setProperty("--dm-swatch-fg", option.fg);
-    swatch.style.setProperty("--dm-swatch-bg", option.bg);
-    swatch.style.setProperty("--dm-swatch-border", option.border);
-
-    const label = document.createElement("span");
-    label.className = "dm-color-swatch-label";
-    label.textContent = option.label;
-
-    button.appendChild(swatch);
-    button.appendChild(label);
-    button.addEventListener("click", async () => {
-      closeDialog(dialog);
-      await onSelect?.(colorId);
-    });
-    swatches.appendChild(button);
-  }
-
-  body.appendChild(swatches);
-
-  const footer = document.createElement("div");
-  footer.className = "dm-dialog-footer";
-  const spacer = document.createElement("span");
-  const cancel = document.createElement("button");
-  cancel.className = "button";
-  cancel.type = "button";
-  cancel.textContent = "Cancel";
-  cancel.addEventListener("click", () => closeDialog(dialog));
-  footer.appendChild(spacer);
-  footer.appendChild(cancel);
-
-  panel.appendChild(header);
-  panel.appendChild(body);
-  panel.appendChild(footer);
-  dialog.appendChild(panel);
-  dialog.addEventListener("mousedown", (event) => {
-    if (event.target === dialog) closeDialog(dialog);
-  });
-
-  document.body.appendChild(dialog);
-  window.setTimeout(() => {
-    dialog.querySelector(".dm-color-swatch-option.is-selected")?.focus();
-  }, 0);
-}
-
 function openCloneInstanceDialog(instance) {
   const existing = document.getElementById("cloneInstanceDialog");
   if (existing) existing.remove();
@@ -1554,6 +1460,8 @@ function renderDockerInstance(list, c, state) {
       kind: "local",
       containerId: c?.containerId || "",
       title: displayName,
+      color: c?.instanceColor || "",
+      icon: c?.instanceIcon || "",
       section
     });
   };
@@ -1628,15 +1536,16 @@ function renderDockerInstance(list, c, state) {
       disabled: !containerId || containerOperationRunning,
       title: "Rename this instance"
     }),
-    menuButton("palette", "Color", () => {
-      openInstanceColorDialog({
-        title: "Instance color",
+    menuButton("palette", "Colour/Icon", () => {
+      openInstanceAppearanceDialog({
+        title: "Instance Colour/Icon",
         currentColor: c?.instanceColor || "",
-        onSelect: (color) => window.dockerManagerActions?.setLocalInstanceColor?.(containerId, color)
+        currentIcon: c?.instanceIcon || "",
+        onSave: (appearance) => window.dockerManagerActions?.setLocalInstanceAppearance?.(containerId, appearance)
       });
     }, {
       disabled: !containerId || backgroundOperation?.type === "delete_instance",
-      title: "Choose this instance color"
+      title: "Choose this Instance colour and icon"
     }),
     menuButton("key", "Save credentials", () => {
       openInstanceCredentialsDialog({
@@ -1808,15 +1717,16 @@ function renderRemoteInstance(list, remote, state) {
     disabled: !remote?.id,
     title: "Rename this saved remote instance"
   }));
-  menuItems.push(menuButton("palette", "Color", () => {
-    openInstanceColorDialog({
-      title: "Instance color",
+  menuItems.push(menuButton("palette", "Colour/Icon", () => {
+    openInstanceAppearanceDialog({
+      title: "Instance Colour/Icon",
       currentColor: remote?.color || "",
-      onSelect: (color) => window.dockerManagerActions?.setRemoteInstanceColor?.(remote?.id || "", color)
+      currentIcon: remote?.icon || "",
+      onSave: (appearance) => window.dockerManagerActions?.setRemoteInstanceAppearance?.(remote?.id || "", appearance)
     });
   }, {
     disabled: !remote?.id,
-    title: "Choose this instance color"
+    title: "Choose this Instance colour and icon"
   }));
   menuItems.push(menuButton("key", "Save credentials", () => {
     openInstanceCredentialsDialog({

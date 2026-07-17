@@ -1,4 +1,6 @@
+import { instanceColorTone, instanceIconName } from "../card-visuals.js";
 import { openHostAccessDialog } from "../host-access-dialog.js";
+import { openInstanceAppearanceDialog } from "../instance-appearance-dialog.js";
 
 let namesCollapsed = false;
 
@@ -29,6 +31,21 @@ function hostStatusLabel(state) {
     error: "Host access error",
     disconnected: "Host access disconnected"
   }[state] || "Host access disconnected";
+}
+
+function saveTabAppearance(tab, appearance) {
+  return tab?.kind === "remote"
+    ? window.dockerManagerActions?.setRemoteInstanceAppearance?.(tab.instanceId || "", appearance)
+    : window.dockerManagerActions?.setLocalInstanceAppearance?.(tab?.containerId || "", appearance);
+}
+
+function openTabAppearance(tab, title) {
+  openInstanceAppearanceDialog({
+    title: `${title} Colour/Icon`,
+    currentColor: tab?.color || "",
+    currentIcon: tab?.icon || "",
+    onSave: (appearance) => saveTabAppearance(tab, appearance)
+  });
 }
 
 function render(state = window.__dmLastState || { instanceTabs: { tabs: [], activeTabId: "" } }) {
@@ -86,10 +103,24 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
 
   for (const tab of tabs) {
     const tabTitle = tab?.title || "Agent Zero";
+    const isActive = tab?.id === selected?.id;
     const item = document.createElement("div");
-    item.className = `dm-instance-tab${tab?.id === selected?.id ? " active" : ""}`;
+    item.className = `dm-instance-tab${isActive ? " active" : ""}`;
     item.setAttribute("role", "tab");
-    item.setAttribute("aria-selected", String(tab?.id === selected?.id));
+    item.setAttribute("aria-selected", String(isActive));
+
+    const icon = document.createElement("button");
+    icon.type = "button";
+    icon.className = "dm-instance-tab-icon";
+    icon.title = isActive ? `Change ${tabTitle} Colour/Icon` : `Show ${tabTitle}`;
+    icon.setAttribute("aria-label", icon.title);
+    icon.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${tab?.loading ? "progress_activity" : instanceIconName(tab?.icon)}</span>`;
+    const tone = instanceColorTone(tab?.color);
+    if (tone && !tab?.loading) icon.style.color = tone.fg;
+    icon.addEventListener("click", () => {
+      if (isActive) openTabAppearance(tab, tabTitle);
+      else window.dockerManagerActions?.selectInstanceTab?.(tab.id);
+    });
 
     const select = document.createElement("button");
     select.type = "button";
@@ -97,11 +128,6 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
     select.title = tabTitle;
     select.setAttribute("aria-label", `Show ${tabTitle}`);
     select.addEventListener("click", () => window.dockerManagerActions?.selectInstanceTab?.(tab.id));
-
-    const icon = document.createElement("span");
-    icon.className = "material-symbols-outlined";
-    icon.setAttribute("aria-hidden", "true");
-    icon.textContent = tab?.loading ? "progress_activity" : "language";
 
     const copy = document.createElement("span");
     copy.className = "dm-instance-tab-copy";
@@ -127,9 +153,9 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
     close.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">close</span>';
     close.addEventListener("click", () => window.dockerManagerActions?.closeInstanceTab?.(tab.id));
 
-    select.appendChild(icon);
     copy.appendChild(label);
     select.appendChild(copy);
+    item.appendChild(icon);
     item.appendChild(select);
     item.appendChild(hostAccess);
     item.appendChild(close);
@@ -151,9 +177,9 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
   const collapse = document.createElement("button");
   collapse.type = "button";
   collapse.className = "button icon-button dm-icon-button";
-  collapse.title = namesCollapsed ? "Show Instance names" : "Collapse Instance names";
+  collapse.title = namesCollapsed ? "Show tab names" : "Hide tab names";
   collapse.setAttribute("aria-label", collapse.title);
-  collapse.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${namesCollapsed ? "chevron_right" : "chevron_left"}</span>`;
+  collapse.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${namesCollapsed ? "label" : "label_off"}</span>`;
   collapse.addEventListener("click", () => {
     namesCollapsed = !namesCollapsed;
     render(window.__dmLastState || state);

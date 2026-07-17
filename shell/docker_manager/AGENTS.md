@@ -19,7 +19,7 @@ This scope owns:
   and progress operations.
 - `state_store.js`: persisted launcher state under Electron `userData`,
   including preferences, remote instances, local instance display names, and
-  local instance color overrides, plus Launcher Host access defaults and
+  local instance colour/icon overrides, plus Launcher Host access defaults and
   per-Instance configuration.
 - `releases_client.js`: GitHub release discovery for Agent Zero backend
   versions.
@@ -100,10 +100,10 @@ This scope owns:
   host folder, prefilled from the Launcher default when available. Remote
   Instances otherwise default to their remote machine and do not acquire
   Launcher host access implicitly.
-- Local instance display-name and color overrides are persisted through
+- Local instance display-name and Colour/Icon overrides are persisted through
   `state_store.js` because Docker labels on existing containers cannot be
-  mutated safely. Local colors are stored as a container-id keyed
-  `localInstanceColors` map with bounded palette IDs.
+  mutated safely. Local colours and icons are stored as container-id keyed
+  `localInstanceColors` and `localInstanceIcons` maps with bounded IDs.
 - Optional local and saved remote Instance login credentials are persisted
   through `state_store.js` as id-keyed, Electron-safe-storage encrypted password
   records. The renderer may receive only saved-credential metadata such as saved
@@ -145,8 +145,8 @@ This scope owns:
   intact.
 - Retention policy is stored as a retained-instance count.
 - Remote instances must normalize and validate URLs before persistence. Their
-  optional saved `color` field uses the same bounded palette IDs as local
-  Instance color overrides. Optional saved remote Instance credentials are keyed
+  optional saved `color` and `icon` fields use the same bounded IDs as local
+  Instance appearance overrides. Optional saved remote Instance credentials are keyed
   by remote Instance id and removed when that remote Instance is deleted.
   Remote instance online/offline status is transient renderer state from a
   bounded `/api/health` probe and must not be persisted into saved remote
@@ -228,11 +228,11 @@ This scope owns:
   canonical `/a0/usr` mount. Explicit ephemeral runs should still be labeled
   with storage metadata even though they do not receive the mount. Clones must
   receive a fresh workspace rather than reusing the source workspace mount.
-- Per-container start/stop/delete/clone/rename/color actions from the Instances
-  card menu still belong in this product layer. Container mutations must target
+- Per-container start/stop/delete/clone/rename/appearance actions from the
+  Instances card menu still belong in this product layer. Container mutations must target
   the requested container id, return an operation id, refresh state afterward,
   and keep storage-volume deletion separate from container deletion. Rename and
-  color selection are fast launcher metadata updates and may return
+  Colour/Icon selection are fast launcher metadata updates and may return
   synchronously.
 - Local instance card start/stop/delete actions run through an in-memory
   per-container background queue and do not occupy the global Docker Manager

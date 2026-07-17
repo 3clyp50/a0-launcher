@@ -16,8 +16,10 @@
   <section class="dm-instance-tabs dm-detached-instance-tabs has-tabs" aria-label="Detached Instance UI">
     <div class="dm-instance-tab-strip">
       <div class="dm-instance-tab active" role="tab" aria-selected="true">
+        <button id="detachedInstanceIcon" class="dm-instance-tab-icon" type="button" aria-label="Change Instance Colour/Icon" title="Change Instance Colour/Icon">
+          <span class="material-symbols-outlined" aria-hidden="true">language</span>
+        </button>
         <span class="dm-instance-tab-select" aria-hidden="true">
-          <span class="material-symbols-outlined">language</span>
           <span class="dm-instance-tab-copy">
             <span id="detachedInstanceName" class="dm-instance-tab-title">Agent Zero</span>
           </span>
@@ -27,8 +29,8 @@
         </button>
       </div>
       <div class="dm-instance-tab-controls">
-        <button id="detachedCollapse" class="button icon-button dm-icon-button" type="button" aria-label="Collapse Instance name" title="Collapse Instance name">
-          <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+        <button id="detachedCollapse" class="button icon-button dm-icon-button" type="button" aria-label="Hide tab name" title="Hide tab name">
+          <span class="material-symbols-outlined" aria-hidden="true">label_off</span>
         </button>
         <button id="detachedReload" class="button icon-button dm-icon-button" type="button" aria-label="Reload Instance UI" title="Reload">
           <span class="material-symbols-outlined" aria-hidden="true">refresh</span>

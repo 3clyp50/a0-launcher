@@ -10,6 +10,8 @@ const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const dockerManager = require('./docker_manager');
 const {
+  normalizeInstanceColor,
+  normalizeInstanceIcon,
   normalizeHttpUrl,
   instanceUiSectionUrl,
   instanceUiSectionScript,
@@ -2031,6 +2033,25 @@ function sendInstanceTabsEvent() {
   }
 }
 
+function updateOpenInstanceAppearance(kind, id, appearance = {}) {
+  const cleanKind = kind === 'remote' ? 'remote' : 'local';
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return;
+  const color = normalizeInstanceColor(appearance?.color);
+  const icon = normalizeInstanceIcon(appearance?.icon);
+  let changed = false;
+  for (const tab of instanceTabs.values()) {
+    const matches = cleanKind === 'remote'
+      ? tab.kind === 'remote' && tab.instanceId === cleanId
+      : tab.kind !== 'remote' && tab.containerId === cleanId;
+    if (!matches) continue;
+    tab.color = color;
+    tab.icon = icon;
+    changed = true;
+  }
+  if (changed) sendInstanceTabsEvent();
+}
+
 function nextInstanceTabId() {
   instanceTabSeq += 1;
   return `instance-tab-${instanceTabSeq}`;
@@ -2074,7 +2095,8 @@ function hideInstanceTabView(tab) {
 
 function applyActiveInstanceTabBounds() {
   for (const tab of instanceTabs.values()) {
-    if (tab.detached || tab.id !== activeInstanceTabId || !instanceTabBounds) {
+    if (tab.detached) continue;
+    if (tab.id !== activeInstanceTabId || !instanceTabBounds) {
       hideInstanceTabView(tab);
       continue;
     }
@@ -2177,6 +2199,8 @@ async function resolveInstanceUiTarget(body) {
       instanceId: typeof remote?.id === 'string' && remote.id ? remote.id : instanceId,
       containerId: '',
       title,
+      color: normalizeInstanceColor(remote?.color),
+      icon: normalizeInstanceIcon(remote?.icon),
       url
     };
     target.key = makeTabKey(target);
@@ -2202,6 +2226,8 @@ async function resolveInstanceUiTarget(body) {
       containerId,
       section,
       title: sanitizeInstanceTabTitle(request.title, 'Agent Zero'),
+      color: normalizeInstanceColor(request.color),
+      icon: normalizeInstanceIcon(request.icon),
       url
     };
     target.key = makeTabKey(target);
@@ -2388,6 +2414,8 @@ async function openInstanceTab(target) {
     const detachedWindow = existing.detachedWindow;
     if (detachedWindow && !detachedWindow.isDestroyed()) {
       existing.title = target.title || existing.title;
+      existing.color = normalizeInstanceColor(target.color);
+      existing.icon = normalizeInstanceIcon(target.icon);
       existing.gatewayHost = gatewayHostUrl(target.url) || existing.gatewayHost || '';
       detachedWindow.setTitle(existing.title);
       detachedWindow.show();
@@ -2404,6 +2432,8 @@ async function openInstanceTab(target) {
     existing.titleLocked = Boolean(target.title) || existing.titleLocked;
     existing.containerId = target.containerId || existing.containerId || '';
     existing.instanceId = target.instanceId || existing.instanceId || '';
+    existing.color = normalizeInstanceColor(target.color);
+    existing.icon = normalizeInstanceIcon(target.icon);
     existing.gatewayHost = gatewayHostUrl(target.url) || existing.gatewayHost || '';
     const nextUrl = normalizeHttpUrl(target.url);
     const didLogin = await loginInstanceWebUiSession(target, existing.view?.webContents);
@@ -2442,6 +2472,8 @@ async function openInstanceTab(target) {
     url: target.url,
     containerId: target.containerId || '',
     instanceId: target.instanceId || '',
+    color: normalizeInstanceColor(target.color),
+    icon: normalizeInstanceIcon(target.icon),
     gatewayHost: gatewayHostUrl(target.url),
     loading: true,
     canReload: true,
@@ -3543,12 +3575,7 @@ function sanitizeDockerManagerState(state) {
   const allowedCategory = new Set(['official_release', 'local_build']);
   const allowedAvailability = new Set(['available', 'installed', 'update_available', 'installing', 'error']);
   const allowedInstallability = new Set(['unknown', 'installable', 'not_yet_available']);
-  const allowedInstanceColors = new Set(['blue', 'green', 'rose', 'amber', 'violet', 'cyan', 'coral']);
   const allowedRemoteHealthStatuses = new Set(['checking', 'online', 'offline']);
-  const cleanInstanceColor = (value) => {
-    const color = typeof value === 'string' ? value.trim().toLowerCase() : '';
-    return allowedInstanceColors.has(color) ? color : '';
-  };
   const cleanMatchedReleaseTag = (value) => {
     const tag = typeof value === 'string' ? value.trim() : '';
     return dockerManager.isSemverReleaseTag(tag) ? tag : '';
@@ -3692,8 +3719,12 @@ function sanitizeDockerManagerState(state) {
     const out = { containerId, containerName };
     if (typeof c.instanceName === 'string' || c.instanceName === null) out.instanceName = c.instanceName || null;
     {
-      const instanceColor = cleanInstanceColor(c.instanceColor);
+      const instanceColor = normalizeInstanceColor(c.instanceColor);
       if (instanceColor) out.instanceColor = instanceColor;
+    }
+    {
+      const instanceIcon = normalizeInstanceIcon(c.instanceIcon);
+      if (instanceIcon) out.instanceIcon = instanceIcon;
     }
     if (typeof c.imageRef === 'string') out.imageRef = c.imageRef;
     if (typeof c.isBackendImage === 'boolean') out.isBackendImage = c.isBackendImage;
@@ -3780,8 +3811,10 @@ function sanitizeDockerManagerState(state) {
     const url = typeof r.url === 'string' ? r.url : '';
     if (!id || !name || !isAllowedHttpUrl(url)) continue;
     const out = { id, name, url };
-    const color = cleanInstanceColor(r.color);
+    const color = normalizeInstanceColor(r.color);
     if (color) out.color = color;
+    const icon = normalizeInstanceIcon(r.icon);
+    if (icon) out.icon = icon;
     if (typeof r.createdAt === 'string') out.createdAt = r.createdAt;
     if (typeof r.updatedAt === 'string') out.updatedAt = r.updatedAt;
     if (isPlainObject(r.launcherCredentials) && r.launcherCredentials.saved === true) {
@@ -4448,12 +4481,15 @@ ipcMain.handle('docker-manager:renameRemoteInstance', async (_event, body) => {
   }
 });
 
-ipcMain.handle('docker-manager:setRemoteInstanceColor', async (_event, body) => {
+ipcMain.handle('docker-manager:setRemoteInstanceAppearance', async (_event, body) => {
   try {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     const id = typeof body.id === 'string' ? body.id : '';
-    const color = typeof body.color === 'string' ? body.color : '';
-    const saved = await dockerManager.setRemoteInstanceColor(id, color);
+    const appearance = {};
+    if (typeof body.color === 'string') appearance.color = body.color;
+    if (typeof body.icon === 'string') appearance.icon = body.icon;
+    const saved = await dockerManager.setRemoteInstanceAppearance(id, appearance);
+    updateOpenInstanceAppearance('remote', id, saved);
     const sanitized = sanitizeDockerManagerState({ remoteInstances: [saved] }).remoteInstances?.[0];
     return sanitized || dockerManager.toErrorResponse({ code: 'INVALID_REMOTE_INSTANCE', message: 'Invalid remote instance' });
   } catch (error) {
@@ -4472,12 +4508,16 @@ ipcMain.handle('docker-manager:renameLocalInstance', async (_event, body) => {
   }
 });
 
-ipcMain.handle('docker-manager:setLocalInstanceColor', async (_event, body) => {
+ipcMain.handle('docker-manager:setLocalInstanceAppearance', async (_event, body) => {
   try {
     if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
     const containerId = typeof body.containerId === 'string' ? body.containerId : '';
-    const color = typeof body.color === 'string' ? body.color : '';
-    return await dockerManager.setLocalInstanceColor(containerId, color);
+    const appearance = {};
+    if (typeof body.color === 'string') appearance.color = body.color;
+    if (typeof body.icon === 'string') appearance.icon = body.icon;
+    const saved = await dockerManager.setLocalInstanceAppearance(containerId, appearance);
+    updateOpenInstanceAppearance('local', containerId, saved);
+    return saved;
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

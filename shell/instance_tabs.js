@@ -1,3 +1,28 @@
+const INSTANCE_COLOR_IDS = new Set(['blue', 'green', 'rose', 'amber', 'violet', 'cyan', 'coral']);
+const INSTANCE_ICON_IDS = new Set([
+  'smart_toy',
+  'psychology',
+  'terminal',
+  'rocket_launch',
+  'hub',
+  'science',
+  'code',
+  'memory',
+  'explore',
+  'bolt',
+  'shield'
+]);
+
+function normalizeInstanceColor(value) {
+  const id = String(value || '').trim().toLowerCase();
+  return INSTANCE_COLOR_IDS.has(id) ? id : '';
+}
+
+function normalizeInstanceIcon(value) {
+  const id = String(value || '').trim().toLowerCase();
+  return INSTANCE_ICON_IDS.has(id) ? id : '';
+}
+
 function parseHttpUrl(value) {
   if (typeof value !== 'string') {
     return null;
@@ -261,6 +286,8 @@ function makeTabsSnapshot(tabs, activeTabId) {
         active: safeTab.id === activeTabId,
         loading: Boolean(safeTab.loading),
         canReload: Boolean(safeTab.canReload),
+        color: normalizeInstanceColor(safeTab.color),
+        icon: normalizeInstanceIcon(safeTab.icon),
         ...(safeTab.detached === true ? { detached: true } : {}),
         hostAccess: safeTab.hostAccess && typeof safeTab.hostAccess === 'object'
           ? safeTab.hostAccess
@@ -319,6 +346,8 @@ function detachedInstanceContentBounds(bounds, visible = true) {
 }
 
 module.exports = {
+  normalizeInstanceColor,
+  normalizeInstanceIcon,
   normalizeHttpUrl,
   instanceUiSectionUrl,
   instanceUiSectionScript,

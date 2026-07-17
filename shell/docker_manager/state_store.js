@@ -108,10 +108,16 @@ const DEFAULT_STORAGE_PREFERENCES = Object.freeze({
 const MAX_REMOTE_INSTANCES = 64;
 const MAX_LOCAL_INSTANCE_NAMES = 256;
 const MAX_LOCAL_INSTANCE_COLORS = 256;
+const MAX_LOCAL_INSTANCE_ICONS = 256;
 const MAX_LOCAL_INSTANCE_CREDENTIALS = 256;
 const MAX_REMOTE_INSTANCE_CREDENTIALS = 256;
 const INSTANCE_COLOR_IDS = Object.freeze(['blue', 'green', 'rose', 'amber', 'violet', 'cyan', 'coral']);
 const INSTANCE_COLOR_SET = new Set(INSTANCE_COLOR_IDS);
+const INSTANCE_ICON_IDS = Object.freeze([
+  'smart_toy', 'psychology', 'terminal', 'rocket_launch', 'hub',
+  'science', 'code', 'memory', 'explore', 'bolt', 'shield'
+]);
+const INSTANCE_ICON_SET = new Set(INSTANCE_ICON_IDS);
 const LOCAL_CREDENTIALS_VERSION = 1;
 
 const INSTANCE_DEFAULT_SLOT_IDS = Object.freeze(['Main', 'Utility', 'Embedding']);
@@ -484,6 +490,11 @@ function normalizeInstanceColor(value) {
   return INSTANCE_COLOR_SET.has(color) ? color : '';
 }
 
+function normalizeInstanceIcon(value) {
+  const icon = String(value || '').trim().toLowerCase();
+  return INSTANCE_ICON_SET.has(icon) ? icon : '';
+}
+
 function normalizeLocalInstanceId(value) {
   const v = String(value || '').trim();
   if (!v || v.length > 128) return '';
@@ -542,6 +553,19 @@ function normalizeLocalInstanceColors(value) {
     if (!id || !color) continue;
     out[id] = color;
     if (Object.keys(out).length >= MAX_LOCAL_INSTANCE_COLORS) break;
+  }
+  return out;
+}
+
+function normalizeLocalInstanceIcons(value) {
+  const out = {};
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  for (const [idRaw, iconRaw] of Object.entries(source)) {
+    const id = normalizeLocalInstanceId(idRaw);
+    const icon = normalizeInstanceIcon(iconRaw);
+    if (!id || !icon) continue;
+    out[id] = icon;
+    if (Object.keys(out).length >= MAX_LOCAL_INSTANCE_ICONS) break;
   }
   return out;
 }
@@ -651,6 +675,11 @@ async function readLocalInstanceColors() {
   return normalizeLocalInstanceColors(state?.localInstanceColors);
 }
 
+async function readLocalInstanceIcons() {
+  const state = await readJson(stateFile(), {});
+  return normalizeLocalInstanceIcons(state?.localInstanceIcons);
+}
+
 async function readLocalInstanceCredentialsMetadata() {
   const state = await readJson(stateFile(), {});
   const current = normalizeLocalInstanceCredentials(state?.localInstanceCredentials);
@@ -719,26 +748,46 @@ async function deleteLocalInstanceName(containerId) {
   return true;
 }
 
-async function writeLocalInstanceColor(containerId, color) {
+async function writeLocalInstanceAppearance(containerId, appearance = {}) {
   const id = normalizeLocalInstanceId(containerId);
   if (!id) throw localInstanceNameError('Invalid instance');
   const state = await readJson(stateFile(), {});
-  const current = normalizeLocalInstanceColors(state?.localInstanceColors);
-  const cleanColor = normalizeInstanceColor(color);
-  if (cleanColor) current[id] = cleanColor;
-  else delete current[id];
-  await writeJson(stateFile(), { ...state, localInstanceColors: current, updatedAt: new Date().toISOString() });
-  return { containerId: id, color: cleanColor };
+  const colors = normalizeLocalInstanceColors(state?.localInstanceColors);
+  const icons = normalizeLocalInstanceIcons(state?.localInstanceIcons);
+  if (Object.prototype.hasOwnProperty.call(appearance, 'color')) {
+    const color = normalizeInstanceColor(appearance.color);
+    if (color) colors[id] = color;
+    else delete colors[id];
+  }
+  if (Object.prototype.hasOwnProperty.call(appearance, 'icon')) {
+    const icon = normalizeInstanceIcon(appearance.icon);
+    if (icon) icons[id] = icon;
+    else delete icons[id];
+  }
+  await writeJson(stateFile(), {
+    ...state,
+    localInstanceColors: colors,
+    localInstanceIcons: icons,
+    updatedAt: new Date().toISOString()
+  });
+  return { containerId: id, color: colors[id] || '', icon: icons[id] || '' };
 }
 
-async function deleteLocalInstanceColor(containerId) {
+async function deleteLocalInstanceAppearance(containerId) {
   const id = normalizeLocalInstanceId(containerId);
   if (!id) return false;
   const state = await readJson(stateFile(), {});
-  const current = normalizeLocalInstanceColors(state?.localInstanceColors);
-  if (!Object.prototype.hasOwnProperty.call(current, id)) return false;
-  delete current[id];
-  await writeJson(stateFile(), { ...state, localInstanceColors: current, updatedAt: new Date().toISOString() });
+  const colors = normalizeLocalInstanceColors(state?.localInstanceColors);
+  const icons = normalizeLocalInstanceIcons(state?.localInstanceIcons);
+  if (!Object.prototype.hasOwnProperty.call(colors, id) && !Object.prototype.hasOwnProperty.call(icons, id)) return false;
+  delete colors[id];
+  delete icons[id];
+  await writeJson(stateFile(), {
+    ...state,
+    localInstanceColors: colors,
+    localInstanceIcons: icons,
+    updatedAt: new Date().toISOString()
+  });
   return true;
 }
 
@@ -821,6 +870,8 @@ function normalizeRemoteInstance(value, existing = null, options = {}) {
     : (typeof existing?.updatedAt === 'string' ? existing.updatedAt : createdAt);
   const hasColorInput = Object.prototype.hasOwnProperty.call(input, 'color');
   const color = normalizeInstanceColor(hasColorInput ? input.color : existing?.color);
+  const hasIconInput = Object.prototype.hasOwnProperty.call(input, 'icon');
+  const icon = normalizeInstanceIcon(hasIconInput ? input.icon : existing?.icon);
 
   const out = {
     id,
@@ -830,6 +881,7 @@ function normalizeRemoteInstance(value, existing = null, options = {}) {
     updatedAt
   };
   if (color) out.color = color;
+  if (icon) out.icon = icon;
   return out;
 }
 
@@ -944,8 +996,9 @@ module.exports = {
   writeLocalInstanceName,
   deleteLocalInstanceName,
   readLocalInstanceColors,
-  writeLocalInstanceColor,
-  deleteLocalInstanceColor,
+  readLocalInstanceIcons,
+  writeLocalInstanceAppearance,
+  deleteLocalInstanceAppearance,
   readLocalInstanceCredentialsMetadata,
   readLocalInstanceCredentials,
   writeLocalInstanceCredentials,

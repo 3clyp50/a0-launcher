@@ -200,8 +200,24 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   deleteRemoteInstance: (id) => ipcRenderer.invoke('docker-manager:deleteRemoteInstance', { id }),
   renameRemoteInstance: (id, name) => ipcRenderer.invoke('docker-manager:renameRemoteInstance', { id, name }),
   renameLocalInstance: (containerId, name) => ipcRenderer.invoke('docker-manager:renameLocalInstance', { containerId, name }),
-  setRemoteInstanceColor: (id, color) => ipcRenderer.invoke('docker-manager:setRemoteInstanceColor', { id, color }),
-  setLocalInstanceColor: (containerId, color) => ipcRenderer.invoke('docker-manager:setLocalInstanceColor', { containerId, color }),
+  setRemoteInstanceAppearance: (id, appearance) => {
+    const value = appearance && typeof appearance === 'object' ? appearance : {};
+    return ipcRenderer.invoke('docker-manager:setRemoteInstanceAppearance', {
+      id,
+      color: typeof value.color === 'string' ? value.color : '',
+      icon: typeof value.icon === 'string' ? value.icon : ''
+    });
+  },
+  setLocalInstanceAppearance: (containerId, appearance) => {
+    const value = appearance && typeof appearance === 'object' ? appearance : {};
+    return ipcRenderer.invoke('docker-manager:setLocalInstanceAppearance', {
+      containerId,
+      color: typeof value.color === 'string' ? value.color : '',
+      icon: typeof value.icon === 'string' ? value.icon : ''
+    });
+  },
+  setRemoteInstanceColor: (id, color) => ipcRenderer.invoke('docker-manager:setRemoteInstanceAppearance', { id, color }),
+  setLocalInstanceColor: (containerId, color) => ipcRenderer.invoke('docker-manager:setLocalInstanceAppearance', { containerId, color }),
   setLocalInstanceCredentials: (containerId, credentials) => {
     const c = credentials && typeof credentials === 'object' ? credentials : {};
     return ipcRenderer.invoke('docker-manager:setLocalInstanceCredentials', {
@@ -315,6 +331,8 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
       containerId: typeof t.containerId === 'string' ? t.containerId : '',
       instanceId: typeof t.instanceId === 'string' ? t.instanceId : '',
       title: typeof t.title === 'string' ? t.title : '',
+      color: typeof t.color === 'string' ? t.color : '',
+      icon: typeof t.icon === 'string' ? t.icon : '',
       section: typeof t.section === 'string' ? t.section : ''
     });
   },

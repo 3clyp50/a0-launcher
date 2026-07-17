@@ -92,8 +92,9 @@ This scope owns:
   bounds, but URL resolution, URL validation, web contents lifecycle, and
   detached windows stay in `shell/main.js`. Detach reparents the existing view
   below a Launcher-owned header; reattach moves that same view back without a
-  page reload. Local `Open UI` requests should wait
-  briefly for a freshly running container's HTTP UI before returning an
+  page reload. Main-window layout passes must leave detached views untouched
+  because their detached windows own those bounds. Local `Open UI` requests
+  should wait briefly for a freshly running container's HTTP UI before returning an
   unavailable error. Renderer open requests may pass a bounded Agent Zero
   section selector such as `self-update`; the shell validates the Instance URL,
   then opens only the matching known in-page Agent Zero modal or same-origin
@@ -238,12 +239,12 @@ This scope owns:
   pass a release tag, but shell code must validate the IPC body and Docker
   Manager must perform a non-forced image removal so Docker can refuse images
   still used by any container.
-- Per-instance clone, rename, and color-selection operations are named Docker
-  Manager intents. Clone may accept a bounded `/a0/usr` category selection, but
+- Per-instance clone, rename, and Colour/Icon selection operations are named
+  Docker Manager intents. Clone may accept a bounded `/a0/usr` category selection, but
   archive copy and filtering stay in `shell/docker_manager` and
-  `shell/docker_adapter`. Color selection may accept only bounded palette IDs
-  and must stay launcher metadata. Long-running container mutations report
-  progress.
+  `shell/docker_adapter`. Appearance selection may accept only bounded palette
+  and icon IDs and must stay launcher metadata. Long-running container
+  mutations report progress.
 - Per-instance deletion may remove persistent workspace storage only after an
   explicit renderer choice. Root-owned host-workspace contents must be cleaned
   through the Docker adapter, and a cleanup failure after container deletion

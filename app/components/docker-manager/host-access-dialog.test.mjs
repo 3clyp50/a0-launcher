@@ -259,7 +259,7 @@ test('Instance headers own Host access, name collapse, and detached reattach con
 
   assert.match(tabsSource, /dm-instance-tab-host/);
   assert.match(tabsSource, /hostState === "connected"/);
-  assert.match(tabsSource, /Collapse Instance names/);
+  assert.match(tabsSource, /Hide tab names/);
   assert.doesNotMatch(tabsSource, /dm-host-status-dot/);
   assert.match(dialogSource, /data-disconnect>Disconnect/);
   assert.match(dialogSource, /data-reconnect>Reconnect/);
@@ -267,6 +267,7 @@ test('Instance headers own Host access, name collapse, and detached reattach con
   assert.match(dialogSource, /hostGatewayCommand\?\.\(tab\.id, "disconnect"\)/);
   assert.match(dialogSource, /hostGatewayCommand\?\.\(tab\.id, "reconnect"\)/);
   assert.match(detachedHtml, /detachedInstanceName/);
+  assert.match(detachedHtml, /detachedInstanceIcon/);
   assert.match(detachedHtml, /detachedHostAccess/);
   assert.match(detachedHtml, /detachedReattach/);
 });

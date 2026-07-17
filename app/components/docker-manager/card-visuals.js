@@ -19,6 +19,23 @@ const INSTANCE_COLOR_OPTIONS = Object.freeze([
   { id: "coral", label: "Coral", fg: "#fda4af", bg: "rgba(159, 18, 57, 0.14)", border: "rgba(253, 164, 175, 0.22)" }
 ]);
 
+const INSTANCE_ICON_OPTIONS = Object.freeze([
+  { id: "", icon: "language", label: "Globe" },
+  { id: "smart_toy", label: "Agent" },
+  { id: "psychology", label: "Mind" },
+  { id: "terminal", label: "Terminal" },
+  { id: "rocket_launch", label: "Rocket" },
+  { id: "hub", label: "Network" },
+  { id: "science", label: "Lab" },
+  { id: "code", label: "Code" },
+  { id: "memory", label: "Memory" },
+  { id: "explore", label: "Compass" },
+  { id: "bolt", label: "Energy" },
+  { id: "shield", label: "Shield" }
+]);
+
+const INSTANCE_ICON_IDS = new Set(INSTANCE_ICON_OPTIONS.filter((item) => item.id).map((item) => item.id));
+
 const INSTANCE_COLOR_TONES = new Map(
   INSTANCE_COLOR_OPTIONS
     .filter((item) => item.id)
@@ -38,6 +55,20 @@ function hashText(value) {
 function normalizedInstanceColorId(value) {
   const id = String(value || "").trim().toLowerCase();
   return INSTANCE_COLOR_TONES.has(id) ? id : "";
+}
+
+function normalizedInstanceIconId(value) {
+  const id = String(value || "").trim().toLowerCase();
+  return INSTANCE_ICON_IDS.has(id) ? id : "";
+}
+
+function instanceIconName(value) {
+  const id = normalizedInstanceIconId(value);
+  return INSTANCE_ICON_OPTIONS.find((item) => item.id === id)?.icon || id || "language";
+}
+
+function instanceColorTone(value) {
+  return INSTANCE_COLOR_TONES.get(normalizedInstanceColorId(value)) || null;
 }
 
 function toneForSeed(seed, color = "") {
@@ -102,8 +133,12 @@ function createInstanceVisual(value, options = {}) {
 
 export {
   INSTANCE_COLOR_OPTIONS,
+  INSTANCE_ICON_OPTIONS,
   createInstanceVisual,
   createVersionVisual,
+  instanceColorTone,
+  instanceIconName,
   normalizedInstanceColorId,
+  normalizedInstanceIconId,
   versionVisualLabel
 };

@@ -80,7 +80,7 @@ This scope owns:
 - Running an installed Version from Versions must keep the operation modal until
   the Docker Manager reports the new Instance UI ready, then hand off to the
   Instances tab so the created Instance is visible.
-- A0 CLI launch, rename, color selection, and log inspection controls belong to
+- A0 CLI launch, rename, Colour/Icon selection, and log inspection controls belong to
   each relevant instance card. Clone belongs to local containers and may appear
   on a saved remote card only when that card points at a loopback URL backed by
   a discovered local container. Pass a local card's UI URL or a saved remote
@@ -94,9 +94,10 @@ This scope owns:
 - Local Instance Backup and Restore belong with the other card-local actions.
   They must call named renderer actions that delegate host path selection and
   container archive work to the shell and Docker Manager.
-- Per-Instance color selection is launcher identity metadata for local and saved
-  remote Instances. It should use bounded palette IDs from Docker Manager state,
-  tint only the card visual, and never imply Docker or Agent Zero runtime state.
+- Per-Instance Colour/Icon selection is launcher identity metadata for local and
+  saved remote Instances. It should use bounded palette and icon IDs from Docker
+  Manager state, tint only launcher identity visuals, and never imply Docker or
+  Agent Zero runtime state.
 - Local and saved remote Instance cards should render the same health-derived
   runtime identity, including branch and commits since the nearest release;
   image tags remain fallback provenance when no runtime identity has been seen.

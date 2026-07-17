@@ -1,4 +1,6 @@
+import { instanceColorTone, instanceIconName } from "../card-visuals.js";
 import { openHostAccessDialog } from "../host-access-dialog.js";
+import { openInstanceAppearanceDialog } from "../instance-appearance-dialog.js";
 
 const api = window.dockerManagerAPI;
 const tabId = new URLSearchParams(window.location.search).get("tabId") || "";
@@ -21,8 +23,17 @@ function render(snapshot) {
   const title = tab.title || "Agent Zero";
   const state = String(tab.hostAccess?.state || "disconnected");
   const name = document.getElementById("detachedInstanceName");
+  const icon = document.getElementById("detachedInstanceIcon");
   const host = document.getElementById("detachedHostAccess");
   if (name) name.textContent = title;
+  if (icon) {
+    icon.title = `Change ${title} Colour/Icon`;
+    icon.setAttribute("aria-label", icon.title);
+    icon.querySelector(".material-symbols-outlined").textContent = tab.loading ? "progress_activity" : instanceIconName(tab.icon);
+    icon.style.removeProperty("color");
+    const tone = instanceColorTone(tab.color);
+    if (tone && !tab.loading) icon.style.color = tone.fg;
+  }
   if (host) {
     host.classList.toggle("connected", state === "connected");
     host.title = hostStatusLabel(state);
@@ -45,6 +56,14 @@ window.dockerManagerActions = {
     const result = await api?.hostGatewayCommand?.(id, action);
     return isError(result) ? false : result;
   },
+  async setLocalInstanceAppearance(containerId, appearance) {
+    const result = await api?.setLocalInstanceAppearance?.(containerId, appearance);
+    return isError(result) ? false : result;
+  },
+  async setRemoteInstanceAppearance(instanceId, appearance) {
+    const result = await api?.setRemoteInstanceAppearance?.(instanceId, appearance);
+    return isError(result) ? false : result;
+  },
   hideInstanceTabView: () => api?.setDetachedInstanceContentVisible?.(tabId, false),
   syncInstanceTabBounds: () => api?.setDetachedInstanceContentVisible?.(tabId, true)
 };
@@ -53,13 +72,26 @@ document.getElementById("detachedHostAccess")?.addEventListener("click", () => {
   if (tab) openHostAccessDialog(tab, window.__dmLastState || {});
 });
 
+document.getElementById("detachedInstanceIcon")?.addEventListener("click", () => {
+  if (!tab) return;
+  const title = tab.title || "Agent Zero";
+  openInstanceAppearanceDialog({
+    title: `${title} Colour/Icon`,
+    currentColor: tab.color || "",
+    currentIcon: tab.icon || "",
+    onSave: (appearance) => tab.kind === "remote"
+      ? window.dockerManagerActions.setRemoteInstanceAppearance(tab.instanceId || "", appearance)
+      : window.dockerManagerActions.setLocalInstanceAppearance(tab.containerId || "", appearance)
+  });
+});
+
 document.getElementById("detachedCollapse")?.addEventListener("click", (event) => {
   namesCollapsed = !namesCollapsed;
   document.querySelector(".dm-detached-instance-tabs")?.classList.toggle("names-collapsed", namesCollapsed);
   const button = event.currentTarget;
-  button.title = namesCollapsed ? "Show Instance name" : "Collapse Instance name";
+  button.title = namesCollapsed ? "Show tab name" : "Hide tab name";
   button.setAttribute("aria-label", button.title);
-  button.querySelector(".material-symbols-outlined").textContent = namesCollapsed ? "chevron_right" : "chevron_left";
+  button.querySelector(".material-symbols-outlined").textContent = namesCollapsed ? "label" : "label_off";
 });
 
 document.getElementById("detachedReload")?.addEventListener("click", () => api?.reloadInstanceTab?.(tabId));

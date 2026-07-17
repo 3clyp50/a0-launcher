@@ -1427,20 +1427,20 @@ async function renameLocalInstance(containerId, name) {
   }
 }
 
-async function setLocalInstanceColor(containerId, color) {
+async function setLocalInstanceAppearance(containerId, appearance = {}) {
   const api = window.dockerManagerAPI;
-  if (!api || typeof api.setLocalInstanceColor !== "function") return false;
+  if (!api || typeof api.setLocalInstanceAppearance !== "function") return false;
   try {
-    const res = await api.setLocalInstanceColor(containerId || "", color || "");
+    const res = await api.setLocalInstanceAppearance(containerId || "", appearance);
     if (isErrorResponse(res)) {
       setBanner("error", res.message);
       return false;
     }
-    setBanner("info", "Instance color saved.");
+    setBanner("info", "Instance appearance saved.");
     await refresh();
     return true;
   } catch (e) {
-    setBanner("error", e?.message || "Unable to save instance color");
+    setBanner("error", e?.message || "Unable to save Instance appearance");
     return false;
   }
 }
@@ -1744,20 +1744,20 @@ async function renameRemoteInstance(id, name) {
   }
 }
 
-async function setRemoteInstanceColor(id, color) {
+async function setRemoteInstanceAppearance(id, appearance = {}) {
   const api = window.dockerManagerAPI;
-  if (!api || typeof api.setRemoteInstanceColor !== "function") return false;
+  if (!api || typeof api.setRemoteInstanceAppearance !== "function") return false;
   try {
-    const res = await api.setRemoteInstanceColor(id || "", color || "");
+    const res = await api.setRemoteInstanceAppearance(id || "", appearance);
     if (isErrorResponse(res)) {
       setBanner("error", res.message);
       return false;
     }
-    setBanner("info", "Instance color saved.");
+    setBanner("info", "Instance appearance saved.");
     await refresh();
     return true;
   } catch (e) {
-    setBanner("error", e?.message || "Unable to save instance color");
+    setBanner("error", e?.message || "Unable to save Instance appearance");
     return false;
   }
 }
@@ -1827,7 +1827,7 @@ window.dockerManagerActions = {
   restoreLocalInstance,
   migrateLocalInstanceStorage,
   renameLocalInstance,
-  setLocalInstanceColor,
+  setLocalInstanceAppearance,
   setLocalInstanceCredentials,
   clearLocalInstanceCredentials,
   setRemoteInstanceCredentials,
@@ -1851,7 +1851,7 @@ window.dockerManagerActions = {
   addRemoteInstance,
   deleteRemoteInstance,
   renameRemoteInstance,
-  setRemoteInstanceColor,
+  setRemoteInstanceAppearance,
   openRemoteInstance,
   openInstanceUi,
   selectInstanceHome,

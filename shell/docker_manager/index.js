@@ -1850,20 +1850,23 @@ async function removeReplacedLocalImage(docker, imageRepo, tag, previousImageId)
   }
 }
 
-function applyLocalInstanceIdentity(containers, localInstanceNames, localInstanceColors, localInstanceCredentials) {
+function applyLocalInstanceIdentity(containers, localInstanceNames, localInstanceColors, localInstanceIcons, localInstanceCredentials) {
   const names = isPlainObject(localInstanceNames) ? localInstanceNames : {};
   const colors = isPlainObject(localInstanceColors) ? localInstanceColors : {};
+  const icons = isPlainObject(localInstanceIcons) ? localInstanceIcons : {};
   const credentials = isPlainObject(localInstanceCredentials) ? localInstanceCredentials : {};
   return (Array.isArray(containers) ? containers : []).map((container) => {
     const id = typeof container?.containerId === 'string' ? container.containerId : '';
     const override = id && typeof names[id] === 'string' ? names[id] : '';
     const color = id && typeof colors[id] === 'string' ? colors[id] : '';
+    const icon = id && typeof icons[id] === 'string' ? icons[id] : '';
     const credential = id && isPlainObject(credentials[id]) && credentials[id].saved ? credentials[id] : null;
-    if (!override && !color && !credential) return container;
+    if (!override && !color && !icon && !credential) return container;
     return {
       ...container,
       ...(override ? { instanceName: override } : {}),
       ...(color ? { instanceColor: color } : {}),
+      ...(icon ? { instanceIcon: icon } : {}),
       ...(credential
         ? {
             launcherCredentials: {
@@ -2199,7 +2202,7 @@ async function buildDerivedState(options = {}) {
     }
   }
 
-  const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, hostAccess, remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceCredentials, installabilityCache, releasesResult, localImages, rawContainers, freeBytes, remoteTags] =
+  const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, hostAccess, remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceIcons, localInstanceCredentials, installabilityCache, releasesResult, localImages, rawContainers, freeBytes, remoteTags] =
     await Promise.all([
       stateStore.readRetentionPolicy(),
       stateStore.readPortPreferences(),
@@ -2210,6 +2213,7 @@ async function buildDerivedState(options = {}) {
       stateStore.readRemoteInstanceCredentialsMetadata(),
       stateStore.readLocalInstanceNames(),
       stateStore.readLocalInstanceColors(),
+      stateStore.readLocalInstanceIcons(),
       stateStore.readLocalInstanceCredentialsMetadata(),
       stateStore.readInstallabilityCache(),
       releasesClient.listOfficialReleases({ githubRepo, forceRefresh }),
@@ -2222,6 +2226,7 @@ async function buildDerivedState(options = {}) {
     await enrichContainersWithWorkspaceStorage(docker, rawContainers),
     localInstanceNames,
     localInstanceColors,
+    localInstanceIcons,
     localInstanceCredentials
   ), { forceRefresh });
 
@@ -4369,14 +4374,16 @@ async function renameRemoteInstance(id, name) {
   return saved;
 }
 
-async function setRemoteInstanceColor(id, color) {
+async function setRemoteInstanceAppearance(id, appearance = {}) {
   const found = await getRemoteInstance(id);
-  const saved = await stateStore.writeRemoteInstance({
+  const next = {
     id: found.id,
     name: found.name,
-    url: found.url,
-    color
-  });
+    url: found.url
+  };
+  if (Object.prototype.hasOwnProperty.call(appearance, 'color')) next.color = appearance.color;
+  if (Object.prototype.hasOwnProperty.call(appearance, 'icon')) next.icon = appearance.icon;
+  const saved = await stateStore.writeRemoteInstance(next);
   if (_cachedState) {
     _cachedState = { ..._cachedState, remoteInstances: await remoteInstancesForState() };
     events.emit('state', _cachedState);
@@ -5286,7 +5293,7 @@ async function renameLocalInstance(containerId, name) {
   return { containerId: id, instanceName: saved.name };
 }
 
-async function setLocalInstanceColor(containerId, color) {
+async function setLocalInstanceAppearance(containerId, appearance = {}) {
   const imageRepo = getBackendImageRepo();
   const id = assertContainerId(containerId);
   const docker = await getManagedDocker(imageRepo);
@@ -5299,9 +5306,9 @@ async function setLocalInstanceColor(containerId, color) {
     throw err;
   }
 
-  const saved = await stateStore.writeLocalInstanceColor(id, color);
+  const saved = await stateStore.writeLocalInstanceAppearance(id, appearance);
   await refreshDockerManager({ forceRefresh: false }).catch(() => {});
-  return { containerId: id, color: saved.color || '' };
+  return { containerId: id, color: saved.color || '', icon: saved.icon || '' };
 }
 
 async function setLocalInstanceCredentials(containerId, credentials = {}) {
@@ -5431,7 +5438,7 @@ async function deleteRetainedInstance(containerId) {
 
       await docker.deleteContainer(id, { force: true });
       await stateStore.deleteLocalInstanceName(id).catch(() => {});
-      await stateStore.deleteLocalInstanceColor(id).catch(() => {});
+      await stateStore.deleteLocalInstanceAppearance(id).catch(() => {});
       await stateStore.deleteLocalInstanceCredentials(id).catch(() => {});
       finishOperation('completed', null);
       updateOperationProgress({ progress: 100, message: 'Deleted' });
@@ -5496,7 +5503,7 @@ async function deleteLocalInstance(containerId, options = {}) {
         await docker.removeLocalImage(cloneImageRef).catch(() => {});
       }
       await stateStore.deleteLocalInstanceName(target.containerId).catch(() => {});
-      await stateStore.deleteLocalInstanceColor(target.containerId).catch(() => {});
+      await stateStore.deleteLocalInstanceAppearance(target.containerId).catch(() => {});
       await stateStore.deleteLocalInstanceCredentials(target.containerId).catch(() => {});
       if (storageError) {
         const error = new Error('Instance deleted, but its /a0/usr folder could not be removed.');
@@ -6010,11 +6017,12 @@ async function cancelOperation(opId) {
 async function getDockerInventory() {
   const imageRepo = getBackendImageRepo();
   await ensureRuntimeIdentityCacheLoaded();
-  const [remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceCredentials, hostAccess] = await Promise.all([
+  const [remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceIcons, localInstanceCredentials, hostAccess] = await Promise.all([
     stateStore.readRemoteInstances(),
     stateStore.readRemoteInstanceCredentialsMetadata(),
     stateStore.readLocalInstanceNames(),
     stateStore.readLocalInstanceColors(),
+    stateStore.readLocalInstanceIcons(),
     stateStore.readLocalInstanceCredentialsMetadata(),
     stateStore.readHostAccessSettings()
   ]);
@@ -6044,6 +6052,7 @@ async function getDockerInventory() {
       await enrichContainersWithWorkspaceStorage(docker, Array.isArray(results[1]) ? results[1] : []),
       localInstanceNames,
       localInstanceColors,
+      localInstanceIcons,
       localInstanceCredentials
     ));
     volumes = Array.isArray(results[2]) ? results[2] : [];
@@ -6193,7 +6202,7 @@ module.exports = {
   backupLocalInstance,
   restoreLocalInstance,
   renameLocalInstance,
-  setLocalInstanceColor,
+  setLocalInstanceAppearance,
   setLocalInstanceCredentials,
   clearLocalInstanceCredentials,
   getLocalInstanceCredentials,
@@ -6212,7 +6221,7 @@ module.exports = {
   addRemoteInstance,
   deleteRemoteInstance,
   renameRemoteInstance,
-  setRemoteInstanceColor,
+  setRemoteInstanceAppearance,
   setRemoteInstanceCredentials,
   clearRemoteInstanceCredentials,
   getRemoteInstanceCredentials,

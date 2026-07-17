@@ -1687,8 +1687,50 @@ body {
   gap: 1.15rem;
 }
 
-.dm-color-dialog {
-  width: min(24rem, calc(100vw - 2rem));
+.dm-appearance-dialog {
+  width: min(31rem, calc(100vw - 2rem));
+}
+
+.dm-appearance-body,
+.dm-appearance-section {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.dm-icon-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.dm-icon-option {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  min-height: 3.9rem;
+  padding: 0.45rem 0.25rem;
+  border: 1px solid var(--dm-line-soft);
+  border-radius: var(--dm-radius-max);
+  background: var(--dm-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: "Rubik", Arial, Helvetica, sans-serif;
+  font-size: 0.72rem;
+}
+
+.dm-icon-option .material-symbols-outlined {
+  color: var(--color-text);
+  font-size: 1.35rem;
+}
+
+.dm-icon-option:hover,
+.dm-icon-option:focus-visible,
+.dm-icon-option.is-selected {
+  border-color: color-mix(in srgb, var(--color-highlight) 62%, var(--dm-line-soft));
+  background: color-mix(in srgb, var(--color-highlight) 16%, var(--dm-surface));
+  color: var(--color-text);
+  outline: none;
 }
 
 .dm-color-swatches {
@@ -2808,6 +2850,7 @@ body.dm-instance-home-active .dm-page {
   white-space: nowrap;
 }
 
+.dm-instance-tab-icon,
 .dm-instance-tab-host,
 .dm-instance-tab-close {
   display: inline-flex;
@@ -2824,11 +2867,13 @@ body.dm-instance-home-active .dm-page {
   padding: 0;
 }
 
+.dm-instance-tab-icon .material-symbols-outlined,
 .dm-instance-tab-host .material-symbols-outlined,
 .dm-instance-tab-close .material-symbols-outlined {
   font-size: 1rem;
 }
 
+.dm-instance-tab-icon:hover,
 .dm-instance-tab-host:hover,
 .dm-instance-tab-close:hover {
   background: var(--dm-surface-strong);
@@ -2845,13 +2890,17 @@ body.dm-instance-home-active .dm-page {
   max-width: none;
 }
 
-.dm-instance-tabs.names-collapsed .dm-instance-tab:not(.dm-instance-home-tab) .dm-instance-tab-copy,
+.dm-instance-tabs.names-collapsed .dm-instance-tab:not(.dm-instance-home-tab) .dm-instance-tab-select,
 .dm-instance-tabs.names-collapsed .dm-instance-tab:not(.dm-instance-home-tab) .dm-instance-tab-close {
   display: none;
 }
 
-.dm-instance-tabs.names-collapsed .dm-instance-tab:not(.dm-instance-home-tab) .dm-instance-tab-select {
-  flex: 0 0 auto;
+.dm-instance-tabs.names-collapsed .dm-instance-home-tab {
+  min-width: auto;
+}
+
+.dm-instance-tabs.names-collapsed .dm-instance-home-tab .dm-instance-tab-title {
+  display: none;
 }
 
 .dm-host-status-dot {
@@ -2917,6 +2966,7 @@ body.dm-instance-home-active .dm-page {
   max-height: min(54rem, calc(100vh - 2rem));
 }
 
+#instanceAppearanceDialog,
 #hostAccessDialog,
 .dm-host-access-onboarding {
   z-index: 4300;

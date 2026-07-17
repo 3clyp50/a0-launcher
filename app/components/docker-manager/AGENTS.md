@@ -38,10 +38,10 @@ This scope owns:
 - `official-versions/`: Version cards, activation dialog, saved
   Instance defaults, port/env overrides, data-loss acknowledgement, and
   update/switch actions.
-- `local-testing/`: local containers, per-instance action menus, rename, color
-  selection, launcher-saved credential controls for local and saved remote
-  Instances, clone/log inspection controls, remote instance CRUD, and instance
-  opening.
+- `local-testing/`: local containers, per-instance action menus, rename,
+  Colour/Icon selection, launcher-saved credential controls for local and saved
+  remote Instances, clone/log inspection controls, remote instance CRUD, and
+  instance opening.
 - `advanced/`: tabbed developer-mode custom image runner with inline Docker
   Compose composer, diagnostics, and storage-volume maintenance.
 - `settings/`: port, workspace, Host access, and saved Instance provider/model
@@ -241,10 +241,10 @@ This scope owns:
   persistence-migration entry points must warn that the source container is
   paused and resumed, and that running AI work stops and must be resumed
   manually.
-- Local and saved remote Instance cards should use the launcher-visible name and
-  saved card color as visual identity. Prefer the last valid runtime version
-  reported by Agent Zero health metadata, including branch and commits since
-  release, then fall back to matched or concrete image provenance. Keep the
+- Local and saved remote Instance cards should use the launcher-visible name,
+  saved colour, and saved tab icon as visual identity. Prefer the last valid
+  runtime version reported by Agent Zero health metadata, including branch and
+  commits since release, then fall back to matched or concrete image provenance. Keep the
   metadata compact: show runtime branch/commit first, put the URL on its own
   line, and avoid listing routine `image latest` or persistent workspace
   fragments in the primary card text.
@@ -272,9 +272,11 @@ This scope owns:
 - Renaming a local instance changes the launcher-visible display name. It must
   not rely on mutating existing Docker labels, because Docker labels are
   immutable after container creation.
-- Selecting an Instance color changes only launcher metadata and should use the
-  same bounded palette for local and saved remote cards. Do not persist raw CSS,
-  arbitrary color strings, or Docker labels for this preference.
+- Selecting an Instance Colour/Icon changes only launcher metadata and should
+  use the same bounded palette and 12-icon set for local and saved remote
+  Instances. The active tab icon opens the same picker as the card menu; compact
+  mode hides both Instance names and the Launcher label. Do not persist raw CSS,
+  arbitrary color strings, icon markup, or Docker labels for this preference.
 - Saved remote URL-only instance cards must not expose Docker mutation actions.
   Their footer status should display the Docker Manager-provided remote health
   state as `Online`, `Offline`, or `Checking`, not a generic `Remote` tag.

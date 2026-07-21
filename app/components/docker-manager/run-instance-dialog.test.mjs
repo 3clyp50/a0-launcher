@@ -22,7 +22,9 @@ test('version choices pin channels, include installed versions and hide testing'
       { id: 'v2.0', displayVersion: '2.0', availability: 'available' },
       { id: 'v1.20', displayVersion: '1.20', availability: 'available', differsFromPublished: true },
       { id: 'v1.19', displayVersion: '1.19', availability: 'installing' },
-      { id: 'testing', displayVersion: 'testing', availability: 'installed' }
+      { id: 'testing', displayVersion: 'testing', availability: 'installed' },
+      { id: 'main', displayVersion: 'main', availability: 'installed' },
+      { id: 'local', displayVersion: 'local', availability: 'installed' }
     ],
     images: [
       { tag: 'main', imageRef: 'agent0ai/agent-zero:main' },
@@ -36,11 +38,10 @@ test('version choices pin channels, include installed versions and hide testing'
     'latest',
     'ready',
     'v1.20',
-    'latest',
     'local',
     'main'
   ]);
-  assert.equal(choices[3].imageRef, 'my-agent-zero:latest');
+  assert.equal(choices.some((choice) => choice.imageRef === 'my-agent-zero:latest'), false);
 });
 
 test('channel pull defaults on for every channel choice', () => {

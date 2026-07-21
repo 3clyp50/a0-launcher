@@ -43,9 +43,9 @@ This scope owns:
   repositories and tags. Validate image names, tags, environment variables,
   port mappings, and mounts before Dockerode sees them; label created containers
   with `a0.launcher.role=developer` so the Instances tab can manage them.
-- Runtime-wide local image discovery feeds the Create local Instance picker.
-  Creating from a user image must carry its exact repository and tag into the
-  container configuration and launcher labels.
+- Runtime-wide local image discovery remains available for Advanced developer
+  controls, while normal Create local Instance choices use only Agent Zero
+  releases and local Agent Zero builds.
 - UI URLs should be derived from inspected port bindings and verified where
   practical before opening.
 - Local and saved remote Instances use the same bounded `/api/health` Git

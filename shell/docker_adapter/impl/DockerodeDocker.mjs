@@ -52,8 +52,12 @@ function hasNoneImageTag(imageRef) {
   return tagFromRef(ref) === '<none>';
 }
 
-function shouldInspectContainerImageRef(imageRef) {
-  return looksLikeDockerImageId(imageRef) || hasNoneImageTag(imageRef);
+function looksLikeAgentZeroCommand(command) {
+  return String(command || '').includes('/exe/initialize.sh');
+}
+
+function shouldInspectContainerImageRef(imageRef, command) {
+  return looksLikeDockerImageId(imageRef) || hasNoneImageTag(imageRef) || looksLikeAgentZeroCommand(command);
 }
 
 function managedContainerFromLabels(labels) {
@@ -400,6 +404,7 @@ async function inspectContainerImageMetadata(dockerode, containerId) {
     return {
       configImage: typeof inspect?.Config?.Image === 'string' ? inspect.Config.Image : '',
       imageId: typeof inspect?.Image === 'string' ? inspect.Image : '',
+      path: typeof inspect?.Path === 'string' ? inspect.Path : '',
       labels
     };
   } catch {
@@ -983,8 +988,9 @@ export class DockerodeDocker extends DockerInterface {
         let imageId = typeof c?.ImageID === 'string' && c.ImageID ? c.ImageID : null;
         let isRepoImage = imageRefMatchesRepo(image, repo);
         let isManagedContainer = managedContainerFromLabels(labels);
+        let isAgentZeroContainer = false;
 
-        if (shouldInspectContainerImageRef(image)) {
+        if (shouldInspectContainerImageRef(image, c?.Command)) {
           const inspected = await inspectContainerImageMetadata(this.docker, c?.Id || '');
           if (inspected?.labels) labels = { ...inspected.labels, ...labels };
           if (!imageId && inspected?.imageId) imageId = inspected.imageId;
@@ -994,9 +1000,10 @@ export class DockerodeDocker extends DockerInterface {
           }
           isRepoImage = imageRefMatchesRepo(image, repo);
           isManagedContainer = managedContainerFromLabels(labels);
+          isAgentZeroContainer = inspected?.path === '/exe/initialize.sh';
         }
 
-        if (!isRepoImage && !isManagedContainer) continue;
+        if (!isRepoImage && !isManagedContainer && !isAgentZeroContainer) continue;
 
         const uiPort = bestUiPortFromList(ports);
         const tag = isRepoImage

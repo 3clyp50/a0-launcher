@@ -1019,15 +1019,11 @@ function stateHasInstalledTag(state = {}, targetTag = "") {
   if (!tag) return false;
 
   const versions = Array.isArray(state?.versions) ? state.versions : [];
-  if (versions.some((version) => {
+  return versions.some((version) => {
     if (version?.id !== tag) return false;
     if (version?.isActive === true) return true;
     return ["installed", "update_available"].includes(version?.availability);
-  })) {
-    return true;
-  }
-
-  return Array.isArray(state?.images) && state.images.some((image) => image?.tag === tag);
+  });
 }
 
 async function setInstanceDefaults(instanceDefaults, options = {}) {

@@ -63,8 +63,9 @@ This scope owns:
   continue if an Instance already exists.
 - First Instance launch settings belong in the normal Create local Instance
   dialog, including model, storage, port, environment, and credential options.
-  Its image picker may include any tagged image from the active Docker runtime
-  and must submit the exact repository and tag selected by the user.
+  Its image picker lists only Agent Zero releases and local Agent Zero builds.
+  Arbitrary Docker images remain available only through Advanced developer
+  controls.
   The first Agent Zero image pull operation modal should stay focused on
   progress and setup showcase content instead of adding a second launch form.
 - Long-running non-runtime Docker operations should use the same centered modal

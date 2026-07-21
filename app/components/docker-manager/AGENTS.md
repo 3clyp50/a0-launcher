@@ -199,9 +199,10 @@ This scope owns:
   renderer-inferred runtime guesses.
 - The Instances tab owns both local Docker containers and saved remote
   instances. Visible copy must say `Instances`, not `Sessions`.
-  Runtime-wide tagged images, including images created in Docker Desktop or
-  another selected Docker runtime, may be chosen by their full repository and
-  tag; that identity must remain visible on the resulting Instance card.
+  Normal Create local Instance choices list only Agent Zero releases and local
+  Agent Zero builds. Arbitrary Docker images stay in Advanced developer
+  controls; Compose-created Agent Zero containers are still detected from their
+  `/exe/initialize.sh` entrypoint and retain their container identity on cards.
   When the first inventory has loaded and there are no local or saved remote
   Instances, show a centered Create local Instance action that opens the normal
   creation dialog.

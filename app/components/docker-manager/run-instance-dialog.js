@@ -133,12 +133,6 @@ function normalizeDate(value) {
   return Number.isFinite(t) ? t : null;
 }
 
-function tagFromImageRef(value) {
-  const raw = String(value || "").trim();
-  if (!raw || !raw.includes(":")) return "";
-  return raw.slice(raw.lastIndexOf(":") + 1);
-}
-
 function isLatestEntry(entry) {
   return entry?.isBackendImage !== false && entry?.tag === "latest";
 }
@@ -243,22 +237,6 @@ function installedVersionChoices(state = {}) {
       publishedReleaseTag: version?.publishedReleaseTag || "",
       publishedAt: version?.publishedAt || null,
       updatedAt: version?.updatedAt || null
-    });
-  }
-
-  const images = Array.isArray(state?.images) ? state.images : [];
-  for (const image of images) {
-    const tag = String(image?.tag || tagFromImageRef(image?.imageRef) || "").trim();
-    addChoice({
-      tag,
-      title: image?.isBackendImage === false ? image?.imageRef || tag : tag || image?.imageRef || "",
-      availability: "installed",
-      category: image?.category || "local_build",
-      isActive: !!image?.isActive,
-      imageRef: image?.imageRef || "",
-      imageRepo: image?.imageRepo || "",
-      isBackendImage: image?.isBackendImage !== false,
-      createdAt: image?.createdAt || null
     });
   }
 

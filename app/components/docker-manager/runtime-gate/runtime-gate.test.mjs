@@ -2,10 +2,22 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  hasInstalledAgentZeroImage,
+  installedTagOptions,
   normalizedRuntimeGate,
   renderRuntimeGate,
   shouldShowRuntimeGate
 } from './runtime-gate.js';
+
+test('runtime setup ignores unrelated Docker images', () => {
+  const state = {
+    versions: [{ id: 'latest', availability: 'installed' }],
+    images: [{ imageRef: 'rhysd/actionlint:latest', tag: 'latest', isBackendImage: false }]
+  };
+
+  assert.equal(hasInstalledAgentZeroImage({ versions: [], images: state.images }), false);
+  assert.deepEqual(installedTagOptions(state).map((option) => option.value), ['latest']);
+});
 
 class MiniEvent {
   constructor(type, options = {}) {

@@ -121,8 +121,9 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
 - `A0_LAUNCHER_USE_LOCAL_CONTENT=true` can use the current working directory as
   local content when it contains `app/index.html` and `package.json`.
 - Docker images default to `agent0ai/agent-zero`.
-- Tagged user images discovered in the selected Docker runtime may also create
-  local Instances; retain their exact repository and tag as Instance identity.
+- Normal Create local Instance pickers list only Agent Zero releases and local
+  Agent Zero builds. Arbitrary Docker images belong to the Advanced developer
+  flow and must not appear as normal versions or setup choices.
 - Local and saved remote Instance cards derive their running code identity from
   Agent Zero's `/api/health` Git metadata. Cache the last valid identity by
   Instance ID so stopped or temporarily offline Instances keep their last-seen

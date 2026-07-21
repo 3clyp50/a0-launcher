@@ -178,6 +178,40 @@ test('listContainers includes legacy Agent Zero install-script containers by lab
   assert.equal(container.labels['ai.agent0.managed'], 'true');
 });
 
+test('listContainers recognizes Compose Agent Zero containers by their entrypoint', async () => {
+  const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
+  docker.docker = {
+    listContainers: async () => [{
+      Id: 'compose-container-id',
+      Image: 'custom/agent-zero:latest',
+      Names: ['/agent-zero'],
+      Labels: {},
+      Command: '"/exe/initialize.sh $BRANCH"',
+      State: 'running',
+      Status: 'Up 2 minutes',
+      Created: 1781760000,
+      Ports: [{ PrivatePort: 80, PublicPort: 32081, Type: 'tcp', IP: '0.0.0.0' }]
+    }],
+    getContainer: (containerId) => {
+      assert.equal(containerId, 'compose-container-id');
+      return {
+        inspect: async () => ({
+          Image: 'sha256:compose',
+          Path: '/exe/initialize.sh',
+          Config: { Image: 'custom/agent-zero:latest', Labels: {} }
+        })
+      };
+    }
+  };
+
+  const [container] = await docker.listContainers('agent0ai/agent-zero');
+
+  assert.equal(container.containerId, 'compose-container-id');
+  assert.equal(container.imageRef, 'custom/agent-zero:latest');
+  assert.equal(container.isBackendImage, false);
+  assert.equal(container.uiUrl, 'http://127.0.0.1:32081/');
+});
+
 test('listLocalImages can discover tagged images from every local repository', async () => {
   const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
   docker.docker = {

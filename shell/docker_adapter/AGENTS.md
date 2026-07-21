@@ -175,6 +175,9 @@ This scope owns:
   removal must be an explicit option.
 - Local image inventory may be repository-scoped or runtime-wide. Runtime-wide
   discovery must preserve every tagged image's full repository and tag.
+- Container inventory should include backend, launcher-managed, and
+  Compose-created Agent Zero containers identified by their inspected
+  `/exe/initialize.sh` entrypoint; never infer Agent Zero from a container name.
 - Container commit support is a low-level snapshot primitive for product-layer
   clone workflows. Keep clone naming, labels, and port-policy decisions in
   `shell/docker_manager`.

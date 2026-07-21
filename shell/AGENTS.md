@@ -217,9 +217,8 @@ This scope owns:
   pass image, tag, environment, port, mount, and pull preferences, but shell code
   must keep validation and Docker execution behind `shell/docker_manager`; do not
   add generic shell or Docker command IPC.
-- Create local Instance may select any tagged image discovered in the active
-  Docker runtime. Preserve and validate the full image reference through IPC so
-  same-tag images from different repositories cannot collapse together.
+- Create local Instance may select only Agent Zero releases and local Agent Zero
+  builds. Arbitrary Docker image execution remains an Advanced developer intent.
 - Docker CLI discovery for that sign-in flow should honor explicit
   `A0_DOCKER_CLI_PATH` or `DOCKER_CLI_PATH` overrides, then `PATH`, then known
   Docker Desktop, Homebrew, Linux package, and Snap locations before failing.

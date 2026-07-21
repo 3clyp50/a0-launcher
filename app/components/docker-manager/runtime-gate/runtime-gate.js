@@ -222,21 +222,13 @@ function installedTagOptions(state = {}) {
   const out = [];
   const seen = new Set();
   const versions = Array.isArray(state?.versions) ? state.versions : [];
-  const images = Array.isArray(state?.images) ? state.images : [];
-  const hasInstalledImage = images.some((image) => asText(image?.tag) || asText(image?.imageRef));
   const hasInstalledVersion = versions.some((version) => versionIsInstalled(version));
 
-  if (hasInstalledImage || hasInstalledVersion) addSetupOption(out, seen, "latest", "latest");
+  if (hasInstalledVersion) addSetupOption(out, seen, "latest", "latest");
 
   for (const version of versions) {
     const tag = asText(version?.id);
     if (!tag || tag === "testing" || !versionIsInstalled(version)) continue;
-    addSetupOption(out, seen, tag, tag);
-  }
-
-  for (const image of images) {
-    const tag = asText(image?.tag) || asText(image?.imageRef);
-    if (!tag || tag === "testing" || tag.endsWith(":testing")) continue;
     addSetupOption(out, seen, tag, tag);
   }
 
@@ -245,9 +237,7 @@ function installedTagOptions(state = {}) {
 
 function hasInstalledAgentZeroImage(state = {}) {
   const versions = Array.isArray(state?.versions) ? state.versions : [];
-  const images = Array.isArray(state?.images) ? state.images : [];
-  return versions.some((version) => versionIsInstalled(version)) ||
-    images.some((image) => asText(image?.tag) || asText(image?.imageRef));
+  return versions.some((version) => versionIsInstalled(version));
 }
 
 function hasLocalInstances(state = {}) {
@@ -848,6 +838,8 @@ export {
   RUNTIME_STEPS,
   actionForRuntime,
   isRuntimeReady,
+  installedTagOptions,
+  hasInstalledAgentZeroImage,
   normalizedRuntimeGate,
   renderRuntimeGate,
   shouldShowRuntimeGate,

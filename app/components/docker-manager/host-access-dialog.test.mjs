@@ -7,6 +7,7 @@ const {
   bindScopeDependency,
   browserSetupAvailable,
   browserSetupHint,
+  browserSupportDetail,
   browserSupportMessage,
   capabilityReadinessLabel,
   capabilityStatusLabel,
@@ -293,6 +294,26 @@ test('Missing host Playwright becomes a Launcher repair action', () => {
   assert.equal(browserSetupAvailable({ can_prepare: false, can_repair: true }), true);
   assert.equal(browserSetupAvailable({ can_prepare: false, support_reason: legacy.support_reason }), true);
   assert.equal(browserSetupAvailable({ can_prepare: false }), false);
+});
+
+test('Browser diagnostics stay hidden while Use my Browser is off', () => {
+  const browser = {
+    status: 'unsupported',
+    support_reason: 'No installed Chromium-family browser profile was detected.'
+  };
+  const disabledConfig = {
+    configured: true,
+    masterEnabled: true,
+    scopes: { browser: false, computer_use: false }
+  };
+
+  assert.equal(browserSupportDetail(false, browser), '');
+  assert.equal(browserSupportDetail(true, browser), browser.support_reason);
+  assert.equal(hostAccessActionMessage(disabledConfig, {
+    state: 'needs_action',
+    message: browser.support_reason,
+    gateway: { status: { browser } }
+  }), '');
 });
 
 test('Browser setup explains how to enable remote debugging when no endpoint is open', () => {

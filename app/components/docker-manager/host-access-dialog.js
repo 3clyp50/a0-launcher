@@ -290,6 +290,16 @@ function browserSupportMessage(browser = {}) {
   return message;
 }
 
+function browserSupportDetail(allowed, browser = {}) {
+  if (!allowed) return "";
+  return browserSupportMessage(browser)
+    || capabilityStatusLabel(browser?.status, "We'll look for a supported browser when you connect.");
+}
+
+function browserRelatedMessage(value) {
+  return /\b(browser|chromium|chrome|playwright|edge|brave|opera|vivaldi)\b/i.test(String(value || ""));
+}
+
 function hostAccessActionMessage(config = {}, runtime = {}) {
   const gateway = runtime?.gateway || {};
   const browser = gateway?.status?.browser || {};
@@ -298,6 +308,8 @@ function hostAccessActionMessage(config = {}, runtime = {}) {
   const browserAllowed = configured && config.scopes?.browser === true;
   const computerSetup = computerUseSetupState(config, runtime);
   const messages = [];
+  const runtimeMessage = String(runtime?.message || "").trim();
+  const ignoredDisabledBrowserMessage = !browserAllowed && browserRelatedMessage(runtimeMessage);
   const add = (value) => {
     const raw = String(value || "").trim();
     const message = browserSupportNeedsRepair({ message: raw })
@@ -306,7 +318,7 @@ function hostAccessActionMessage(config = {}, runtime = {}) {
     if (message && !messages.includes(message)) messages.push(message);
   };
 
-  add(runtime?.message);
+  if (!ignoredDisabledBrowserMessage) add(runtimeMessage);
   const browserStatus = normalizeCapabilityStatus(browser?.status);
   if (
     browserAllowed &&
@@ -323,7 +335,9 @@ function hostAccessActionMessage(config = {}, runtime = {}) {
     if (computerSetup.setupState === "checking") add("Checking macOS permissions…");
     if (!messages.length && state === "needs_action") add("Finish Computer Use setup below.");
   }
-  if (!messages.length && state === "needs_action") add("Finish the required Host access setup below.");
+  if (!messages.length && state === "needs_action" && !ignoredDisabledBrowserMessage) {
+    add("Finish the required Host access setup below.");
+  }
   if (!messages.length && state === "error") add("Host access could not connect. Retry to check again.");
   return messages.join(" ");
 }
@@ -394,6 +408,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   let computerSetup = computerUseSetupState(config, runtime);
   const actionMessage = hostAccessActionMessage(config, runtime);
   const browserReadiness = capabilityReadinessLabel(browserAllowed, browser);
+  const browserDetail = browserSupportDetail(browserAllowed, browser);
   const canArmComputer = !computerSetup.setupSupported && computerUseNeedsArm(computer.status);
   const connectionLabel = disconnectedWithoutTab && configured ? "Ready to connect" : statusLabel(stateName);
   const connectionDetail = disconnectedWithoutTab
@@ -455,7 +470,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
             <div class="dm-field">
               <label for="hostAccessBrowser">Browser to use</label>
               <select id="hostAccessBrowser" class="dm-select" data-host-config-control>${browserOptions(browser, config.browserSelection)}</select>
-              <div class="dm-field-hint" data-browser-support-message>${escapeHtml(browserSupportMessage(browser) || capabilityStatusLabel(browser.status, "We'll look for a supported browser when you connect."))}</div>
+              <div class="dm-field-hint" data-browser-support-message${browserDetail ? "" : " hidden"}>${escapeHtml(browserDetail)}</div>
             </div>
             <div class="dm-host-access-diagnostics">
               <div><span>Connection</span><strong>${escapeHtml(compatibility)}</strong></div>
@@ -485,6 +500,26 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     configuredSelector: "#hostAccessConfigured"
   });
   const configuredInput = dialog.querySelector("#hostAccessConfigured");
+  const browserInput = dialog.querySelector('[data-host-scope="browser"]');
+  const browserLabel = dialog.querySelector("[data-browser-readiness]");
+  const browserSupport = dialog.querySelector("[data-browser-support-message]");
+  const browserSetupButton = dialog.querySelector("[data-prepare-browser]");
+  const browserAllowedInForm = () => configuredInput?.checked === true && browserInput?.checked === true;
+  const syncBrowserPresentation = () => {
+    const allowed = browserAllowedInForm();
+    const detail = browserSupportDetail(allowed, browser);
+    if (browserLabel) browserLabel.textContent = capabilityReadinessLabel(allowed, browser);
+    if (browserSupport) {
+      browserSupport.textContent = detail;
+      browserSupport.hidden = !detail;
+    }
+    if (browserSetupButton) {
+      browserSetupButton.hidden = !(allowed && browserSetupAvailable(browser));
+    }
+  };
+  configuredInput?.addEventListener("change", syncBrowserPresentation);
+  browserInput?.addEventListener("change", syncBrowserPresentation);
+  syncBrowserPresentation();
   if (disconnectedWithoutTab) {
     const syncConnectionCopy = () => {
       const enabled = configuredInput?.checked === true;
@@ -573,15 +608,11 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     const nextGateway = nextRuntime.gateway || {};
     const nextBrowser = nextGateway.status?.browser || {};
     browser = nextBrowser;
-    const nextConfigured = nextConfig.configured === true && nextConfig.masterEnabled !== false;
     const nextComputerSetup = computerUseSetupState(nextConfig, nextRuntime);
     computerSetup = nextComputerSetup;
     const nextActionMessage = hostAccessActionMessage(nextConfig, nextRuntime);
     const nextStateName = String(nextRuntime.state || "disconnected");
     const computerLabel = dialog.querySelector("[data-computer-use-readiness]");
-    const browserLabel = dialog.querySelector("[data-browser-readiness]");
-    const browserSupport = dialog.querySelector("[data-browser-support-message]");
-    const browserSetupButton = dialog.querySelector("[data-prepare-browser]");
     const connectionLabelElement = dialog.querySelector("[data-host-connection-label]");
     const connectionDetailElement = dialog.querySelector("[data-host-connection-detail]");
     const statusDot = dialog.querySelector(".dm-host-status-dot");
@@ -594,19 +625,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
       connectionDetailElement.textContent = nextRuntime.hostLabel || nextGateway.host_label || "This computer";
     }
     if (statusDot) statusDot.className = `dm-host-status-dot ${nextStateName}`;
-    if (browserLabel) {
-      browserLabel.textContent = capabilityReadinessLabel(
-        nextConfigured && nextConfig.scopes?.browser === true,
-        nextBrowser
-      );
-    }
-    if (browserSupport) {
-      browserSupport.textContent = browserSupportMessage(nextBrowser)
-        || capabilityStatusLabel(nextBrowser.status, "We'll look for a supported browser when you connect.");
-    }
-    if (browserSetupButton) {
-      browserSetupButton.hidden = !(nextConfigured && nextConfig.scopes?.browser === true && browserSetupAvailable(nextBrowser));
-    }
+    syncBrowserPresentation();
     if (notice) {
       notice.textContent = nextActionMessage;
       notice.hidden = !nextActionMessage;
@@ -628,6 +647,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
 
 export {
   browserSetupAvailable,
+  browserSupportDetail,
   browserSupportMessage,
   configForTarget,
   capabilityStatusLabel,

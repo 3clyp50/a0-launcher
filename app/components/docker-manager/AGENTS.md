@@ -363,11 +363,14 @@ This scope owns:
   a modal that is already opened from the owning Instance tab. A missing host
   Browser dependency must become a concise `Set up browser` repair action; do
   not hide that action merely because no Chromium-family profile is currently
-  detected, and do not send Launcher users to an A0 CLI slash command. Render a
-  saved capability choice independently from runtime readiness as `Not allowed`,
-  `Allowed · Setup needed`, `Allowed · Checking`, or `Allowed · Ready`; runtime
-  metadata must never turn an allowed switch off. When Computer Use is newly
-  enabled on macOS, open the staged setup surface after the gateway connects.
+  detected, and do not send Launcher users to an A0 CLI slash command. Hide
+  Browser support diagnostics and repair actions while the current modal choice
+  does not allow `Use my Browser`; retained runtime metadata must not imply that
+  Browser is required. Render a saved capability choice independently from
+  runtime readiness as `Not allowed`, `Allowed · Setup needed`, `Allowed ·
+  Checking`, or `Allowed · Ready`; runtime metadata must never turn an allowed
+  switch off. When Computer Use is newly enabled on macOS, open the staged
+  setup surface after the gateway connects.
   Later launches preflight silently, with one explicit retry or restart action
   when required. Name the pending macOS service on that action (`Open
   Accessibility Settings`, `Allow Screen Recording`, or `Check Computer Use`)

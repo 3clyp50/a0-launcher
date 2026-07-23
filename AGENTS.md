@@ -82,9 +82,12 @@ Architecture contracts:
 - A0 CLI v2.6 is the first connector release expected to advertise
   `computer_use_setup_v1`. Capability-gate the correlated Computer Use setup
   command separately from the base gateway contract. On macOS, a newly enabled
-  Computer Use choice may prompt once through the staged setup flow; later
-  launches preflight silently and keep the saved choice enabled when runtime
-  permission setup needs attention.
+  Computer Use choice may prompt once through the staged setup flow. Electron
+  owns the Accessibility prompt so TCC grants the packaged Launcher or the
+  Electron dev build that actually launched the helper; the connector continues
+  Screen Recording and runtime validation afterward. Later launches preflight
+  silently and keep the saved choice enabled when runtime permission setup needs
+  attention.
 - A successful manual login in an eligible Instance tab may offer one branded,
   shell-owned modal child window with `Save credentials` / `Not now` when that
   Instance has no launcher-saved credentials. Login detection and pending

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, Menu, net, ipcMain, shell, nativeImage, protocol, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, net, ipcMain, shell, nativeImage, protocol, dialog, systemPreferences } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const os = require('node:os');
@@ -48,6 +48,11 @@ const {
   publicGatewayStatus
 } = require('./host_gateway');
 const {
+  ensureMacAccessibilityPermission,
+  localizeMacPermissionStatus,
+  macAccessibilityPermissionMessage
+} = require('./macos_permissions');
+const {
   A0_CLI_RELEASE_API_URL,
   normalizeA0CliVersion,
   runA0CliInstaller,
@@ -68,6 +73,7 @@ const {
 const OPEN_UI_READY_TIMEOUT_MS = 20_000;
 const OPEN_UI_READY_INTERVAL_MS = 450;
 const COMPUTER_USE_RESUME_ARG = '--a0-resume-computer-use=';
+const MAC_ACCESSIBILITY_SETUP_TIMEOUT_MS = 115000;
 
 // Handle Squirrel.Windows startup events
 if (require('electron-squirrel-startup')) {
@@ -229,13 +235,16 @@ const hostGatewaySupervisor = new HostGatewaySupervisor({
   onStatus(leaseKey, status) {
     const tab = instanceTabForGatewayLease(leaseKey);
     if (!tab) return;
+    const displayStatus = process.platform === 'darwin'
+      ? localizeMacPermissionStatus(status, { isPackaged: app.isPackaged })
+      : status;
     tab.hostAccess = {
       ...(tab.hostAccess || {}),
-      ...status,
+      ...displayStatus,
       config: tab.hostAccessConfig || null
     };
     sendInstanceTabsEvent();
-    void maybeStartComputerUseSetup(tab, status);
+    void maybeStartComputerUseSetup(tab, displayStatus);
   },
   onConfig(leaseKey, gateway) {
     void persistGatewayConfigForTab(leaseKey, gateway);
@@ -1773,6 +1782,65 @@ function gatewaySupportsComputerUseSetup(status = {}) {
     status.gateway.features.includes('computer_use_setup_v1');
 }
 
+function setComputerUseSetupStatus(tab, setup = {}) {
+  if (!tab || !instanceTabs.has(tab.id)) return;
+  const computerStatus = tab.hostAccess?.gateway?.status?.computer_use || {};
+  tab.hostAccess = {
+    ...(tab.hostAccess || {}),
+    gateway: {
+      ...(tab.hostAccess?.gateway || {}),
+      status: {
+        ...(tab.hostAccess?.gateway?.status || {}),
+        computer_use: {
+          ...computerStatus,
+          setup: {
+            ...(computerStatus.setup || {}),
+            ...setup
+          }
+        }
+      }
+    }
+  };
+  sendInstanceTabsEvent();
+}
+
+async function prepareLauncherMacAccessibility(tab, { prompt = false } = {}) {
+  if (process.platform !== 'darwin') return { granted: true, prompted: false };
+  if (tab?.macAccessibilitySetupPromise) return await tab.macAccessibilitySetupPromise;
+  const pending = ensureMacAccessibilityPermission(systemPreferences, {
+    prompt,
+    timeoutMs: MAC_ACCESSIBILITY_SETUP_TIMEOUT_MS,
+    onPrompt() {
+      setComputerUseSetupStatus(tab, {
+        state: 'accessibility_required',
+        accessibility: 'required',
+        message: macAccessibilityPermissionMessage({ isPackaged: app.isPackaged })
+      });
+    }
+  });
+  if (tab) tab.macAccessibilitySetupPromise = pending;
+  try {
+    return await pending;
+  } finally {
+    if (tab?.macAccessibilitySetupPromise === pending) tab.macAccessibilitySetupPromise = null;
+  }
+}
+
+async function requestComputerUseSetup(tab, { prompt = false } = {}) {
+  if (tab?.computerUseSetupRequestPromise) return await tab.computerUseSetupRequestPromise;
+  const pending = hostGatewaySupervisor.request(
+    hostGatewayLeaseKey(tab),
+    { action: 'setup_computer_use', prompt },
+    { timeoutMs: 150000 }
+  );
+  if (tab) tab.computerUseSetupRequestPromise = pending;
+  try {
+    return await pending;
+  } finally {
+    if (tab?.computerUseSetupRequestPromise === pending) tab.computerUseSetupRequestPromise = null;
+  }
+}
+
 function signalComputerUseSetupDialog(tab) {
   if (!tab || !instanceTabs.has(tab.id)) return;
   tab.hostAccess = {
@@ -1803,34 +1871,19 @@ async function maybeStartComputerUseSetup(tab, status = tab?.hostAccess || {}) {
     const forcePrompt = tab.forcePromptComputerUseSetup === true;
     const prompt = forcePrompt;
     tab.forcePromptComputerUseSetup = false;
-    const computerStatus = tab.hostAccess?.gateway?.status?.computer_use || {};
-    tab.hostAccess = {
-      ...(tab.hostAccess || {}),
-      gateway: {
-        ...(tab.hostAccess?.gateway || {}),
-        status: {
-          ...(tab.hostAccess?.gateway?.status || {}),
-          computer_use: {
-            ...computerStatus,
-            setup: {
-              ...(computerStatus.setup || {}),
-              state: 'checking',
-              message: 'Checking macOS permissions…'
-            }
-          }
-        }
-      }
-    };
-    sendInstanceTabsEvent();
+    setComputerUseSetupStatus(tab, {
+      state: 'checking',
+      message: 'Checking macOS permissions…'
+    });
     if (prompt || tab.openComputerUseSetupAfterRestart === true) {
       tab.openComputerUseSetupAfterRestart = false;
       signalComputerUseSetupDialog(tab);
     }
-    const result = await hostGatewaySupervisor.request(
-      hostGatewayLeaseKey(tab),
-      { action: 'setup_computer_use', prompt },
-      { timeoutMs: 150000 }
-    );
+    if (prompt) {
+      const accessibility = await prepareLauncherMacAccessibility(tab, { prompt: true });
+      if (!accessibility.granted) return;
+    }
+    const result = await requestComputerUseSetup(tab, { prompt });
     if (result?.state === 'restart_required') signalComputerUseSetupDialog(tab);
   } catch (error) {
     console.warn('[host-gateway] Computer Use setup failed', error?.message || error);
@@ -4375,14 +4428,32 @@ ipcMain.handle('docker-manager:hostGatewayCommand', async (_event, body) => {
         message: 'Update A0 CLI to finish Computer Use setup.'
       });
     }
-    const result = await hostGatewaySupervisor.request(
-      hostGatewayLeaseKey(tab),
-      {
-        action,
-        ...(action === 'setup_computer_use' ? { prompt: body.prompt === true } : {})
-      },
-      { timeoutMs: action === 'setup_computer_use' || action === 'rearm_computer_use' ? 150000 : 60000 }
-    );
+    if (action === 'setup_computer_use' && body.prompt === true && process.platform === 'darwin') {
+      if (tab.macAccessibilitySetupPromise) {
+        await tab.macAccessibilitySetupPromise;
+        return {
+          accepted: true,
+          result: tab.hostAccess?.gateway?.status?.computer_use?.setup || { state: 'checking' }
+        };
+      }
+      const accessibility = await prepareLauncherMacAccessibility(tab, { prompt: true });
+      if (!accessibility.granted) {
+        return {
+          accepted: true,
+          result: tab.hostAccess?.gateway?.status?.computer_use?.setup || {
+            state: 'accessibility_required',
+            accessibility: 'required'
+          }
+        };
+      }
+    }
+    const result = action === 'setup_computer_use'
+      ? await requestComputerUseSetup(tab, { prompt: body.prompt === true })
+      : await hostGatewaySupervisor.request(
+        hostGatewayLeaseKey(tab),
+        { action },
+        { timeoutMs: action === 'rearm_computer_use' ? 150000 : 60000 }
+      );
     return { accepted: true, result };
   } catch (error) {
     return dockerManager.toErrorResponse(error);

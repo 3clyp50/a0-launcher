@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const {
   bindHostAccessState,
   bindScopeDependency,
+  browserSetupAvailable,
   browserSetupHint,
   browserSupportMessage,
   capabilityReadinessLabel,
@@ -232,10 +233,13 @@ test('Computer Use readiness stays separate from the saved permission choice', (
   assert.equal(setupNeeded.allowed, true);
   assert.equal(setupNeeded.label, 'Allowed · Setup needed');
   assert.equal(setupNeeded.canSetup, true);
+  assert.equal(setupNeeded.actionLabel, 'Open Accessibility Settings');
+  assert.equal(setupNeeded.prompt, true);
   assert.equal(checking.label, 'Allowed · Checking');
   assert.equal(checking.canSetup, false);
   assert.equal(ready.label, 'Allowed · Ready');
   assert.equal(ready.canSetup, false);
+  assert.equal(ready.prompt, false);
 });
 
 test('Needs action shows the actual capability reason', () => {
@@ -286,6 +290,9 @@ test('Missing host Playwright becomes a Launcher repair action', () => {
   assert.equal(browserSupportMessage(legacy), 'Browser support needs repair. Choose Set up browser.');
   assert.equal(browserSupportMessage(current), 'Browser support needs repair. Choose Set up browser.');
   assert.equal(browserSupportMessage({ message: 'Close Chrome before continuing.' }), 'Close Chrome before continuing.');
+  assert.equal(browserSetupAvailable({ can_prepare: false, can_repair: true }), true);
+  assert.equal(browserSetupAvailable({ can_prepare: false, support_reason: legacy.support_reason }), true);
+  assert.equal(browserSetupAvailable({ can_prepare: false }), false);
 });
 
 test('Browser setup explains how to enable remote debugging when no endpoint is open', () => {
@@ -302,9 +309,10 @@ test('Browser setup explains how to enable remote debugging when no endpoint is 
   assert.equal(browserSetupHint({
     available_browsers: [{ cdp_endpoint: 'ws://localhost:9333/devtools/browser/test' }]
   }), '');
+  assert.match(browserSetupHint({ available_browsers: [] }), /Install Chrome, Chromium, Edge, Brave, Opera, or Vivaldi/);
 });
 
-test('Browser setup explains a stale debugging endpoint after the gateway command fails', () => {
+test('Browser setup keeps an actionable fallback after the gateway command fails', () => {
   let stateListener;
   let toast;
   let removed = false;
@@ -335,7 +343,7 @@ test('Browser setup explains a stale debugging endpoint after the gateway comman
     else globalThis.window = originalWindow;
   }
 
-  assert.match(toast[0], /chrome:\/\/inspect\/#remote-debugging/);
+  assert.match(toast[0], /Install Chrome, Chromium, Edge, Brave, Opera, or Vivaldi/);
   assert.deepEqual(toast.slice(1), ['Set up browser', 12, 'dm-host-browser-setup']);
   assert.equal(removed, true);
 });

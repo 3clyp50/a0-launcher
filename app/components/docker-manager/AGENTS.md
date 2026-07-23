@@ -362,13 +362,17 @@ This scope owns:
   reason in the visible modal body; do not substitute generic tab-lease copy in
   a modal that is already opened from the owning Instance tab. A missing host
   Browser dependency must become a concise `Set up browser` repair action; do
-  not send Launcher users to an A0 CLI slash command. Render a
+  not hide that action merely because no Chromium-family profile is currently
+  detected, and do not send Launcher users to an A0 CLI slash command. Render a
   saved capability choice independently from runtime readiness as `Not allowed`,
   `Allowed · Setup needed`, `Allowed · Checking`, or `Allowed · Ready`; runtime
   metadata must never turn an allowed switch off. When Computer Use is newly
   enabled on macOS, open the staged setup surface after the gateway connects.
   Later launches preflight silently, with one explicit retry or restart action
-  when required. Present capability metadata as human labels and offer Computer
+  when required. Name the pending macOS service on that action (`Open
+  Accessibility Settings`, `Allow Screen Recording`, or `Check Computer Use`)
+  instead of repeating a generic permission button. Present capability metadata
+  as human labels and offer Computer
   Use setup only for actionable approval, rearm, restart, or error states—not
   healthy trust modes.
   Compatibility copy must name advertised Launcher gateway support rather than

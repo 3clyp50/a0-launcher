@@ -246,6 +246,11 @@ function computerUseSetupState(config = {}, runtime = {}) {
   const macosBackend = String(computer?.backend_family || computer?.backend_id || "").toLowerCase() === "macos";
   const setupState = normalizeCapabilityStatus(computer?.setup?.state);
   const updateRequired = allowed && macosBackend && !setupSupported;
+  const actionLabel = setupState === "accessibility required"
+    ? "Open Accessibility Settings"
+    : setupState === "screen recording required"
+      ? "Allow Screen Recording"
+      : "Check Computer Use";
   return {
     allowed,
     computer,
@@ -255,6 +260,8 @@ function computerUseSetupState(config = {}, runtime = {}) {
       ? "Allowed · Setup needed"
       : capabilityReadinessLabel(allowed, computer, { computerUse: true, setupSupported }),
     canSetup: allowed && setupSupported && setupState !== "ready" && setupState !== "checking",
+    actionLabel,
+    prompt: ["accessibility required", "screen recording required"].includes(setupState),
     restartRequired: allowed && setupState === "restart required",
     message: updateRequired
       ? "Update A0 CLI to finish Computer Use setup."
@@ -267,8 +274,12 @@ function rawBrowserSupportMessage(browser = {}) {
 }
 
 function browserSupportNeedsRepair(browser = {}) {
-  return [browser?.message, browser?.support_reason, browser?.last_error]
+  return browser?.can_repair === true || [browser?.message, browser?.support_reason, browser?.last_error]
     .some((value) => /Python Playwright is not installed|Browser support is incomplete/i.test(String(value || "")));
+}
+
+function browserSetupAvailable(browser = {}) {
+  return browser?.can_prepare === true || browserSupportNeedsRepair(browser);
 }
 
 function browserSupportMessage(browser = {}) {
@@ -335,6 +346,9 @@ function browserSetupHint(browser = {}) {
   const available = Array.isArray(browser?.available_browsers) ? browser.available_browsers : [];
   const hasDebuggingEndpoint = Boolean(String(browser?.cdp_endpoint || "").trim())
     || available.some((candidate) => Boolean(String(candidate?.cdp_endpoint || "").trim()));
+  if (!hasDebuggingEndpoint && available.length === 0) {
+    return "Install Chrome, Chromium, Edge, Brave, Opera, or Vivaldi on this computer, then click Set up browser again.";
+  }
   return hasDebuggingEndpoint
     ? ""
     : "Open Chrome or Chromium at chrome://inspect/#remote-debugging, Edge at edge://inspect/#remote-debugging, or Opera at opera://inspect/#remote-debugging. Brave and Vivaldi are supported too. Turn on ‘Allow remote debugging for this browser instance,’ then click Set up browser again.";
@@ -377,7 +391,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const disconnectedWithoutTab = !tab.id && stateName === "disconnected";
   const configured = config.configured && config.masterEnabled;
   const browserAllowed = configured && config.scopes.browser === true;
-  const computerSetup = computerUseSetupState(config, runtime);
+  let computerSetup = computerUseSetupState(config, runtime);
   const actionMessage = hostAccessActionMessage(config, runtime);
   const browserReadiness = capabilityReadinessLabel(browserAllowed, browser);
   const canArmComputer = !computerSetup.setupSupported && computerUseNeedsArm(computer.status);
@@ -454,8 +468,8 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
       <div class="dm-dialog-footer dm-host-access-footer">
         <div class="dm-dialog-footer-group">
           ${runtime.retryable || ["error", "needs_action"].includes(stateName) ? '<button class="button" type="button" data-retry>Retry</button>' : ""}
-          ${browserAllowed && browser.can_prepare ? '<button class="button" type="button" data-prepare-browser>Set up browser</button>' : ""}
-          <button class="button" type="button" data-setup-computer${computerSetup.canSetup && !computerSetup.restartRequired ? "" : " hidden"}>Allow Computer Use</button>
+          <button class="button" type="button" data-prepare-browser${browserAllowed && browserSetupAvailable(browser) ? "" : " hidden"}>Set up browser</button>
+          <button class="button" type="button" data-setup-computer${computerSetup.canSetup && !computerSetup.restartRequired ? "" : " hidden"}>${escapeHtml(computerSetup.actionLabel)}</button>
           <button class="button confirm" type="button" data-restart-computer${computerSetup.restartRequired ? "" : " hidden"}>Restart Launcher</button>
           ${canArmComputer ? '<button class="button" type="button" data-rearm>Allow Computer Use</button>' : ""}
         </div>
@@ -526,7 +540,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     const result = await window.dockerManagerActions?.hostGatewayCommand?.(
       tab.id,
       "setup_computer_use",
-      { prompt: true }
+      { prompt: computerSetup.prompt }
     );
     if (result === false && dialog.isConnected) {
       button.disabled = false;
@@ -561,11 +575,13 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     browser = nextBrowser;
     const nextConfigured = nextConfig.configured === true && nextConfig.masterEnabled !== false;
     const nextComputerSetup = computerUseSetupState(nextConfig, nextRuntime);
+    computerSetup = nextComputerSetup;
     const nextActionMessage = hostAccessActionMessage(nextConfig, nextRuntime);
     const nextStateName = String(nextRuntime.state || "disconnected");
     const computerLabel = dialog.querySelector("[data-computer-use-readiness]");
     const browserLabel = dialog.querySelector("[data-browser-readiness]");
     const browserSupport = dialog.querySelector("[data-browser-support-message]");
+    const browserSetupButton = dialog.querySelector("[data-prepare-browser]");
     const connectionLabelElement = dialog.querySelector("[data-host-connection-label]");
     const connectionDetailElement = dialog.querySelector("[data-host-connection-detail]");
     const statusDot = dialog.querySelector(".dm-host-status-dot");
@@ -588,12 +604,16 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
       browserSupport.textContent = browserSupportMessage(nextBrowser)
         || capabilityStatusLabel(nextBrowser.status, "We'll look for a supported browser when you connect.");
     }
+    if (browserSetupButton) {
+      browserSetupButton.hidden = !(nextConfigured && nextConfig.scopes?.browser === true && browserSetupAvailable(nextBrowser));
+    }
     if (notice) {
       notice.textContent = nextActionMessage;
       notice.hidden = !nextActionMessage;
       notice.classList?.toggle("error", nextStateName === "error");
     }
     if (setupButton) {
+      setupButton.textContent = nextComputerSetup.actionLabel;
       setupButton.hidden = !nextComputerSetup.canSetup || nextComputerSetup.restartRequired;
       setupButton.disabled = nextComputerSetup.setupState === "checking";
     }
@@ -607,6 +627,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
 }
 
 export {
+  browserSetupAvailable,
   browserSupportMessage,
   configForTarget,
   capabilityStatusLabel,

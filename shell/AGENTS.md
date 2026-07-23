@@ -87,7 +87,10 @@ This scope owns:
   `computer_use_setup_v1`. The shell must capability-gate that command, correlate
   every request/result with `request_id`, reject pending requests on timeout or
   gateway exit, and keep the base gateway usable when the setup capability is
-  absent.
+  absent. On macOS, the Electron shell owns the Accessibility prompt so TCC
+  authorizes the actual packaged Launcher or Electron dev build; prompt once,
+  poll silently, then let the connector continue staged Screen Recording and
+  runtime validation. Later preflights remain non-prompting.
 - External links should open through Electron `shell.openExternal` only after
   validation. Approved public launcher resources such as Docs, API Dashboard,
   and Support should be exposed to the renderer as fixed resource IDs, not

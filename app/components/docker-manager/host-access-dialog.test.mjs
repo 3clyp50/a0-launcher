@@ -6,11 +6,13 @@ const {
   bindHostAccessState,
   bindScopeDependency,
   browserSetupHint,
+  browserSupportMessage,
   capabilityReadinessLabel,
   capabilityStatusLabel,
   computerUseNeedsArm,
   computerUseSetupState,
   configForTarget,
+  hostAccessActionMessage,
   normalizeConfig,
   normalizeScopes,
   scopeFieldsHtml,
@@ -236,6 +238,56 @@ test('Computer Use readiness stays separate from the saved permission choice', (
   assert.equal(ready.canSetup, false);
 });
 
+test('Needs action shows the actual capability reason', () => {
+  const config = {
+    configured: true,
+    masterEnabled: true,
+    scopes: { browser: true, computer_use: true }
+  };
+  assert.equal(hostAccessActionMessage(config, {
+    state: 'needs_action',
+    gateway: {
+      features: ['computer_use_setup_v1'],
+      status: {
+        browser: {
+          status: 'relaunch_required',
+          message: 'Close Chrome before preparing this profile.'
+        },
+        computer_use: { setup: { state: 'ready' } }
+      }
+    }
+  }), 'Close Chrome before preparing this profile.');
+  assert.equal(hostAccessActionMessage(config, {
+    state: 'needs_action',
+    gateway: {
+      features: ['computer_use_setup_v1'],
+      status: {
+        browser: { status: 'ready' },
+        computer_use: {
+          setup: {
+            state: 'accessibility_required',
+            message: 'Allow Agent Zero Launcher in macOS Accessibility settings.'
+          }
+        }
+      }
+    }
+  }), 'Allow Agent Zero Launcher in macOS Accessibility settings.');
+  assert.equal(hostAccessActionMessage(config, { state: 'needs_action' }), 'Finish Computer Use setup below.');
+});
+
+test('Missing host Playwright becomes a Launcher repair action', () => {
+  const legacy = {
+    support_reason: 'Python Playwright is not installed in the A0 CLI host environment (/tmp/python). Run /browser repair.'
+  };
+  const current = {
+    support_reason: 'Browser support is incomplete in the A0 CLI host environment (/tmp/python). Use the current Browser setup action.'
+  };
+
+  assert.equal(browserSupportMessage(legacy), 'Browser support needs repair. Choose Set up browser.');
+  assert.equal(browserSupportMessage(current), 'Browser support needs repair. Choose Set up browser.');
+  assert.equal(browserSupportMessage({ message: 'Close Chrome before continuing.' }), 'Close Chrome before continuing.');
+});
+
 test('Browser setup explains how to enable remote debugging when no endpoint is open', () => {
   const hint = browserSetupHint({
     available_browsers: [{ label: 'Google Chrome - Default', cdp_endpoint: '' }]
@@ -288,12 +340,10 @@ test('Browser setup explains a stale debugging endpoint after the gateway comman
   assert.equal(removed, true);
 });
 
-test('Host access UI uses five friendly permissions and explains the command boundary', async () => {
+test('Host access UI uses five friendly permissions and visible action reasons', async () => {
   const source = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
-  assert.match(source, /current Instance is open with the Launcher/i);
-  assert.match(source, /either in a tab or detached window/i);
-  assert.match(source, /close that tab or window, and access stops/i);
-  assert.doesNotMatch(source, /Access stays on when you detach/i);
+  assert.doesNotMatch(source, /Host access works only while the current Instance is open/i);
+  assert.match(source, /data-host-action-notice/);
   assert.match(source, /Files read/);
   assert.match(source, /Files write/);
   assert.match(source, /Use my Browser/);

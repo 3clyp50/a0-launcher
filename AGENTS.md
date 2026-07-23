@@ -72,7 +72,9 @@ Architecture contracts:
   start a gateway lease. An Instance menu shows `Install A0 CLI` while the
   system CLI is missing and replaces it with `Open A0 CLI` once installed.
   Create/Add Instance and Host access settings do not include a separate CLI
-  installer step.
+  installer step. Official compatible CLI packages include the Python
+  Playwright client used for host Browser launch without bundling Chromium;
+  `Set up browser` repairs older or damaged CLI environments in place.
 - A0 CLI v2.5 is the first connector release with the Launcher gateway
   contract. Continue capability-gating gateway candidates rather than replacing
   that contract check with a version comparison; an unreleased sibling

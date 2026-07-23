@@ -357,7 +357,12 @@ This scope owns:
   Keep browser selection and Connection/Computer Use diagnostics in a collapsed
   Advanced settings disclosure with a short summary.
   Browser preparation and Computer Use permission failures are Needs action
-  states, not silent browser relaunches or hidden permission grants. Render a
+  states, not silent browser relaunches or hidden permission grants. A Needs
+  action summary must show the concrete browser, permission, restart, or runtime
+  reason in the visible modal body; do not substitute generic tab-lease copy in
+  a modal that is already opened from the owning Instance tab. A missing host
+  Browser dependency must become a concise `Set up browser` repair action; do
+  not send Launcher users to an A0 CLI slash command. Render a
   saved capability choice independently from runtime readiness as `Not allowed`,
   `Allowed · Setup needed`, `Allowed · Checking`, or `Allowed · Ready`; runtime
   metadata must never turn an allowed switch off. When Computer Use is newly

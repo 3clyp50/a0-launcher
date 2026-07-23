@@ -262,6 +262,61 @@ function computerUseSetupState(config = {}, runtime = {}) {
   };
 }
 
+function rawBrowserSupportMessage(browser = {}) {
+  return String(browser?.message || browser?.support_reason || browser?.last_error || "").trim();
+}
+
+function browserSupportNeedsRepair(browser = {}) {
+  return [browser?.message, browser?.support_reason, browser?.last_error]
+    .some((value) => /Python Playwright is not installed|Browser support is incomplete/i.test(String(value || "")));
+}
+
+function browserSupportMessage(browser = {}) {
+  const message = rawBrowserSupportMessage(browser);
+  if (browserSupportNeedsRepair(browser)) {
+    return "Browser support needs repair. Choose Set up browser.";
+  }
+  return message;
+}
+
+function hostAccessActionMessage(config = {}, runtime = {}) {
+  const gateway = runtime?.gateway || {};
+  const browser = gateway?.status?.browser || {};
+  const state = String(runtime?.state || "disconnected");
+  const configured = config.configured === true && config.masterEnabled !== false;
+  const browserAllowed = configured && config.scopes?.browser === true;
+  const computerSetup = computerUseSetupState(config, runtime);
+  const messages = [];
+  const add = (value) => {
+    const raw = String(value || "").trim();
+    const message = browserSupportNeedsRepair({ message: raw })
+      ? browserSupportMessage({ message: raw })
+      : raw;
+    if (message && !messages.includes(message)) messages.push(message);
+  };
+
+  add(runtime?.message);
+  const browserStatus = normalizeCapabilityStatus(browser?.status);
+  if (
+    browserAllowed &&
+    browserStatus &&
+    !["ready", "active", "persistent", "allow"].includes(browserStatus)
+  ) {
+    add(browserSupportMessage(browser));
+    if (!messages.length && state === "needs_action") {
+      add("Set up the selected browser to finish Browser access.");
+    }
+  }
+  if (computerSetup.allowed && computerSetup.setupState !== "ready") {
+    add(computerSetup.message);
+    if (computerSetup.setupState === "checking") add("Checking macOS permissions…");
+    if (!messages.length && state === "needs_action") add("Finish Computer Use setup below.");
+  }
+  if (!messages.length && state === "needs_action") add("Finish the required Host access setup below.");
+  if (!messages.length && state === "error") add("Host access could not connect. Retry to check again.");
+  return messages.join(" ");
+}
+
 function browserOptions(browser = {}, selected = "") {
   const options = [{ value: "", label: "Automatic detection" }];
   for (const candidate of Array.isArray(browser?.available_browsers) ? browser.available_browsers : []) {
@@ -314,7 +369,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const runtime = tab.hostAccess || {};
   const gateway = runtime.gateway || {};
   const details = gateway.status || {};
-  const browser = details.browser || {};
+  let browser = details.browser || {};
   const computer = details.computer_use || {};
   const stateName = String(runtime.state || "disconnected");
   const reconnectAvailable = runtime.suppressed === true;
@@ -323,6 +378,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const configured = config.configured && config.masterEnabled;
   const browserAllowed = configured && config.scopes.browser === true;
   const computerSetup = computerUseSetupState(config, runtime);
+  const actionMessage = hostAccessActionMessage(config, runtime);
   const browserReadiness = capabilityReadinessLabel(browserAllowed, browser);
   const canArmComputer = !computerSetup.setupSupported && computerUseNeedsArm(computer.status);
   const connectionLabel = disconnectedWithoutTab && configured ? "Ready to connect" : statusLabel(stateName);
@@ -362,9 +418,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
           <div><strong data-host-connection-label>${escapeHtml(connectionLabel)}</strong><small data-host-connection-detail>${escapeHtml(connectionDetail)}</small></div>
           ${connectionAction}
         </div>
-        <p class="dm-dialog-copy">Host access works only while the current Instance is open with the Launcher, either in a tab or detached window. Close that tab or window, and access stops.</p>
-        ${runtime.message ? `<div class="dm-host-access-notice ${stateName === "error" ? "error" : ""}">${escapeHtml(runtime.message)}</div>` : ""}
-        <div class="dm-host-access-notice" data-computer-setup-notice${computerSetup.message ? "" : " hidden"}>${escapeHtml(computerSetup.message)}</div>
+        <div class="dm-host-access-notice ${stateName === "error" ? "error" : ""}" data-host-action-notice${actionMessage ? "" : " hidden"}>${escapeHtml(actionMessage)}</div>
         ${scopeFieldsHtml("hostAccessInstance", config.scopes, {
           masterContent: switchLineHtml(
             "hostAccessConfigured",
@@ -387,7 +441,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
             <div class="dm-field">
               <label for="hostAccessBrowser">Browser to use</label>
               <select id="hostAccessBrowser" class="dm-select" data-host-config-control>${browserOptions(browser, config.browserSelection)}</select>
-              <div class="dm-field-hint">${escapeHtml(browser.support_reason || capabilityStatusLabel(browser.status, "We'll look for a supported browser when you connect."))}</div>
+              <div class="dm-field-hint" data-browser-support-message>${escapeHtml(browserSupportMessage(browser) || capabilityStatusLabel(browser.status, "We'll look for a supported browser when you connect."))}</div>
             </div>
             <div class="dm-host-access-diagnostics">
               <div><span>Connection</span><strong>${escapeHtml(compatibility)}</strong></div>
@@ -440,11 +494,22 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     if (await window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "reconnect") !== false) closeDialog(dialog);
   });
   dialog.querySelector("[data-retry]")?.addEventListener("click", () => window.dockerManagerActions?.retryHostGateway?.(tab.id));
-  dialog.querySelector("[data-prepare-browser]")?.addEventListener("click", () => {
+  dialog.querySelector("[data-prepare-browser]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
     const hint = browserSetupHint(browser);
     if (hint) window.toastFrontendInfo?.(hint, "Set up browser", 12, "dm-host-browser-setup");
     else watchBrowserSetupFailure(tab.id);
-    window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "prepare_browser");
+    const repairing = browserSupportNeedsRepair(browser);
+    if (repairing) {
+      button.disabled = true;
+      const notice = dialog.querySelector("[data-host-action-notice]");
+      if (notice) {
+        notice.textContent = "Installing browser support…";
+        notice.hidden = false;
+      }
+    }
+    await window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "prepare_browser");
+    if (dialog.isConnected) button.disabled = false;
   });
   dialog.querySelector("[data-rearm]")?.addEventListener("click", () => window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "rearm_computer_use"));
   dialog.querySelector("[data-setup-computer]")?.addEventListener("click", async (event) => {
@@ -452,7 +517,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     button.disabled = true;
     button.hidden = true;
     const readiness = dialog.querySelector("[data-computer-use-readiness]");
-    const notice = dialog.querySelector("[data-computer-setup-notice]");
+    const notice = dialog.querySelector("[data-host-action-notice]");
     if (readiness) readiness.textContent = "Allowed · Checking";
     if (notice) {
       notice.textContent = "Checking macOS permissions…";
@@ -493,23 +558,40 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     const nextRuntime = nextTab.hostAccess || {};
     const nextGateway = nextRuntime.gateway || {};
     const nextBrowser = nextGateway.status?.browser || {};
+    browser = nextBrowser;
     const nextConfigured = nextConfig.configured === true && nextConfig.masterEnabled !== false;
     const nextComputerSetup = computerUseSetupState(nextConfig, nextRuntime);
+    const nextActionMessage = hostAccessActionMessage(nextConfig, nextRuntime);
+    const nextStateName = String(nextRuntime.state || "disconnected");
     const computerLabel = dialog.querySelector("[data-computer-use-readiness]");
     const browserLabel = dialog.querySelector("[data-browser-readiness]");
-    const notice = dialog.querySelector("[data-computer-setup-notice]");
+    const browserSupport = dialog.querySelector("[data-browser-support-message]");
+    const connectionLabelElement = dialog.querySelector("[data-host-connection-label]");
+    const connectionDetailElement = dialog.querySelector("[data-host-connection-detail]");
+    const statusDot = dialog.querySelector(".dm-host-status-dot");
+    const notice = dialog.querySelector("[data-host-action-notice]");
     const setupButton = dialog.querySelector("[data-setup-computer]");
     const restartButton = dialog.querySelector("[data-restart-computer]");
     if (computerLabel) computerLabel.textContent = nextComputerSetup.label;
+    if (connectionLabelElement) connectionLabelElement.textContent = statusLabel(nextStateName);
+    if (connectionDetailElement) {
+      connectionDetailElement.textContent = nextRuntime.hostLabel || nextGateway.host_label || "This computer";
+    }
+    if (statusDot) statusDot.className = `dm-host-status-dot ${nextStateName}`;
     if (browserLabel) {
       browserLabel.textContent = capabilityReadinessLabel(
         nextConfigured && nextConfig.scopes?.browser === true,
         nextBrowser
       );
     }
+    if (browserSupport) {
+      browserSupport.textContent = browserSupportMessage(nextBrowser)
+        || capabilityStatusLabel(nextBrowser.status, "We'll look for a supported browser when you connect.");
+    }
     if (notice) {
-      notice.textContent = nextComputerSetup.message;
-      notice.hidden = !nextComputerSetup.message;
+      notice.textContent = nextActionMessage;
+      notice.hidden = !nextActionMessage;
+      notice.classList?.toggle("error", nextStateName === "error");
     }
     if (setupButton) {
       setupButton.hidden = !nextComputerSetup.canSetup || nextComputerSetup.restartRequired;
@@ -525,11 +607,13 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
 }
 
 export {
+  browserSupportMessage,
   configForTarget,
   capabilityStatusLabel,
   capabilityReadinessLabel,
   computerUseNeedsArm,
   computerUseSetupState,
+  hostAccessActionMessage,
   gatewaySupportsComputerUseSetup,
   normalizeConfig,
   normalizeScopes,

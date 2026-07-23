@@ -33,6 +33,8 @@ const {
 } = require('./instance_tabs');
 const { formatLauncherVersion } = require('./launcher_update');
 const {
+  hostAccessMatchesGateway,
+  hostAccessInstanceKey,
   normalizeHostAccessSettings,
   resolveInstanceHostAccess
 } = require('./host_access');
@@ -65,6 +67,7 @@ const {
 
 const OPEN_UI_READY_TIMEOUT_MS = 20_000;
 const OPEN_UI_READY_INTERVAL_MS = 450;
+const COMPUTER_USE_RESUME_ARG = '--a0-resume-computer-use=';
 
 // Handle Squirrel.Windows startup events
 if (require('electron-squirrel-startup')) {
@@ -131,6 +134,15 @@ function defaultAppRepoArg(argv = process.argv) {
   return '';
 }
 
+function computerUseResumeIdentity(argv = process.argv) {
+  const raw = (Array.isArray(argv) ? argv : [])
+    .map((value) => String(value || ''))
+    .find((value) => value.startsWith(COMPUTER_USE_RESUME_ARG));
+  const identity = raw ? raw.slice(COMPUTER_USE_RESUME_ARG.length) : '';
+  const match = identity.match(/^(local|remote):([A-Za-z0-9._:-]{1,256})$/);
+  return match ? { kind: match[1], id: match[2] } : null;
+}
+
 function isLocalRepoContentDir(dir) {
   try {
     const appIndex = path.join(dir, 'app', 'index.html');
@@ -163,6 +175,7 @@ function resolveLocalRepoDir() {
 
 const LOCAL_REPO_DIR = resolveLocalRepoDir();
 const USING_LOCAL_CONTENT = !!LOCAL_REPO_DIR;
+let pendingComputerUseResume = computerUseResumeIdentity();
 const LOCAL_INDEX_FILE = USING_LOCAL_CONTENT ? path.join(LOCAL_REPO_DIR, 'app', 'index.html') : '';
 
 const GITHUB_REPO = getGithubRepo();
@@ -210,6 +223,7 @@ let hostGatewayQuitPending = false;
 let a0CliEnsurePromise = null;
 let a0CliEnsureState = 'idle';
 let a0CliResolvedBinary = '';
+const pendingComputerUseSetup = new Set();
 
 const hostGatewaySupervisor = new HostGatewaySupervisor({
   onStatus(leaseKey, status) {
@@ -221,6 +235,7 @@ const hostGatewaySupervisor = new HostGatewaySupervisor({
       config: tab.hostAccessConfig || null
     };
     sendInstanceTabsEvent();
+    void maybeStartComputerUseSetup(tab, status);
   },
   onConfig(leaseKey, gateway) {
     void persistGatewayConfigForTab(leaseKey, gateway);
@@ -1296,6 +1311,7 @@ async function continueToAppContent(options = {}) {
   }
   await loadAppContent();
   scheduleRuntimeSetupResume();
+  scheduleComputerUseSetupResume();
 }
 
 /**
@@ -1593,6 +1609,11 @@ async function persistGatewayConfigForTab(leaseKey, gateway) {
   const identity = hostAccessIdentity(tab);
   if (!tab || !identity || !gateway || typeof gateway !== 'object') return;
   const current = tab.hostAccessConfig || {};
+  const configurationMatches = hostAccessMatchesGateway(current, gateway);
+  if (tab.gatewayConfigSynchronized !== true) {
+    if (configurationMatches) tab.gatewayConfigSynchronized = true;
+    return;
+  }
   const next = {
     ...current,
     masterEnabled: gateway.master_enabled !== false,
@@ -1624,15 +1645,11 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
   }
 
   const settings = await dockerManager.getHostAccessSettings();
-  const config = resolveInstanceHostAccess(settings, identity);
+  const config = resolveInstanceHostAccess(settings, identity, tab.hostAccessConfig);
   tab.hostAccessConfig = config;
-  if (!settings.onboardingComplete) {
-    setTabHostAccess(tab, hostAccessStatus('needs_action', {
-      code: 'ONBOARDING_REQUIRED',
-      message: 'Choose how Agent Zero can use this computer.'
-    }), config);
-    return null;
-  }
+  tab.computerUseSetupStarted = false;
+  tab.gatewayConfigSynchronized = false;
+  if (pendingComputerUseSetup.delete(config.key)) tab.forcePromptComputerUseSetup = true;
   if (!config.configured) {
     setTabHostAccess(tab, hostAccessStatus('disconnected', {
       message: identity.kind === 'remote' ? 'Using the remote machine.' : 'This computer is not connected.'
@@ -1733,7 +1750,9 @@ async function restartHostGatewayForTab(tab) {
   if (hostGatewaySupervisor.isSuppressed(leaseKey)) {
     const settings = await dockerManager.getHostAccessSettings();
     const identity = hostAccessIdentity(tab);
-    const config = identity ? resolveInstanceHostAccess(settings, identity) : tab.hostAccessConfig;
+    const config = identity
+      ? resolveInstanceHostAccess(settings, identity, tab.hostAccessConfig)
+      : tab.hostAccessConfig;
     const status = {
       ...hostGatewaySupervisor.statusFor(leaseKey),
       message: 'Disconnected for this tab. Reconnect here or close and reopen the tab.',
@@ -1747,6 +1766,75 @@ async function restartHostGatewayForTab(tab) {
     message: 'Updating Host access…'
   }), tab.hostAccessConfig || null);
   return await startHostGatewayForTab(tab, { force: true });
+}
+
+function gatewaySupportsComputerUseSetup(status = {}) {
+  return Array.isArray(status?.gateway?.features) &&
+    status.gateway.features.includes('computer_use_setup_v1');
+}
+
+function signalComputerUseSetupDialog(tab) {
+  if (!tab || !instanceTabs.has(tab.id)) return;
+  tab.hostAccess = {
+    ...(tab.hostAccess || {}),
+    openComputerUseSetup: true
+  };
+  sendInstanceTabsEvent();
+  tab.hostAccess.openComputerUseSetup = false;
+}
+
+async function maybeStartComputerUseSetup(tab, status = tab?.hostAccess || {}) {
+  if (process.platform !== 'darwin' || !tab || !instanceTabs.has(tab.id)) return;
+  const config = tab.hostAccessConfig || {};
+  if (
+    tab.computerUseSetupStarted ||
+    config.configured !== true ||
+    config.masterEnabled === false ||
+    config.scopes?.computer_use !== true ||
+    !gatewaySupportsComputerUseSetup(status)
+  ) {
+    return;
+  }
+  const computer = status?.gateway?.status?.computer_use || {};
+  if (String(computer.backend_family || computer.backend_id || '').toLowerCase() !== 'macos') return;
+
+  tab.computerUseSetupStarted = true;
+  try {
+    const forcePrompt = tab.forcePromptComputerUseSetup === true;
+    const prompt = forcePrompt;
+    tab.forcePromptComputerUseSetup = false;
+    const computerStatus = tab.hostAccess?.gateway?.status?.computer_use || {};
+    tab.hostAccess = {
+      ...(tab.hostAccess || {}),
+      gateway: {
+        ...(tab.hostAccess?.gateway || {}),
+        status: {
+          ...(tab.hostAccess?.gateway?.status || {}),
+          computer_use: {
+            ...computerStatus,
+            setup: {
+              ...(computerStatus.setup || {}),
+              state: 'checking',
+              message: 'Checking macOS permissions…'
+            }
+          }
+        }
+      }
+    };
+    sendInstanceTabsEvent();
+    if (prompt || tab.openComputerUseSetupAfterRestart === true) {
+      tab.openComputerUseSetupAfterRestart = false;
+      signalComputerUseSetupDialog(tab);
+    }
+    const result = await hostGatewaySupervisor.request(
+      hostGatewayLeaseKey(tab),
+      { action: 'setup_computer_use', prompt },
+      { timeoutMs: 150000 }
+    );
+    if (result?.state === 'restart_required') signalComputerUseSetupDialog(tab);
+  } catch (error) {
+    console.warn('[host-gateway] Computer Use setup failed', error?.message || error);
+  }
 }
 
 function disconnectHostGatewayForTab(tab) {
@@ -4089,12 +4177,40 @@ function scheduleRuntimeSetupResume() {
   }, 1500);
 }
 
+function scheduleComputerUseSetupResume() {
+  if (!pendingComputerUseResume) return;
+  setTimeout(async () => {
+    const identity = pendingComputerUseResume;
+    pendingComputerUseResume = null;
+    try {
+      const target = await resolveInstanceUiTarget({
+        kind: identity.kind,
+        ...(identity.kind === 'remote' ? { instanceId: identity.id } : { containerId: identity.id })
+      });
+      const opened = await openInstanceTab(target);
+      const tab = instanceTabs.get(opened?.tabId);
+      if (tab) {
+        tab.openComputerUseSetupAfterRestart = true;
+        tab.computerUseSetupStarted = false;
+        void maybeStartComputerUseSetup(tab, tab.hostAccess);
+      }
+    } catch (error) {
+      console.error('[host-gateway] unable to resume Computer Use setup', error);
+    }
+  }, 1500).unref?.();
+}
+
 dockerManager.events.on('state', (state) => {
   try {
     sendDockerManagerEvent('docker-manager:state', sanitizeDockerManagerState(state));
   } catch {
     // ignore
   }
+});
+
+dockerManager.events.on('host-access-computer-use-enabled', (identity = {}) => {
+  const key = hostAccessInstanceKey(identity.kind, identity.id);
+  if (key) pendingComputerUseSetup.add(key);
 });
 
 dockerManager.events.on('progress', (progress) => {
@@ -4125,10 +4241,13 @@ ipcMain.handle('docker-manager:setHostAccessSettings', async (_event, body) => {
     if (!isPlainObject(body)) {
       return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid Host access settings' });
     }
-    const saved = await dockerManager.setHostAccessSettings({
-      onboardingComplete: body.onboardingComplete === true,
+    const update = {
       defaults: isPlainObject(body.defaults) ? body.defaults : undefined
-    });
+    };
+    if (typeof body.onboardingComplete === 'boolean') {
+      update.onboardingComplete = body.onboardingComplete;
+    }
+    const saved = await dockerManager.setHostAccessSettings(update);
     for (const tab of instanceTabs.values()) void restartHostGatewayForTab(tab);
     return publicHostAccessSettings(saved);
   } catch (error) {
@@ -4147,10 +4266,28 @@ ipcMain.handle('docker-manager:setInstanceHostAccess', async (_event, body) => {
       id: typeof body.id === 'string' ? body.id : ''
     };
     const config = isPlainObject(body.config) ? body.config : {};
+    const key = hostAccessInstanceKey(identity.kind, identity.id);
+    const settings = await dockerManager.getHostAccessSettings();
+    const existing = key ? settings.instances?.[key] : null;
+    const previous = resolveInstanceHostAccess(settings, identity);
     const saved = await dockerManager.setInstanceHostAccess(identity.kind, identity.id, config);
+    const previousComputerUse = existing != null &&
+      previous.configured === true &&
+      previous.masterEnabled !== false &&
+      previous.scopes?.computer_use === true;
+    const nextComputerUse = saved.configured === true &&
+      saved.masterEnabled !== false &&
+      saved.scopes?.computer_use === true;
+    if (!previousComputerUse && nextComputerUse && saved.key) pendingComputerUseSetup.add(saved.key);
     for (const candidate of instanceTabs.values()) {
       const candidateIdentity = hostAccessIdentity(candidate);
       if (candidateIdentity?.kind === identity.kind && candidateIdentity.id === identity.id) {
+        if (!previousComputerUse && nextComputerUse) {
+          candidate.forcePromptComputerUseSetup = true;
+          candidate.computerUseSetupStarted = false;
+          pendingComputerUseSetup.delete(saved.key);
+        }
+        setTabHostAccess(candidate, candidate.hostAccess || hostAccessStatus('disconnected'), saved);
         void restartHostGatewayForTab(candidate);
       }
     }
@@ -4214,13 +4351,39 @@ ipcMain.handle('docker-manager:hostGatewayCommand', async (_event, body) => {
       if (!status) throw createTabTargetError('RECONNECT_UNAVAILABLE', 'Host access is not waiting to reconnect.');
       return { accepted: true, status };
     }
-    if (!['prepare_browser', 'rearm_computer_use'].includes(action)) {
+    if (action === 'restart_computer_use') {
+      if (process.platform !== 'darwin') {
+        return dockerManager.toErrorResponse({
+          code: 'UNSUPPORTED_PLATFORM',
+          message: 'Computer Use restart recovery is available on macOS.'
+        });
+      }
+      const identity = hostAccessIdentity(tab);
+      if (!identity) throw createTabTargetError('INSTANCE_NOT_FOUND', 'Instance identity is unavailable.');
+      const resumeArg = `${COMPUTER_USE_RESUME_ARG}${identity.kind}:${identity.id}`;
+      const args = process.argv.slice(1).filter((arg) => !String(arg || '').startsWith(COMPUTER_USE_RESUME_ARG));
+      app.relaunch({ args: [...args, resumeArg] });
+      setTimeout(() => app.quit(), 100);
+      return { accepted: true, restarting: true };
+    }
+    if (!['prepare_browser', 'rearm_computer_use', 'setup_computer_use'].includes(action)) {
       return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Unsupported Host access command' });
     }
-    if (!hostGatewaySupervisor.send(hostGatewayLeaseKey(tab), { action })) {
-      return dockerManager.toErrorResponse({ code: 'GATEWAY_NOT_RUNNING', message: 'Host gateway is not running.' });
+    if (action === 'setup_computer_use' && !gatewaySupportsComputerUseSetup(tab.hostAccess)) {
+      return dockerManager.toErrorResponse({
+        code: 'CLI_UPDATE_REQUIRED',
+        message: 'Update A0 CLI to finish Computer Use setup.'
+      });
     }
-    return { accepted: true };
+    const result = await hostGatewaySupervisor.request(
+      hostGatewayLeaseKey(tab),
+      {
+        action,
+        ...(action === 'setup_computer_use' ? { prompt: body.prompt === true } : {})
+      },
+      { timeoutMs: action === 'setup_computer_use' || action === 'rearm_computer_use' ? 150000 : 60000 }
+    );
+    return { accepted: true, result };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

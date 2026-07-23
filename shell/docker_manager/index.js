@@ -5874,6 +5874,16 @@ async function activateTag(tag, dataLossAck, options = {}) {
       }
       if (activationOptions.hostAccess && createdNew?.containerId) {
         await stateStore.writeInstanceHostAccess('local', createdNew.containerId, activationOptions.hostAccess);
+        if (
+          activationOptions.hostAccess.configured === true &&
+          activationOptions.hostAccess.masterEnabled !== false &&
+          activationOptions.hostAccess.scopes?.computer_use === true
+        ) {
+          events.emit('host-access-computer-use-enabled', {
+            kind: 'local',
+            id: createdNew.containerId
+          });
+        }
       }
 
       updateOperationProgress({ message: 'Starting instance (waiting for UI)', progress: null });

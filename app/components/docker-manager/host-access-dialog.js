@@ -18,10 +18,16 @@ const CAPABILITY_STATUS_LABELS = Object.freeze({
   arming: "Waiting for permission",
   "approval required": "Permission needed",
   "rearm required": "Permission needed",
+  "restart required": "Restart needed",
   error: "Needs attention"
 });
 
-const ARMABLE_COMPUTER_USE_STATUSES = new Set(["approval required", "rearm required", "error"]);
+const ARMABLE_COMPUTER_USE_STATUSES = new Set([
+  "approval required",
+  "rearm required",
+  "restart required",
+  "error"
+]);
 
 function escapeHtml(value) {
   return String(value || "")
@@ -76,12 +82,12 @@ function configForTarget(state = {}, target = {}) {
   const key = instanceKey(target);
   const saved = key ? hostAccess?.instances?.[key] : null;
   const runtimeConfig = target?.hostAccess?.config;
-  const config = normalizeConfig(runtimeConfig || saved, defaults, target?.kind);
+  const config = normalizeConfig(saved || runtimeConfig, defaults, target?.kind);
   if (target?.kind === "remote" && !config.folder) config.folder = defaults.folder;
   return config;
 }
 
-function scopeFieldsHtml(prefix, scopes, { compact = false, onboarding = false, masterContent = "", detailsContent = "" } = {}) {
+function scopeFieldsHtml(prefix, scopes, { compact = false, masterContent = "", detailsContent = "" } = {}) {
   const fields = `<fieldset class="dm-host-access-scopes${compact ? " compact" : ""}" aria-label="Host permissions">
       ${SCOPE_FIELDS.map(({ key, icon, label, hint }) => `
         <label class="dm-host-access-scope">
@@ -97,12 +103,6 @@ function scopeFieldsHtml(prefix, scopes, { compact = false, onboarding = false, 
         </label>
       `).join("")}
     </fieldset>`;
-  if (onboarding) {
-    return `<div class="dm-host-access-permissions-static">
-      <div class="dm-field-label">Host permissions</div>
-      ${fields}
-    </div>`;
-  }
   return `<details class="dm-advanced dm-host-access-permissions">
     <summary>Host permissions <span data-host-scope-summary>${scopeSummaryText(scopes)}</span></summary>
     ${masterContent}
@@ -215,6 +215,53 @@ function computerUseNeedsArm(value) {
   return ARMABLE_COMPUTER_USE_STATUSES.has(normalizeCapabilityStatus(value));
 }
 
+function gatewaySupportsComputerUseSetup(gateway = {}) {
+  return Array.isArray(gateway?.features) && gateway.features.includes("computer_use_setup_v1");
+}
+
+function capabilityReadinessLabel(allowed, capability = {}, { computerUse = false, setupSupported = false } = {}) {
+  if (!allowed) return "Not allowed";
+  if (computerUse) {
+    const setupState = normalizeCapabilityStatus(capability?.setup?.state);
+    if (setupState === "ready") return "Allowed · Ready";
+    if (setupState === "checking") return "Allowed · Checking";
+    if (["accessibility required", "screen recording required", "restart required", "error"].includes(setupState)) {
+      return "Allowed · Setup needed";
+    }
+    if (setupSupported && (!setupState || setupState === "unknown")) return "Allowed · Checking";
+  }
+  const status = normalizeCapabilityStatus(capability?.status);
+  return ["ready", "active", "persistent", "allow"].includes(status)
+    ? "Allowed · Ready"
+    : status === "arming"
+      ? "Allowed · Checking"
+      : "Allowed · Setup needed";
+}
+
+function computerUseSetupState(config = {}, runtime = {}) {
+  const gateway = runtime?.gateway || {};
+  const computer = gateway?.status?.computer_use || {};
+  const allowed = config.configured === true && config.masterEnabled !== false && config.scopes?.computer_use === true;
+  const setupSupported = gatewaySupportsComputerUseSetup(gateway);
+  const macosBackend = String(computer?.backend_family || computer?.backend_id || "").toLowerCase() === "macos";
+  const setupState = normalizeCapabilityStatus(computer?.setup?.state);
+  const updateRequired = allowed && macosBackend && !setupSupported;
+  return {
+    allowed,
+    computer,
+    setupSupported,
+    setupState,
+    label: updateRequired
+      ? "Allowed · Setup needed"
+      : capabilityReadinessLabel(allowed, computer, { computerUse: true, setupSupported }),
+    canSetup: allowed && setupSupported && setupState !== "ready" && setupState !== "checking",
+    restartRequired: allowed && setupState === "restart required",
+    message: updateRequired
+      ? "Update A0 CLI to finish Computer Use setup."
+      : String(computer?.setup?.message || computer?.message || computer?.last_error || "")
+  };
+}
+
 function browserOptions(browser = {}, selected = "") {
   const options = [{ value: "", label: "Automatic detection" }];
   for (const candidate of Array.isArray(browser?.available_browsers) ? browser.available_browsers : []) {
@@ -255,80 +302,9 @@ function watchBrowserSetupFailure(tabId) {
 }
 
 function closeDialog(dialog) {
+  dialog?.__hostAccessCleanup?.();
   dialog?.remove();
   window.dockerManagerActions?.syncInstanceTabBounds?.();
-}
-
-function openHostAccessOnboarding(state = {}) {
-  if (document.getElementById("hostAccessOnboarding")) return;
-  const defaults = normalizeConfig(state?.hostAccess?.defaults, {}, "local");
-  const dialog = document.createElement("div");
-  dialog.id = "hostAccessOnboarding";
-  dialog.className = "dm-dialog-backdrop dm-host-access-onboarding";
-  dialog.innerHTML = `
-    <form class="dm-dialog dm-host-access-dialog" role="dialog" aria-modal="true" aria-labelledby="hostAccessOnboardingTitle">
-      <div class="dm-dialog-header">
-        <div>
-          <div class="dm-host-access-kicker">This computer</div>
-          <h2 id="hostAccessOnboardingTitle" class="dm-dialog-title">Host access</h2>
-        </div>
-      </div>
-      <div class="dm-dialog-body">
-        <p class="dm-dialog-copy">Agent Zero can help with files, apps, and tasks on this computer while the current Instance is open with the Launcher, either in a tab or detached window. Close that tab or window, and access stops.</p>
-        ${switchLineHtml(
-          "hostAccessDefaultConfigured",
-          "Allow new local Instances to use this computer",
-          "You can change this for each Instance.",
-          false
-        )}
-        ${scopeFieldsHtml("hostAccessDefault", defaults.scopes, { onboarding: true })}
-        <div class="dm-field">
-          <label for="hostAccessDefaultFolder">Default folder for files and commands <span class="dm-optional">optional</span></label>
-          <div class="dm-host-folder-row">
-            <input id="hostAccessDefaultFolder" class="dm-text-input" type="text" readonly value="${escapeHtml(defaults.folder)}" placeholder="Choose a fallback folder" data-host-config-control>
-            <button class="button" type="button" data-choose-folder data-host-config-control>Choose</button>
-          </div>
-          <div class="dm-field-hint">Used when an Instance has no workspace on this computer. Agent Zero reads and writes files here. Commands start here but can reach other folders.</div>
-        </div>
-      </div>
-      <div class="dm-dialog-footer">
-        <button class="button" type="button" data-skip>Skip</button>
-        <button class="button confirm" type="submit">Save defaults</button>
-      </div>
-    </form>`;
-  const form = dialog.querySelector("form");
-  const folder = dialog.querySelector("#hostAccessDefaultFolder");
-  const configuredInput = dialog.querySelector("#hostAccessDefaultConfigured");
-  bindScopeDependency(dialog);
-  bindHostAccessState(dialog, {
-    configuredSelector: "#hostAccessDefaultConfigured"
-  });
-  dialog.querySelector("[data-choose-folder]")?.addEventListener("click", () => chooseFolder(folder));
-  const save = async (configured) => {
-    const ok = await window.dockerManagerActions?.setHostAccessSettings?.({
-      onboardingComplete: true,
-      defaults: {
-        configured,
-        masterEnabled: configured,
-        folder: folder?.value || "",
-        scopes: readScopes(dialog),
-        browserSelection: ""
-      }
-    });
-    if (ok !== false) closeDialog(dialog);
-  };
-  dialog.querySelector("[data-skip]")?.addEventListener("click", () => save(false));
-  form?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    void save(configuredInput?.checked === true);
-  });
-  document.body.appendChild(dialog);
-  window.setTimeout(() => configuredInput?.focus(), 0);
-}
-
-function maybeOpenHostAccessOnboarding(state = {}) {
-  if (!state?.stateLoaded || state?.hostAccess?.onboardingComplete === true) return;
-  openHostAccessOnboarding(state);
 }
 
 function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
@@ -340,12 +316,15 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
   const details = gateway.status || {};
   const browser = details.browser || {};
   const computer = details.computer_use || {};
-  const canArmComputer = computerUseNeedsArm(computer.status);
   const stateName = String(runtime.state || "disconnected");
   const reconnectAvailable = runtime.suppressed === true;
   const disconnectAvailable = !reconnectAvailable && (runtime.connected === true || stateName === "connecting");
   const disconnectedWithoutTab = !tab.id && stateName === "disconnected";
   const configured = config.configured && config.masterEnabled;
+  const browserAllowed = configured && config.scopes.browser === true;
+  const computerSetup = computerUseSetupState(config, runtime);
+  const browserReadiness = capabilityReadinessLabel(browserAllowed, browser);
+  const canArmComputer = !computerSetup.setupSupported && computerUseNeedsArm(computer.status);
   const connectionLabel = disconnectedWithoutTab && configured ? "Ready to connect" : statusLabel(stateName);
   const connectionDetail = disconnectedWithoutTab
     ? configured ? "Open this Instance in a Launcher tab to connect." : "Host access is off."
@@ -361,8 +340,6 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
       ? "Update Launcher or Agent Zero to use Host access"
       : runtime.code === "AUTH_REQUIRED"
         ? "Sign in to this Instance"
-      : runtime.code === "ONBOARDING_REQUIRED"
-        ? "Choose your Host access defaults"
         : stateName === "connected" || stateName === "paused" || stateName === "needs_action"
           ? "Ready"
           : "Checked when you connect";
@@ -385,7 +362,9 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
           <div><strong data-host-connection-label>${escapeHtml(connectionLabel)}</strong><small data-host-connection-detail>${escapeHtml(connectionDetail)}</small></div>
           ${connectionAction}
         </div>
+        <p class="dm-dialog-copy">Host access works only while the current Instance is open with the Launcher, either in a tab or detached window. Close that tab or window, and access stops.</p>
         ${runtime.message ? `<div class="dm-host-access-notice ${stateName === "error" ? "error" : ""}">${escapeHtml(runtime.message)}</div>` : ""}
+        <div class="dm-host-access-notice" data-computer-setup-notice${computerSetup.message ? "" : " hidden"}>${escapeHtml(computerSetup.message)}</div>
         ${scopeFieldsHtml("hostAccessInstance", config.scopes, {
           masterContent: switchLineHtml(
             "hostAccessConfigured",
@@ -412,7 +391,8 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
             </div>
             <div class="dm-host-access-diagnostics">
               <div><span>Connection</span><strong>${escapeHtml(compatibility)}</strong></div>
-              <div><span>Computer Use</span><strong>${escapeHtml(capabilityStatusLabel(computer.status, "Permission checked when connected"))}</strong></div>
+              <div><span>Browser</span><strong data-browser-readiness>${escapeHtml(browserReadiness)}</strong></div>
+              <div><span>Computer Use</span><strong data-computer-use-readiness>${escapeHtml(computerSetup.label)}</strong></div>
             </div>
           </div>
         </details>
@@ -420,7 +400,9 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
       <div class="dm-dialog-footer dm-host-access-footer">
         <div class="dm-dialog-footer-group">
           ${runtime.retryable || ["error", "needs_action"].includes(stateName) ? '<button class="button" type="button" data-retry>Retry</button>' : ""}
-          ${browser.can_prepare ? '<button class="button" type="button" data-prepare-browser>Set up browser</button>' : ""}
+          ${browserAllowed && browser.can_prepare ? '<button class="button" type="button" data-prepare-browser>Set up browser</button>' : ""}
+          <button class="button" type="button" data-setup-computer${computerSetup.canSetup && !computerSetup.restartRequired ? "" : " hidden"}>Allow Computer Use</button>
+          <button class="button confirm" type="button" data-restart-computer${computerSetup.restartRequired ? "" : " hidden"}>Restart Launcher</button>
           ${canArmComputer ? '<button class="button" type="button" data-rearm>Allow Computer Use</button>' : ""}
         </div>
         <div class="dm-dialog-footer-group">
@@ -465,6 +447,30 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "prepare_browser");
   });
   dialog.querySelector("[data-rearm]")?.addEventListener("click", () => window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "rearm_computer_use"));
+  dialog.querySelector("[data-setup-computer]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.hidden = true;
+    const readiness = dialog.querySelector("[data-computer-use-readiness]");
+    const notice = dialog.querySelector("[data-computer-setup-notice]");
+    if (readiness) readiness.textContent = "Allowed · Checking";
+    if (notice) {
+      notice.textContent = "Checking macOS permissions…";
+      notice.hidden = false;
+    }
+    const result = await window.dockerManagerActions?.hostGatewayCommand?.(
+      tab.id,
+      "setup_computer_use",
+      { prompt: true }
+    );
+    if (result === false && dialog.isConnected) {
+      button.disabled = false;
+      button.hidden = false;
+    }
+  });
+  dialog.querySelector("[data-restart-computer]")?.addEventListener("click", () => {
+    window.dockerManagerActions?.hostGatewayCommand?.(tab.id, "restart_computer_use");
+  });
   dialog.querySelector("form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const enabled = configuredInput?.checked === true;
@@ -478,6 +484,41 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     if (saved !== false) closeDialog(dialog);
   });
   document.body.appendChild(dialog);
+  const onState = (event) => {
+    if (!dialog.isConnected) return;
+    const nextState = event?.detail || {};
+    const nextTab = nextState?.instanceTabs?.tabs?.find((candidate) => candidate?.id === tab.id);
+    if (!nextTab) return;
+    const nextConfig = configForTarget(nextState, nextTab);
+    const nextRuntime = nextTab.hostAccess || {};
+    const nextGateway = nextRuntime.gateway || {};
+    const nextBrowser = nextGateway.status?.browser || {};
+    const nextConfigured = nextConfig.configured === true && nextConfig.masterEnabled !== false;
+    const nextComputerSetup = computerUseSetupState(nextConfig, nextRuntime);
+    const computerLabel = dialog.querySelector("[data-computer-use-readiness]");
+    const browserLabel = dialog.querySelector("[data-browser-readiness]");
+    const notice = dialog.querySelector("[data-computer-setup-notice]");
+    const setupButton = dialog.querySelector("[data-setup-computer]");
+    const restartButton = dialog.querySelector("[data-restart-computer]");
+    if (computerLabel) computerLabel.textContent = nextComputerSetup.label;
+    if (browserLabel) {
+      browserLabel.textContent = capabilityReadinessLabel(
+        nextConfigured && nextConfig.scopes?.browser === true,
+        nextBrowser
+      );
+    }
+    if (notice) {
+      notice.textContent = nextComputerSetup.message;
+      notice.hidden = !nextComputerSetup.message;
+    }
+    if (setupButton) {
+      setupButton.hidden = !nextComputerSetup.canSetup || nextComputerSetup.restartRequired;
+      setupButton.disabled = nextComputerSetup.setupState === "checking";
+    }
+    if (restartButton) restartButton.hidden = !nextComputerSetup.restartRequired;
+  };
+  window.addEventListener("dm:state", onState);
+  dialog.__hostAccessCleanup = () => window.removeEventListener("dm:state", onState);
   window.dockerManagerActions?.hideInstanceTabView?.();
   window.setTimeout(() => dialog.querySelector("#hostAccessConfigured")?.focus(), 0);
   return true;
@@ -486,8 +527,10 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
 export {
   configForTarget,
   capabilityStatusLabel,
+  capabilityReadinessLabel,
   computerUseNeedsArm,
-  maybeOpenHostAccessOnboarding,
+  computerUseSetupState,
+  gatewaySupportsComputerUseSetup,
   normalizeConfig,
   normalizeScopes,
   openHostAccessDialog,

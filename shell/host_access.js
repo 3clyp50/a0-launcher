@@ -113,11 +113,12 @@ function normalizeHostAccessSettings(value) {
   };
 }
 
-function resolveInstanceHostAccess(settings, { kind = 'local', id = '', folder = '' } = {}) {
+function resolveInstanceHostAccess(settings, { kind = 'local', id = '', folder = '' } = {}, current = null) {
   const normalized = normalizeHostAccessSettings(settings);
   const key = hostAccessInstanceKey(kind, id);
   const saved = key ? normalized.instances[key] : null;
-  const config = normalizeHostAccessInstance(saved, { kind, defaults: normalized.defaults });
+  const currentConfig = current && typeof current === 'object' && !Array.isArray(current) ? current : null;
+  const config = normalizeHostAccessInstance(saved || currentConfig, { kind, defaults: normalized.defaults });
   const resolvedFolder = normalizeHostFolder(folder) || config.folder;
   return {
     key,
@@ -126,6 +127,12 @@ function resolveInstanceHostAccess(settings, { kind = 'local', id = '', folder =
     folder: resolvedFolder,
     folderSource: normalizeHostFolder(folder) ? 'instance_workspace' : config.folder ? 'configured' : ''
   };
+}
+
+function hostAccessMatchesGateway(config = {}, gateway = {}) {
+  if ((config.masterEnabled !== false) !== (gateway.master_enabled !== false)) return false;
+  return ['files', 'file_write', 'code_execution', 'browser', 'computer_use']
+    .every((scope) => (config.scopes?.[scope] === true) === (gateway.scopes?.[scope] === true));
 }
 
 module.exports = {
@@ -138,5 +145,6 @@ module.exports = {
   normalizeHostAccessDefaults,
   normalizeHostAccessInstance,
   normalizeHostAccessSettings,
-  resolveInstanceHostAccess
+  resolveInstanceHostAccess,
+  hostAccessMatchesGateway
 };

@@ -99,6 +99,7 @@ test('gateway metadata is bounded before it reaches renderer state', () => {
     id: 'x'.repeat(300),
     state: 'connected',
     scopes: { files: true, file_write: false, code_execution: true, browser: true },
+    features: ['computer_use_setup_v1', '', 'x'.repeat(200)],
     status: { browser: { message: 'x'.repeat(4000) } }
   });
   assert.equal(metadata.id.length, 128);
@@ -106,6 +107,80 @@ test('gateway metadata is bounded before it reaches renderer state', () => {
   assert.equal(metadata.scopes.file_write, false);
   assert.equal(metadata.scopes.code_execution, false);
   assert.equal(metadata.status.browser.message.length, 2048);
+  assert.deepEqual(metadata.features.slice(0, 2), ['computer_use_setup_v1', 'x'.repeat(128)]);
+});
+
+test('gateway commands correlate successful results by request id', async () => {
+  const child = fakeChild();
+  const supervisor = new HostGatewaySupervisor({ spawn: () => child });
+  supervisor.start('tab-1', launch());
+
+  const pending = supervisor.request('tab-1', { action: 'setup_computer_use', prompt: true });
+  const command = JSON.parse(child.input.trim());
+  assert.equal(command.action, 'setup_computer_use');
+  assert.equal(command.prompt, true);
+  assert.match(command.request_id, /^launcher-/);
+
+  child.stdout.write(`${JSON.stringify({
+    type: 'result',
+    request_id: command.request_id,
+    ok: true,
+    result: { state: 'ready', accessibility: 'granted', screen_recording: 'granted' }
+  })}\n`);
+
+  assert.deepEqual(await pending, {
+    state: 'ready',
+    accessibility: 'granted',
+    screen_recording: 'granted'
+  });
+});
+
+test('gateway command failures retain structured errors and actionable status', async () => {
+  const child = fakeChild();
+  const supervisor = new HostGatewaySupervisor({ spawn: () => child });
+  supervisor.start('tab-1', launch());
+  const pending = supervisor.request('tab-1', { action: 'setup_computer_use' });
+  const command = JSON.parse(child.input.trim());
+
+  child.stdout.write(`${JSON.stringify({
+    type: 'result',
+    request_id: command.request_id,
+    ok: false,
+    code: 'COMPUTER_USE_SETUP_FAILED',
+    error: 'Computer Use setup failed.',
+    result: { state: 'error', accessibility: 'required', screen_recording: 'unknown' }
+  })}\n`);
+
+  await assert.rejects(pending, (error) => {
+    assert.equal(error.code, 'COMPUTER_USE_SETUP_FAILED');
+    assert.match(error.message, /setup failed/);
+    assert.deepEqual(error.result, {
+      state: 'error',
+      accessibility: 'required',
+      screen_recording: 'unknown'
+    });
+    return true;
+  });
+  assert.equal(supervisor.statusFor('tab-1').code, 'COMPUTER_USE_SETUP_FAILED');
+});
+
+test('gateway commands reject on timeout and child exit', async () => {
+  const first = fakeChild();
+  const second = fakeChild();
+  let childIndex = 0;
+  const supervisor = new HostGatewaySupervisor({ spawn: () => [first, second][childIndex++] });
+  supervisor.start('tab-1', launch());
+  await assert.rejects(
+    supervisor.request('tab-1', { action: 'status' }, { timeoutMs: 5 }),
+    (error) => error.code === 'GATEWAY_COMMAND_TIMEOUT'
+  );
+
+  supervisor.stop('tab-1', 'replace');
+  supervisor.start('tab-1', launch());
+  const pending = supervisor.request('tab-1', { action: 'status' });
+  second.exitCode = 1;
+  second.emit('exit', 1, null);
+  await assert.rejects(pending, (error) => error.code === 'GATEWAY_EXITED');
 });
 
 test('one tab owns exactly one invisible gateway child and no credential arguments', () => {

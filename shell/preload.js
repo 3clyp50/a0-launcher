@@ -182,10 +182,14 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     defaultPath: typeof defaultPath === 'string' ? defaultPath : ''
   }),
   retryHostGateway: (tabId) => ipcRenderer.invoke('docker-manager:retryHostGateway', { tabId }),
-  hostGatewayCommand: (tabId, action) => ipcRenderer.invoke('docker-manager:hostGatewayCommand', {
-    tabId,
-    action
-  }),
+  hostGatewayCommand: (tabId, action, options) => {
+    const value = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:hostGatewayCommand', {
+      tabId,
+      action,
+      prompt: value.prompt === true
+    });
+  },
   provisionRuntime: () => ipcRenderer.invoke('docker-manager:provisionRuntime'),
   selectRuntimeEndpoint: (id) => ipcRenderer.invoke('docker-manager:selectRuntimeEndpoint', {
     id: typeof id === 'string' ? id : ''

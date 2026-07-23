@@ -37,12 +37,12 @@ This scope owns:
   status. The renderer may choose folders through the named native-picker
   action and send bounded settings or gateway commands; it never sees child
   process handles, decrypted credentials, or a generic execution primitive.
-- First-use Host access onboarding is skippable and precedes gateway startup.
-  Local and saved remote setup default to no Launcher Host access. Onboarding
-  and Settings expose the local default master switch; file read, file write,
-  and Code execution remain preselected while browser and Computer Use are
-  opt-in. Remote setup requires an explicit choice to connect this computer
-  while its Launcher tab or detached window is open.
+- Create/Add Instance is the single initial Host access opt-in point; do not
+  reopen a global Host access onboarding modal. Local creation inherits the
+  Settings defaults, while saved remote setup requires an explicit choice to
+  connect this computer while its Launcher tab or detached window is open.
+  File read, file write, and Code execution remain preselected by default while
+  browser and Computer Use are opt-in.
 - Runtime setup state is part of the canonical renderer snapshot. If the
   runtime is not ready after initial state loads and no saved remote Instances
   exist, the renderer must show the startup runtime modal with a first-step
@@ -88,10 +88,10 @@ This scope owns:
   Instance ID through the shell-owned terminal action; the shell prompts for the
   CLI working folder before opening the terminal. Show `Install A0 CLI` while
   the system CLI is missing and replace it with `Open A0 CLI` once installed;
-  disable Open while CLI maintenance is running. First-run and Host access
-  onboarding must not present CLI installation as an extra step, permission, or
-  dependency. Do not add a global footer or ambiguous active-instance CLI
-  button.
+  disable Open while CLI maintenance is running. Create/Add Instance and Host
+  access settings must not present CLI installation as an extra step,
+  permission, or dependency. Do not add a global footer or ambiguous
+  active-instance CLI button.
 - Local Instance Backup and Restore belong with the other card-local actions.
   They must call named renderer actions that delegate host path selection and
   container archive work to the shell and Docker Manager.

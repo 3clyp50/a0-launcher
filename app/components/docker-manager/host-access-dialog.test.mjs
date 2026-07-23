@@ -6,8 +6,10 @@ const {
   bindHostAccessState,
   bindScopeDependency,
   browserSetupHint,
+  capabilityReadinessLabel,
   capabilityStatusLabel,
   computerUseNeedsArm,
+  computerUseSetupState,
   configForTarget,
   normalizeConfig,
   normalizeScopes,
@@ -81,6 +83,35 @@ test('local Host access inherits defaults while remote Host access stays off wit
   assert.equal(configForTarget(state, { kind: 'remote', instanceId: 'vps' }).folder, '/home/user/agent-zero');
 });
 
+test('saved Instance choices win over stale runtime gateway configuration', () => {
+  const saved = {
+    configured: true,
+    masterEnabled: true,
+    scopes: { files: true, file_write: true, code_execution: true, browser: true, computer_use: true }
+  };
+  const state = {
+    hostAccess: {
+      defaults: { configured: false, masterEnabled: false },
+      instances: { 'local:abc': saved }
+    }
+  };
+  const config = configForTarget(state, {
+    kind: 'local',
+    containerId: 'abc',
+    hostAccess: {
+      config: {
+        configured: false,
+        masterEnabled: false,
+        scopes: { files: false, file_write: false, code_execution: false, browser: false, computer_use: false }
+      }
+    }
+  });
+
+  assert.equal(config.configured, true);
+  assert.equal(config.scopes.browser, true);
+  assert.equal(config.scopes.computer_use, true);
+});
+
 test('File write controls Code execution without hiding file reads', () => {
   assert.deepEqual(normalizeScopes({
     files: true,
@@ -118,21 +149,11 @@ test('Host permissions use one collapsed native disclosure', () => {
   assert.doesNotMatch(html, /<details[^>]* open/);
 });
 
-test('Host access onboarding starts off and keeps permission switches visible', async () => {
-  const html = scopeFieldsHtml('host', {
-    files: true,
-    file_write: true,
-    code_execution: true,
-    browser: false,
-    computer_use: false
-  }, { onboarding: true });
-  assert.match(html, /dm-host-access-permissions-static/);
-  assert.match(html, /dm-host-access-switch/);
-  assert.doesNotMatch(html, /<details/);
+test('Host access uses per-Instance opt-in without a duplicate global onboarding dialog', async () => {
   const source = await readFile(new URL('./host-access-dialog.js', import.meta.url), 'utf8');
-  assert.match(source, /hostAccessDefaultConfigured/);
-  assert.match(source, /"You can change this for each Instance\.",\s+false/);
-  assert.match(source, />Save defaults<\/button>/);
+  const rendererSource = await readFile(new URL('../../docker_manager.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /hostAccessOnboarding|openHostAccessOnboarding/);
+  assert.doesNotMatch(rendererSource, /maybeOpenHostAccessOnboarding/);
 });
 
 test('Advanced Host access details start collapsed with a short summary', async () => {
@@ -167,6 +188,52 @@ test('Host capability statuses are human labels and arm only when actionable', (
   assert.equal(computerUseNeedsArm('rearm required'), true);
   assert.equal(computerUseNeedsArm('approval_required'), true);
   assert.equal(computerUseNeedsArm('unsupported'), false);
+  assert.equal(capabilityReadinessLabel(false, { status: 'ready' }), 'Not allowed');
+  assert.equal(capabilityReadinessLabel(true, { status: 'ready' }), 'Allowed · Ready');
+  assert.equal(capabilityReadinessLabel(true, { status: 'disabled' }), 'Allowed · Setup needed');
+});
+
+test('Computer Use readiness stays separate from the saved permission choice', () => {
+  const config = {
+    configured: true,
+    masterEnabled: true,
+    scopes: { computer_use: true }
+  };
+  const setupNeeded = computerUseSetupState(config, {
+    gateway: {
+      features: ['computer_use_setup_v1'],
+      status: {
+        computer_use: {
+          status: 'approval required',
+          setup: {
+            state: 'accessibility_required',
+            accessibility: 'required',
+            screen_recording: 'unknown'
+          }
+        }
+      }
+    }
+  });
+  const ready = computerUseSetupState(config, {
+    gateway: {
+      features: ['computer_use_setup_v1'],
+      status: { computer_use: { setup: { state: 'ready' } } }
+    }
+  });
+  const checking = computerUseSetupState(config, {
+    gateway: {
+      features: ['computer_use_setup_v1'],
+      status: { computer_use: { setup: { state: 'checking' } } }
+    }
+  });
+
+  assert.equal(setupNeeded.allowed, true);
+  assert.equal(setupNeeded.label, 'Allowed · Setup needed');
+  assert.equal(setupNeeded.canSetup, true);
+  assert.equal(checking.label, 'Allowed · Checking');
+  assert.equal(checking.canSetup, false);
+  assert.equal(ready.label, 'Allowed · Ready');
+  assert.equal(ready.canSetup, false);
 });
 
 test('Browser setup explains how to enable remote debugging when no endpoint is open', () => {
@@ -233,6 +300,9 @@ test('Host access UI uses five friendly permissions and explains the command bou
   assert.match(source, /Commands start here but can reach other folders/i);
   assert.match(source, /Folder for files and commands/);
   assert.match(source, /Launcher setup needs attention/);
+  assert.match(source, /data-browser-readiness/);
+  assert.match(source, /data-computer-use-readiness/);
+  assert.match(source, /Allowed · Setup needed/);
   assert.doesNotMatch(source, /data-install-cli/);
   assert.doesNotMatch(source, /2\.5 or newer/);
   assert.doesNotMatch(source, /Personal browser/);

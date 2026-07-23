@@ -7,7 +7,7 @@ import {
 import { renderOperationDialog } from "./components/docker-manager/operation-modal/operation-modal.js";
 import { progressMetaText } from "./components/docker-manager/progress-eta.js";
 import { renderRuntimeGate } from "./components/docker-manager/runtime-gate/runtime-gate.js";
-import { maybeOpenHostAccessOnboarding } from "./components/docker-manager/host-access-dialog.js";
+import { openHostAccessDialog } from "./components/docker-manager/host-access-dialog.js";
 
 function isErrorResponse(obj) {
   return !!obj && typeof obj === "object" && typeof obj.message === "string";
@@ -477,7 +477,8 @@ function emitState() {
   renderBackgroundProgressToast(next.progress);
   renderRuntimeGate(next, window.dockerManagerActions || {});
   renderOperationDialog(next, window.dockerManagerActions || {});
-  maybeOpenHostAccessOnboarding(next);
+  const setupTab = next?.instanceTabs?.tabs?.find((tab) => tab?.hostAccess?.openComputerUseSetup === true);
+  if (setupTab && !document.getElementById("hostAccessDialog")) openHostAccessDialog(setupTab, next);
 }
 
 function applyInstanceTabsSnapshot(snap) {
@@ -1080,6 +1081,25 @@ async function setInstanceHostAccess(target = {}, config = {}) {
       setBanner("error", res.message);
       return false;
     }
+    const key = typeof res?.key === "string" && res.key ? res.key : id ? `${kind}:${id}` : "";
+    const saved = res && typeof res === "object" ? { ...res } : { ...config };
+    delete saved.key;
+    if (key) {
+      store.hostAccess = store.hostAccess && typeof store.hostAccess === "object"
+        ? store.hostAccess
+        : { version: 1, defaults: {}, instances: {} };
+      store.hostAccess.instances = {
+        ...(store.hostAccess.instances || {}),
+        [key]: saved
+      };
+      store.instanceTabs.tabs = (store.instanceTabs.tabs || []).map((tab) => {
+        const tabId = tab?.kind === "remote" ? tab?.instanceId : tab?.containerId;
+        return `${tab?.kind === "remote" ? "remote" : "local"}:${tabId || ""}` === key
+          ? { ...tab, hostAccess: { ...(tab.hostAccess || {}), config: saved } }
+          : tab;
+      });
+      emitState();
+    }
     setBanner("info", "Host access settings saved.");
     await refresh();
     return res || true;
@@ -1121,16 +1141,16 @@ async function retryHostGateway(tabId) {
   }
 }
 
-async function hostGatewayCommand(tabId, action) {
+async function hostGatewayCommand(tabId, action, options = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.hostGatewayCommand !== "function") return false;
   try {
-    const res = await api.hostGatewayCommand(tabId, action);
+    const res = await api.hostGatewayCommand(tabId, action, options);
     if (isErrorResponse(res)) {
       setBanner("error", res.message);
       return false;
     }
-    return true;
+    return res || true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to update Host access");
     return false;

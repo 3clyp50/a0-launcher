@@ -24,8 +24,8 @@ This scope owns:
   progress, recovery actions, and non-dismissable gating.
 - `remote-instance-dialog.js`: shared remote Instance URL and optional saved
   credential dialog used by the startup runtime gate and the Instances tab.
-- `host-access-dialog.js`: one-time Host access onboarding, existing-Instance
-  settings, scope dependency UI, folder selection, browser-profile selection,
+- `host-access-dialog.js`: existing-Instance Host access settings, scope
+  dependency UI, folder selection, browser-profile selection, permission setup,
   diagnostics, Retry, Disconnect, Reconnect, and disconnected state.
 - `first-instance-setup/`: retired first image-pull defaults panel retained for
   compatibility while normal creation owns first Instance launch choices.
@@ -306,7 +306,7 @@ This scope owns:
 - Settings owns persistence for preferred UI/SSH ports and Instance
   provider/model defaults plus workspace storage and Host access defaults. The
   Instance defaults tab must expose the same master state, five permissions,
-  and fallback folder chosen during Host access onboarding, preserve hidden
+  and fallback folder used by Create Instance, preserve hidden
   browser-profile state, and save them through the page's single Save action.
   Do not scatter persistent default controls into install or instance cards
   except for the first-pull defaults prompt.
@@ -343,24 +343,29 @@ This scope owns:
   permissions while Host access is on, show only that Host access is off when
   the master switch is off, place that master switch and the folder field inside
   the same disclosure, and keep live Disconnect/Reconnect beside the connection
-  status. Use Agent Zero-style switch controls in every Host access view. The
-  one-time onboarding is the exception only to collapsing: keep its full
-  permission list visible.
-  Host access starts off for new local and remote setups, with the local default
-  master switch available in both onboarding and Settings. Browser and Computer
-  Use start opt-in. Do not add a CLI installation helper to first-Instance or
-  Host access onboarding; Launcher owns CLI preparation independently of
-  permission opt-in.
+  status. Use Agent Zero-style switch controls in every Host access view.
+  Create/Add Instance is the single initial Host access choice and must not be
+  followed by a global onboarding prompt. New local Instances inherit the
+  Settings default, while new remote Instances require their own explicit
+  choice. Browser and Computer Use start opt-in. Do not add a CLI installation
+  helper to Create/Add Instance or Host access settings; Launcher owns CLI
+  preparation independently of permission opt-in.
   One Agent Zero-style switch owns the persisted master permission state and
   visibly disables its dependent permissions. Call the selected path the folder
   for files and commands, explain both roles in plain language, and make
   clear that commands may use other locations available to the Launcher user.
   Keep browser selection and Connection/Computer Use diagnostics in a collapsed
   Advanced settings disclosure with a short summary.
-  Browser preparation and Computer Use
-  permission failures are Needs action states, not silent relaunches or grants.
-  Present capability metadata as human labels and offer Computer Use arming only
-  for actionable approval, rearm, or error states—not healthy trust modes.
+  Browser preparation and Computer Use permission failures are Needs action
+  states, not silent browser relaunches or hidden permission grants. Render a
+  saved capability choice independently from runtime readiness as `Not allowed`,
+  `Allowed · Setup needed`, `Allowed · Checking`, or `Allowed · Ready`; runtime
+  metadata must never turn an allowed switch off. When Computer Use is newly
+  enabled on macOS, open the staged setup surface after the gateway connects.
+  Later launches preflight silently, with one explicit retry or restart action
+  when required. Present capability metadata as human labels and offer Computer
+  Use setup only for actionable approval, rearm, restart, or error states—not
+  healthy trust modes.
   Compatibility copy must name advertised Launcher gateway support rather than
   assume a specific A0 CLI release number.
 - Local creation defaults channel updates on for `latest` and `ready`; users may

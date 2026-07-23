@@ -71,12 +71,18 @@ Architecture contracts:
   only an explicitly enabled Host access choice on an open Instance tab may
   start a gateway lease. An Instance menu shows `Install A0 CLI` while the
   system CLI is missing and replaces it with `Open A0 CLI` once installed.
-  First-run and Host access onboarding do not include a separate CLI installer
-  step.
+  Create/Add Instance and Host access settings do not include a separate CLI
+  installer step.
 - A0 CLI v2.5 is the first connector release with the Launcher gateway
   contract. Continue capability-gating gateway candidates rather than replacing
   that contract check with a version comparison; an unreleased sibling
   development checkout may advertise the capability before the public release.
+- A0 CLI v2.6 is the first connector release expected to advertise
+  `computer_use_setup_v1`. Capability-gate the correlated Computer Use setup
+  command separately from the base gateway contract. On macOS, a newly enabled
+  Computer Use choice may prompt once through the staged setup flow; later
+  launches preflight silently and keep the saved choice enabled when runtime
+  permission setup needs attention.
 - A successful manual login in an eligible Instance tab may offer one branded,
   shell-owned modal child window with `Save credentials` / `Not now` when that
   Instance has no launcher-saved credentials. Login detection and pending

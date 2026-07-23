@@ -83,6 +83,11 @@ This scope owns:
   contract. Keep actual gateway startup capability-gated so compatible
   development checkouts and future versions work without version-specific
   branches.
+- A0 CLI v2.6 is the first release expected to advertise
+  `computer_use_setup_v1`. The shell must capability-gate that command, correlate
+  every request/result with `request_id`, reject pending requests on timeout or
+  gateway exit, and keep the base gateway usable when the setup capability is
+  absent.
 - External links should open through Electron `shell.openExternal` only after
   validation. Approved public launcher resources such as Docs, API Dashboard,
   and Support should be exposed to the renderer as fixed resource IDs, not
@@ -128,7 +133,10 @@ This scope owns:
   so remote shell groups, browser sessions, Computer Use sessions, and the
   WebSocket are not orphaned.
 - Missing Host access preferences normalize with the local master state off.
-  Preserve explicit saved choices; local onboarding and Settings own opt-in.
+  Preserve explicit saved Instance choices ahead of tab/runtime snapshots;
+  Settings owns local defaults and Create/Add Instance is the single initial
+  opt-in point. The retained onboarding field is compatibility state only and
+  must not gate gateway startup.
 - Launcher gateway supervision must use the installed CLI contract and JSONL
   stdin/stdout; it must not open an inbound port or expose a generic process
   surface through preload. Pass credentials only as ephemeral environment

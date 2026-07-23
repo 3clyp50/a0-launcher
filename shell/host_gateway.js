@@ -10,6 +10,7 @@ const GATEWAY_STATES = new Set([
 ]);
 const MAX_GATEWAY_JSONL_LENGTH = 1024 * 1024;
 const GATEWAY_STARTUP_TIMEOUT_MS = 30000;
+const GATEWAY_REQUEST_TIMEOUT_MS = 30000;
 
 function boundedGatewayValue(value, depth = 0) {
   if (typeof value === 'string') return value.slice(0, 2048);
@@ -41,6 +42,9 @@ function sanitizeGatewayMetadata(value = {}) {
     host_label: String(source.host_label || '').slice(0, 128),
     state,
     master_enabled: source.master_enabled !== false,
+    features: Array.isArray(source.features)
+      ? source.features.slice(0, 64).map((item) => String(item || '').slice(0, 128)).filter(Boolean)
+      : [],
     scopes: {
       files,
       file_write: fileWrite,
@@ -147,6 +151,7 @@ class HostGatewaySupervisor {
       : GATEWAY_STARTUP_TIMEOUT_MS;
     this.records = new Map();
     this.closingChildren = new Set();
+    this.requestSequence = 0;
   }
 
   start(tabId, launch = {}, options = {}) {
@@ -175,6 +180,7 @@ class HostGatewaySupervisor {
       suppressed: false,
       removed: false,
       startupTimer: null,
+      pendingRequests: new Map(),
       launch: { ...launch }
     };
     this.records.set(id, record);
@@ -248,6 +254,37 @@ class HostGatewaySupervisor {
     }
   }
 
+  request(tabId, payload, options = {}) {
+    const record = this.records.get(String(tabId || '').trim());
+    const child = record?.child;
+    if (!record || !child?.stdin || child.stdin.destroyed || child.exitCode !== null) {
+      return Promise.reject(this._requestError('GATEWAY_NOT_RUNNING', 'Host gateway is not running.'));
+    }
+    const timeoutValue = Number(options.timeoutMs);
+    const timeoutMs = Number.isFinite(timeoutValue)
+      ? Math.max(1, Math.min(timeoutValue, 5 * 60 * 1000))
+      : GATEWAY_REQUEST_TIMEOUT_MS;
+    const requestId = `launcher-${++this.requestSequence}`;
+    const command = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? { ...payload, request_id: requestId }
+      : { request_id: requestId };
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        record.pendingRequests.delete(requestId);
+        reject(this._requestError(
+          'GATEWAY_COMMAND_TIMEOUT',
+          `Host gateway command timed out after ${Math.ceil(timeoutMs / 1000)} seconds.`
+        ));
+      }, timeoutMs);
+      timer.unref?.();
+      record.pendingRequests.set(requestId, { resolve, reject, timer });
+      if (this.send(record.tabId, command)) return;
+      clearTimeout(timer);
+      record.pendingRequests.delete(requestId);
+      reject(this._requestError('GATEWAY_NOT_RUNNING', 'Host gateway is not running.'));
+    });
+  }
+
   disconnect(tabId) {
     const id = String(tabId || '').trim();
     const record = this.records.get(id);
@@ -264,6 +301,7 @@ class HostGatewaySupervisor {
     record.intentional = true;
     record.removed = !preserveSuppression;
     this._clearStartupTimer(record);
+    this._rejectPending(record, 'GATEWAY_STOPPED', 'Host gateway stopped before the command completed.');
     if (preserveSuppression) {
       record.status = {
         ...record.status,
@@ -408,14 +446,19 @@ class HostGatewaySupervisor {
       return;
     }
     if (event.type === 'result' && event.ok === false) {
+      this._settleRequest(record, event);
       record.status = {
         ...record.status,
         state: 'needs_action',
-        code: 'GATEWAY_COMMAND_FAILED',
-        message: String(event.error || 'Host access needs attention.'),
+        code: String(event.code || 'GATEWAY_COMMAND_FAILED').slice(0, 128),
+        message: String(event.error || 'Host access needs attention.').slice(0, 2048),
         retryable: false
       };
       this._publish(record);
+      return;
+    }
+    if (event.type === 'result') {
+      this._settleRequest(record, event);
       return;
     }
     if (event.type === 'stage') {
@@ -434,6 +477,7 @@ class HostGatewaySupervisor {
     this._clearStartupTimer(record);
     if (record.child) this.closingChildren.delete(record.child);
     record.child = null;
+    this._rejectPending(record, 'GATEWAY_EXITED', 'Host gateway exited before the command completed.');
     if (record.removed) return;
     const expected = record.intentional || record.suppressed;
     const preserveFailure = !expected &&
@@ -468,6 +512,7 @@ class HostGatewaySupervisor {
   _terminateWithError(record, code, message) {
     if (record.removed) return;
     this._clearStartupTimer(record);
+    this._rejectPending(record, code, message);
     this._fail(record, code, message);
     try { record.child?.kill?.('SIGTERM'); } catch { /* ignore */ }
   }
@@ -478,6 +523,39 @@ class HostGatewaySupervisor {
     record.startupTimer = null;
   }
 
+  _settleRequest(record, event) {
+    const requestId = String(event?.request_id || '').trim();
+    const pending = requestId ? record.pendingRequests.get(requestId) : null;
+    if (!pending) return false;
+    record.pendingRequests.delete(requestId);
+    clearTimeout(pending.timer);
+    if (event.ok === true) {
+      pending.resolve(boundedGatewayValue(event.result));
+    } else {
+      pending.reject(this._requestError(
+        String(event.code || 'GATEWAY_COMMAND_FAILED'),
+        String(event.error || 'Host access command failed.'),
+        event.result
+      ));
+    }
+    return true;
+  }
+
+  _rejectPending(record, code, message) {
+    for (const pending of record?.pendingRequests?.values?.() || []) {
+      clearTimeout(pending.timer);
+      pending.reject(this._requestError(code, message));
+    }
+    record?.pendingRequests?.clear?.();
+  }
+
+  _requestError(code, message, result) {
+    const error = new Error(String(message || code || 'Host gateway command failed.'));
+    error.code = String(code || 'GATEWAY_COMMAND_FAILED');
+    if (result !== undefined) error.result = boundedGatewayValue(result);
+    return error;
+  }
+
   _publish(record) {
     if (!record.removed) this.onStatus(record.tabId, publicGatewayStatus(record.status));
   }
@@ -485,6 +563,7 @@ class HostGatewaySupervisor {
 
 module.exports = {
   GATEWAY_STATES,
+  GATEWAY_REQUEST_TIMEOUT_MS,
   coreCapabilitiesSupportLauncher,
   gatewayScopeArgument,
   gatewayErrorState,

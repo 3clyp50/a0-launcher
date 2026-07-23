@@ -1,8 +1,11 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { test } = require('node:test');
 
 const {
   hostAccessInstanceKey,
+  hostAccessMatchesGateway,
   normalizeHostFolder,
   normalizeHostAccessScopes,
   normalizeHostAccessSettings,
@@ -22,6 +25,12 @@ test('Host access defaults local Instances off with browser and Computer Use opt
     browser: false,
     computer_use: false
   });
+});
+
+test('gateway startup is not gated by legacy onboarding state', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  assert.doesNotMatch(source, /ONBOARDING_REQUIRED/);
+  assert.doesNotMatch(source, /!settings\.onboardingComplete/);
 });
 
 test('saved remote Instances stay server-side until explicitly configured', () => {
@@ -83,4 +92,50 @@ test('instance settings and bind-mounted workspace resolve deterministically', (
   assert.equal(local.folder, '/home/instance/usr');
   assert.equal(local.folderSource, 'instance_workspace');
   assert.equal(local.scopes.code_execution, false);
+});
+
+test('saved Instance choices win, then the current tab, then local defaults', () => {
+  const settings = normalizeHostAccessSettings({
+    defaults: {
+      configured: false,
+      scopes: { browser: false, computer_use: false }
+    },
+    instances: {
+      'local:saved': {
+        configured: true,
+        scopes: { browser: true, computer_use: true }
+      }
+    }
+  });
+  const staleTab = {
+    configured: false,
+    scopes: { browser: false, computer_use: false }
+  };
+  const currentTab = {
+    configured: true,
+    scopes: { browser: true, computer_use: true }
+  };
+
+  assert.equal(resolveInstanceHostAccess(settings, { kind: 'local', id: 'saved' }, staleTab).configured, true);
+  assert.equal(resolveInstanceHostAccess(settings, { kind: 'local', id: 'current' }, currentTab).configured, true);
+  assert.equal(resolveInstanceHostAccess(settings, { kind: 'local', id: 'default' }).configured, false);
+});
+
+test('empty or stale gateway snapshots do not match saved permission switches', () => {
+  const saved = {
+    masterEnabled: true,
+    scopes: {
+      files: true,
+      file_write: true,
+      code_execution: true,
+      browser: true,
+      computer_use: true
+    }
+  };
+
+  assert.equal(hostAccessMatchesGateway(saved, { master_enabled: true, scopes: {} }), false);
+  assert.equal(hostAccessMatchesGateway(saved, {
+    master_enabled: true,
+    scopes: { ...saved.scopes }
+  }), true);
 });

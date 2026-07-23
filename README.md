@@ -19,8 +19,7 @@ container, release, storage-volume, and remote-instance orchestration.
 - Installs and maintains the official A0 CLI, with per-Instance actions to open
   it or run installation/update explicitly.
 - Offers opt-in, tab-leased Host access for local files, browser, and computer
-  control without making CLI installation part of first-run or permission
-  onboarding.
+  control without making CLI installation part of Instance setup.
 
 ## Runtime Model
 
@@ -112,7 +111,11 @@ This does not enable Host access: a gateway runs only for an Instance whose Host
 access setting was explicitly enabled while its Launcher tab or detached window
 is open. Each local and saved remote Instance menu shows `Install A0 CLI` while
 the system CLI is missing, then replaces it with `Open A0 CLI`. A0 CLI v2.5 is
-the first release carrying the Launcher gateway contract.
+the first release carrying the Launcher gateway contract. Launcher 1.4 uses the
+`computer_use_setup_v1` capability introduced in A0 CLI 2.6 to stage macOS
+Accessibility and Screen Recording setup after Computer Use is enabled. Saved
+permission choices remain on when runtime setup needs attention; subsequent
+launches preflight silently instead of reopening system prompts.
 
 ## Validation
 

@@ -90,11 +90,12 @@ This scope owns:
   inspection rather than renderer guesses.
 - Persist user preferences and remote instances through `state_store.js`; do not
   invent parallel files.
-- Host access persistence lives in `state_store.js`: one-time onboarding,
-  local defaults, optional default folder, per-Instance configured/master
-  state, five permission scopes, browser selection, and the stable Launcher
-  installation ID. Child PIDs and connection status are runtime-only. Local
-  records use container IDs and remote records use saved remote Instance IDs.
+- Host access persistence lives in `state_store.js`: compatibility-only
+  onboarding state, local defaults, optional default folder, per-Instance
+  configured/master state, five permission scopes, browser selection, and the
+  stable Launcher installation ID. Child PIDs, connection status, and permission
+  readiness are runtime-only. Local records use container IDs and remote records
+  use saved remote Instance IDs.
 - A local bind mount backing `/a0/usr` is the authoritative Host access folder.
   This includes development containers that bind the whole `/a0` runtime: map
   their host source's `usr` child unless a more specific `/a0/usr` mount masks

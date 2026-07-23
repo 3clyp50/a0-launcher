@@ -276,7 +276,6 @@ class HostGatewaySupervisor {
           `Host gateway command timed out after ${Math.ceil(timeoutMs / 1000)} seconds.`
         ));
       }, timeoutMs);
-      timer.unref?.();
       record.pendingRequests.set(requestId, { resolve, reject, timer });
       if (this.send(record.tabId, command)) return;
       clearTimeout(timer);

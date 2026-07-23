@@ -52,7 +52,9 @@ This scope owns:
   metadata for runtime identity. Cache the last valid identity by stable
   Instance ID so stopped or temporarily offline Instances retain their
   last-seen version; replace it only after a later successful health response.
-  Keep Docker image tags as separate fallback provenance.
+  A local Instance without health metadata may show the bounded branch from
+  `/a0/.git/HEAD`, but health-derived and cached `R v...` identity remains
+  preferred. Keep Docker image tags as separate fallback provenance.
 - Channel-tagged images and containers may expose `matchedReleaseTag` when the
   local tag can be tied to a concrete semver release through digest matching or
   local evidence for the current `latest` release tag. For containers, channel

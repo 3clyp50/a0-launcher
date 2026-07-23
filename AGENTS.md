@@ -125,9 +125,11 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   Agent Zero builds. Arbitrary Docker images belong to the Advanced developer
   flow and must not appear as normal versions or setup choices.
 - Local and saved remote Instance cards derive their running code identity from
-  Agent Zero's `/api/health` Git metadata. Cache the last valid identity by
-  Instance ID so stopped or temporarily offline Instances keep their last-seen
-  version until a later successful health check replaces it.
+  Agent Zero's `/api/health` Git metadata. A local Instance without health
+  metadata may show the bounded branch from `/a0/.git/HEAD`, but health-derived
+  and cached `R v...` identity remains preferred. Cache the last valid identity
+  by Instance ID so stopped or temporarily offline Instances keep their
+  last-seen version until a later successful health check replaces it.
 - A saved runtime endpoint is a preference, not a lock: use it while reachable,
   temporarily fall back to another reachable endpoint, and return to it later.
   Explicitly starting or selecting a runtime makes that endpoint preferred.

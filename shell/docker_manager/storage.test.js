@@ -24,6 +24,8 @@ const {
   waitForStartedLocalInstanceUi,
   instanceHealthUrl,
   requestInstanceHealth,
+  gitBranchFromHead,
+  enrichContainersWithGitBranch,
   parsePortMappings,
   settlePortMappings,
   replacementPortMappingsFromInspect,
@@ -40,6 +42,20 @@ const {
   createAgentZeroBackupZip,
   restoreAgentZeroBackupZip
 } = dockerManager._test;
+
+test('unhealthy local Instances fall back to their Git HEAD branch', async () => {
+  assert.equal(gitBranchFromHead('ref: refs/heads/ready\n'), 'ready');
+  assert.equal(gitBranchFromHead('34a8092dabba\n'), '');
+
+  const [container] = await enrichContainersWithGitBranch({
+    async readContainerTextFile() {
+      return 'ref: refs/heads/ready\n';
+    }
+  }, [{ containerId: 'container-id', imageRef: '34a8092dabba' }]);
+
+  assert.equal(container.runtimeBranch, 'ready');
+  assert.equal(container.runtimeVersion, undefined);
+});
 
 async function tempRoot() {
   return await fs.mkdtemp(path.join(os.tmpdir(), 'a0-launcher-storage-'));

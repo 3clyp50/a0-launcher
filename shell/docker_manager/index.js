@@ -452,6 +452,26 @@ function runtimeSourceFromHealth(value) {
   });
 }
 
+function gitBranchFromHead(value) {
+  const match = String(value || '').trim().match(/^ref:\s+refs\/heads\/([^\r\n]+)$/u);
+  return sanitizeGitBranchName(match?.[1]);
+}
+
+async function enrichContainersWithGitBranch(docker, containers = []) {
+  const list = Array.isArray(containers) ? containers : [];
+  if (!docker || typeof docker.readContainerTextFile !== 'function') return list;
+  return Promise.all(list.map(async (container) => {
+    if (container?.runtimeBranch || container?.runtimeSource?.branch || !container?.containerId) return container;
+    try {
+      const head = await docker.readContainerTextFile(container.containerId, '/a0/.git/HEAD', { maxBytes: 256 });
+      const branch = gitBranchFromHead(head);
+      return branch ? { ...container, runtimeBranch: branch } : container;
+    } catch {
+      return container;
+    }
+  }));
+}
+
 function applyRuntimeSource(instance, source) {
   if (!source) return instance;
   return {
@@ -2223,7 +2243,7 @@ async function buildDerivedState(options = {}) {
       docker.listRemoteTags(imageRepo).catch(() => null)
     ]);
   let containers = enrichLocalInstancesWithHealth(applyLocalInstanceIdentity(
-    await enrichContainersWithWorkspaceStorage(docker, rawContainers),
+    await enrichContainersWithGitBranch(docker, await enrichContainersWithWorkspaceStorage(docker, rawContainers)),
     localInstanceNames,
     localInstanceColors,
     localInstanceIcons,
@@ -6049,7 +6069,7 @@ async function getDockerInventory() {
       isBackendImage: String(image?.imageRepo || '').trim() === imageRepo
     }));
     containers = enrichLocalInstancesWithHealth(applyLocalInstanceIdentity(
-      await enrichContainersWithWorkspaceStorage(docker, Array.isArray(results[1]) ? results[1] : []),
+      await enrichContainersWithGitBranch(docker, await enrichContainersWithWorkspaceStorage(docker, Array.isArray(results[1]) ? results[1] : [])),
       localInstanceNames,
       localInstanceColors,
       localInstanceIcons,
@@ -6257,6 +6277,8 @@ module.exports = {
     instanceHealthUrl,
     requestInstanceHealth,
     runtimeSourceFromHealth,
+    gitBranchFromHead,
+    enrichContainersWithGitBranch,
     parsePortMappings,
     settlePortMappings,
     replacementPortMappingsFromInspect,

@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const {
   authEnvLinesFromValues,
   channelPullDefault,
+  channelPullOperationType,
   createLocalInstanceButtonModel,
   directWorkspaceFolder,
   installedVersionChoices,
@@ -62,6 +63,11 @@ test('channel pull defaults on for every channel choice', () => {
     matchedReleaseTag: 'v1.10',
     publishedReleaseTag: 'v1.10'
   }), true);
+});
+
+test('channel pulls install missing images and update existing images', () => {
+  assert.equal(channelPullOperationType({ tag: 'latest', availability: 'available' }), 'install');
+  assert.equal(channelPullOperationType({ tag: 'latest', availability: 'installed' }), 'update');
 });
 
 test('create local instance button model explains disabled states', () => {

@@ -884,13 +884,13 @@ async function startRunAfterPull(progress = null) {
   return true;
 }
 
-async function runAfterPull(tag, options = {}) {
+async function runAfterPull(tag, options = {}, operationType = "update") {
   const targetTag = typeof tag === "string" ? tag.trim() : "";
   if (!targetTag) {
     setBanner("error", "Choose a version before creating an Instance.");
     return false;
   }
-  const res = await installOrSync(targetTag, { operationType: "update" });
+  const res = await installOrSync(targetTag, { operationType });
   if (isErrorResponse(res) || !res?.opId) return res;
   pendingRunAfterPull = {
     opId: res.opId,

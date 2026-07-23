@@ -297,6 +297,10 @@ function channelPullDefault(choice = null) {
   return isChannelVersionChoice(choice);
 }
 
+function channelPullOperationType(choice = null) {
+  return isInstalledRunEntry(choice) ? "update" : "install";
+}
+
 function openRunInstanceDialog({ entry, state, versionChoices = null, includeVersionPicker = false, title = "Run instance", submitLabel = "Run", selectedTag = "" } = {}) {
   const existing = document.getElementById("activateInstanceDialog");
   if (existing) existing.remove();
@@ -606,7 +610,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
     if (defaultsSaved === false) return;
     closeDialog(dialog);
     if (shouldPullChannel) {
-      await window.dockerManagerActions?.runAfterPull?.(tag, options);
+      await window.dockerManagerActions?.runAfterPull?.(tag, options, channelPullOperationType(selectedEntry));
     } else {
       await window.dockerManagerActions?.activateTag?.(tag, options);
     }
@@ -647,6 +651,7 @@ function openCreateLocalInstanceDialog(state = {}, options = {}) {
 export {
   authEnvLinesFromValues,
   channelPullDefault,
+  channelPullOperationType,
   createLocalInstanceButtonModel,
   directWorkspaceFolder,
   installedVersionChoices,

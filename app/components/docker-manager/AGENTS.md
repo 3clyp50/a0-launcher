@@ -130,7 +130,9 @@ This scope owns:
   defaults panel, workspace storage step, or "start my first Instance" checkbox.
   Starting after a pull is automatic only for the submitted Create local
   Instance form. First-run image pulls should keep visible progress and should
-  not expose `Download in background`.
+  not expose `Download in background`, and their modal copy must say `Install`
+  / `Installing`; channel pulls for an existing local image say `Update` /
+  `Updating`.
 - Active modal progress should show the current phase once, in the progress
   header above the bar. Do not repeat the same phase as body detail under the
   modal title.

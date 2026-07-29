@@ -180,7 +180,10 @@ This scope owns:
 - Packaged launcher executable update prompts use `electron-updater` metadata
   from the launcher GitHub Release. A newer executable may hold
   `shell/loading.html` with `Update` and `Continue`; `Update` downloads the
-  updater payload, then becomes a restart/install action once downloaded.
+  updater payload, then becomes a restart/install action once downloaded. Before
+  `quitAndInstall()`, stop active gateway leases and run the installed CLI's
+  `a0 update` handoff; a CLI update failure is logged but must not strand the
+  downloaded Launcher update.
 - `electron-updater` stays configured with `autoDownload: false`,
   `autoInstallOnAppQuit: false`, web installers disabled, and differential
   download disabled. User intent must start download and install.

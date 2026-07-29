@@ -85,10 +85,45 @@ function runA0CliInstaller({ platform = process.platform, spawn = childProcess.s
   });
 }
 
+function runA0CliUpdate(cli, { spawn = childProcess.spawn, env = process.env } = {}) {
+  const binary = String(cli || '').trim();
+  if (!binary) {
+    const error = new Error('A0 CLI was not found.');
+    error.code = 'TERMINAL_UNAVAILABLE';
+    return Promise.reject(error);
+  }
+
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawn(binary, ['update'], {
+        stdio: 'ignore',
+        windowsHide: true,
+        env
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    child.once('error', reject);
+    child.once('exit', (code, signal) => {
+      if (code === 0) {
+        resolve({ updated: true });
+        return;
+      }
+      const error = new Error(`A0 CLI update exited (${code ?? signal ?? 'unknown'}).`);
+      error.code = 'CLI_UPDATE_FAILED';
+      reject(error);
+    });
+  });
+}
+
 module.exports = {
   A0_CLI_RELEASE_API_URL,
   a0CliInstallCommand,
   normalizeA0CliVersion,
   runA0CliInstaller,
+  runA0CliUpdate,
   shouldInstallA0Cli
 };

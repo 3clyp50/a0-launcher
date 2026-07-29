@@ -56,6 +56,7 @@ const {
   A0_CLI_RELEASE_API_URL,
   normalizeA0CliVersion,
   runA0CliInstaller,
+  runA0CliUpdate,
   shouldInstallA0Cli
 } = require('./a0_cli_install');
 const {
@@ -724,12 +725,33 @@ async function installLauncherUpdate() {
 
   setLauncherUpdateState({
     state: 'installing',
-    message: 'Restarting to install update...',
+    message: 'Updating A0 CLI...',
     progress: null
   });
 
   const logPath = resolveLauncherUpdaterLogPathForCurrentRun();
   const useSilentWindowsInstall = process.platform === 'win32';
+
+  try {
+    hostGatewaySupervisor.stopAll('cli_update', { preserveSuppression: true });
+    if (hostGatewaySupervisor.pendingStopCount()) {
+      await hostGatewaySupervisor.waitForStopped(8500);
+    }
+    const cli = await ensureA0CliInstalled();
+    await runA0CliUpdate(cli);
+    await appendLauncherUpdaterPersistentLog(logPath, 'A0 CLI update command completed.');
+  } catch (error) {
+    console.warn('[launcher-update] A0 CLI update failed; continuing with the Launcher update.', error);
+    await appendLauncherUpdaterPersistentLog(logPath, 'A0 CLI update command failed.', {
+      message: error && typeof error.message === 'string' ? error.message : String(error || 'Unknown error')
+    });
+  }
+
+  setLauncherUpdateState({
+    state: 'installing',
+    message: 'Restarting to install update...',
+    progress: null
+  });
 
   try {
     await writeLauncherUpdaterInstallMarker({

@@ -6,6 +6,7 @@ const {
   a0CliInstallCommand,
   normalizeA0CliVersion,
   runA0CliInstaller,
+  runA0CliUpdate,
   shouldInstallA0Cli
 } = require('./a0_cli_install');
 
@@ -68,4 +69,27 @@ test('CLI installer waits for completion and reports failure', async () => {
   const failed = runA0CliInstaller({ platform: 'linux', spawn });
   child.emit('exit', 7, null);
   await assert.rejects(failed, { code: 'CLI_INSTALL_FAILED' });
+});
+
+test('CLI updater runs a0 update and reports failure', async () => {
+  let child;
+  let spawned;
+  const spawn = (command, args, options) => {
+    spawned = { command, args, options };
+    child = new EventEmitter();
+    return child;
+  };
+
+  const updated = runA0CliUpdate('/usr/bin/a0', { spawn, env: { PATH: '/usr/bin' } });
+  child.emit('exit', 0, null);
+  assert.deepEqual(await updated, { updated: true });
+  assert.deepEqual(spawned.args, ['update']);
+  assert.equal(spawned.command, '/usr/bin/a0');
+  assert.equal(spawned.options.stdio, 'ignore');
+  assert.equal(spawned.options.windowsHide, true);
+
+  const failed = runA0CliUpdate('/usr/bin/a0', { spawn });
+  child.emit('exit', 7, null);
+  await assert.rejects(failed, { code: 'CLI_UPDATE_FAILED' });
+  await assert.rejects(runA0CliUpdate('', { spawn }), { code: 'TERMINAL_UNAVAILABLE' });
 });

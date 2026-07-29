@@ -123,7 +123,8 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   `app.getVersion()` with the latest launcher executable release. When a newer
   launcher executable is available, the loading screen may hold with `Update`
   and `Continue` actions; `Update` downloads the updater payload and then
-  restarts through `quitAndInstall()` once the payload is ready.
+  runs `a0 update` before restarting through `quitAndInstall()` once the payload
+  is ready. A CLI update failure remains non-blocking and is logged.
 - Packaged DevTools expose `window.space.debugReinstall(version)` plus
   `checkForUpdates()`, `downloadUpdate()`, and `installUpdate()` for targeted
   updater testing against a specific release version. This is a debugging

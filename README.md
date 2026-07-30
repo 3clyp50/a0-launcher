@@ -211,9 +211,9 @@ GitHub Actions owns the release path:
 3. `bundle-content.yml` checks out the tag, bundles `app/` into `content.json`,
    and uploads it to the release.
 
-Two-segment tags such as `v1.4` are the public release shape. Executable builds
-normalize them to full semver versions such as `1.4.0` only where packaging or
-updater tooling requires it, while public asset names keep `1.4`.
+Two-segment tags such as `v1.5` are the public release shape. Executable builds
+normalize them to full semver versions such as `1.5.0` only where packaging or
+updater tooling requires it, while public asset names keep `1.5`.
 
 After publishing, verify release assets with:
 

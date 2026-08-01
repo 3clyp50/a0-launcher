@@ -688,6 +688,10 @@ async function selectInstanceHome() {
   await window.dockerManagerAPI?.selectInstanceHome?.();
 }
 
+async function reorderInstanceTabs(ids) {
+  await window.dockerManagerAPI?.reorderInstanceTabs?.(ids);
+}
+
 async function closeInstanceTab(id) {
   await window.dockerManagerAPI?.closeInstanceTab?.(id);
 }
@@ -697,7 +701,7 @@ async function reloadInstanceTab(id) {
 }
 
 async function detachInstanceTab(id) {
-  await window.dockerManagerAPI?.detachInstanceTab?.(id);
+  return await window.dockerManagerAPI?.detachInstanceTab?.(id);
 }
 
 async function openHomepage() {
@@ -1872,6 +1876,7 @@ window.dockerManagerActions = {
   openInstanceUi,
   selectInstanceHome,
   selectInstanceTab,
+  reorderInstanceTabs,
   closeInstanceTab,
   reloadInstanceTab,
   detachInstanceTab,

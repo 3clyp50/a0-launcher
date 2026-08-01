@@ -3,6 +3,119 @@ import { openHostAccessDialog } from "../host-access-dialog.js";
 import { openInstanceAppearanceDialog } from "../instance-appearance-dialog.js";
 
 let namesCollapsed = false;
+let tabDrag = null;
+let ignoreTabClickId = "";
+
+function pointInside(rect, x, y) {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function startTabDragPreview(drag, event) {
+  const bounds = drag.item.getBoundingClientRect();
+  drag.offsetX = event.clientX - bounds.left;
+  drag.offsetY = event.clientY - bounds.top;
+  drag.ghost = drag.item.cloneNode(true);
+  drag.ghost.classList.remove("dragging");
+  drag.ghost.classList.add("dm-instance-tab-drag-ghost");
+  drag.ghost.removeAttribute("role");
+  drag.ghost.removeAttribute("data-tab-id");
+  drag.ghost.setAttribute("aria-hidden", "true");
+  drag.ghost.inert = true;
+  drag.ghost.style.width = `${bounds.width}px`;
+  drag.ghost.style.height = `${bounds.height}px`;
+  drag.marker = document.createElement("span");
+  drag.marker.className = "dm-instance-tab-drop-marker";
+  drag.marker.setAttribute("aria-hidden", "true");
+  document.body.append(drag.ghost, drag.marker);
+}
+
+function clearTabDragPreview(drag) {
+  drag.ghost?.remove();
+  drag.marker?.remove();
+}
+
+function finishTabDrag(event, cancelled = false) {
+  if (!tabDrag || event.pointerId !== tabDrag.pointerId) return;
+  const drag = tabDrag;
+  tabDrag = null;
+  drag.item.classList.remove("dragging");
+  clearTabDragPreview(drag);
+  try { drag.handle.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+
+  if (!drag.started) return;
+  ignoreTabClickId = drag.id;
+  window.setTimeout(() => {
+    if (ignoreTabClickId === drag.id) ignoreTabClickId = "";
+  }, 0);
+  if (cancelled) {
+    render();
+    window.dockerManagerActions?.syncInstanceTabBounds?.();
+    return;
+  }
+
+  if (!pointInside(drag.strip.getBoundingClientRect(), event.clientX, event.clientY)) {
+    Promise.resolve(window.dockerManagerActions?.detachInstanceTab?.(drag.id))
+      .then((result) => {
+        if (!result?.detached) window.dockerManagerActions?.syncInstanceTabBounds?.();
+      })
+      .catch(() => window.dockerManagerActions?.syncInstanceTabBounds?.());
+    return;
+  }
+  window.dockerManagerActions?.syncInstanceTabBounds?.();
+  if (drag.orderedIds.some((id, index) => id !== drag.originalIds[index])) {
+    window.dockerManagerActions?.reorderInstanceTabs?.(drag.orderedIds);
+  }
+}
+
+function beginTabDrag(event, item, strip, id) {
+  if (event.button !== 0 || tabDrag) return;
+  tabDrag = {
+    id,
+    item,
+    strip,
+    handle: event.currentTarget,
+    pointerId: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    started: false,
+    originalIds: Array.from(strip.querySelectorAll(".dm-instance-tab[data-tab-id]"), (tab) => tab.dataset.tabId)
+  };
+  tabDrag.orderedIds = tabDrag.originalIds;
+  event.currentTarget.setPointerCapture(event.pointerId);
+}
+
+function moveTabDrag(event) {
+  if (!tabDrag || event.pointerId !== tabDrag.pointerId) return;
+  if (!tabDrag.started) {
+    if (Math.hypot(event.clientX - tabDrag.x, event.clientY - tabDrag.y) < 6) return;
+    tabDrag.started = true;
+    window.dockerManagerActions?.hideInstanceTabView?.();
+    startTabDragPreview(tabDrag, event);
+  }
+  tabDrag.item.classList.add("dragging");
+  tabDrag.ghost.style.transform = `translate3d(${Math.round(event.clientX - tabDrag.offsetX)}px, ${Math.round(event.clientY - tabDrag.offsetY)}px, 0)`;
+  event.preventDefault();
+
+  const stripBounds = tabDrag.strip.getBoundingClientRect();
+  if (!pointInside(stripBounds, event.clientX, event.clientY)) {
+    tabDrag.marker.hidden = true;
+    return;
+  }
+  const tabs = Array.from(tabDrag.strip.querySelectorAll(".dm-instance-tab[data-tab-id]"))
+    .filter((item) => item !== tabDrag.item);
+  const index = tabs.findIndex((item) => event.clientX < item.getBoundingClientRect().left + item.offsetWidth / 2);
+  const ids = tabs.map((item) => item.dataset.tabId);
+  ids.splice(index < 0 ? ids.length : index, 0, tabDrag.id);
+  tabDrag.orderedIds = ids;
+  const destination = index < 0
+    ? tabDrag.strip.querySelector(".dm-instance-tab-controls")?.getBoundingClientRect().left
+    : tabs[index].getBoundingClientRect().left;
+  tabDrag.marker.hidden = !Number.isFinite(destination);
+  if (!tabDrag.marker.hidden) {
+    tabDrag.marker.style.height = `${Math.max(0, stripBounds.height - 12)}px`;
+    tabDrag.marker.style.transform = `translate3d(${Math.round(destination - 2)}px, ${Math.round(stripBounds.top + 6)}px, 0)`;
+  }
+}
 
 function byId(id) {
   return document.getElementById(id);
@@ -106,6 +219,7 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
     const isActive = tab?.id === selected?.id;
     const item = document.createElement("div");
     item.className = `dm-instance-tab${isActive ? " active" : ""}`;
+    item.dataset.tabId = tab.id;
     item.setAttribute("role", "tab");
     item.setAttribute("aria-selected", String(isActive));
 
@@ -127,7 +241,17 @@ function render(state = window.__dmLastState || { instanceTabs: { tabs: [], acti
     select.className = "dm-instance-tab-select";
     select.title = tabTitle;
     select.setAttribute("aria-label", `Show ${tabTitle}`);
-    select.addEventListener("click", () => window.dockerManagerActions?.selectInstanceTab?.(tab.id));
+    select.addEventListener("click", (event) => {
+      if (ignoreTabClickId === tab.id) {
+        event.preventDefault();
+        return;
+      }
+      window.dockerManagerActions?.selectInstanceTab?.(tab.id);
+    });
+    select.addEventListener("pointerdown", (event) => beginTabDrag(event, item, strip, tab.id));
+    select.addEventListener("pointermove", moveTabDrag);
+    select.addEventListener("pointerup", (event) => finishTabDrag(event));
+    select.addEventListener("pointercancel", (event) => finishTabDrag(event, true));
 
     const copy = document.createElement("span");
     copy.className = "dm-instance-tab-copy";

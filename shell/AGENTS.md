@@ -96,7 +96,7 @@ This scope owns:
   and Support should be exposed to the renderer as fixed resource IDs, not
   arbitrary URL strings.
 - Instance UI tabs are shell-owned `WebContentsView`s. Renderer code may request
-  open/select/select launcher home/close/reload/detach/reattach and report viewport
+  open/select/select launcher home/close/reload/reorder/detach/reattach and report viewport
   bounds, but URL resolution, URL validation, web contents lifecycle, and
   detached windows stay in `shell/main.js`. Detach reparents the existing view
   below a Launcher-owned header; reattach moves that same view back without a

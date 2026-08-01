@@ -342,6 +342,9 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   },
   selectInstanceHome: () => ipcRenderer.invoke('docker-manager:selectInstanceHome'),
   selectInstanceTab: (id) => ipcRenderer.invoke('docker-manager:selectInstanceTab', { id }),
+  reorderInstanceTabs: (ids) => ipcRenderer.invoke('docker-manager:reorderInstanceTabs', {
+    ids: Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : []
+  }),
   closeInstanceTab: (id) => ipcRenderer.invoke('docker-manager:closeInstanceTab', { id }),
   reloadInstanceTab: (id) => ipcRenderer.invoke('docker-manager:reloadInstanceTab', { id }),
   detachInstanceTab: (id) => ipcRenderer.invoke('docker-manager:detachInstanceTab', { id }),

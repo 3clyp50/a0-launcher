@@ -47,8 +47,9 @@ This scope owns:
 - `settings/`: port, workspace, Host access, and saved Instance provider/model
   defaults.
 - `instance-tabs/`: browser-style attached and detached tab chrome, Launcher
-  tab, name collapse, per-Instance Host access buttons, reload/detach/reattach,
-  empty state, and viewport bounds reporting for shell-owned Agent Zero views.
+  tab, drag ordering and drag-out detach, name collapse, per-Instance Host
+  access buttons, reload/detach/reattach, empty state, and viewport bounds
+  reporting for shell-owned Agent Zero views.
 
 ## Local Contracts
 
@@ -322,6 +323,11 @@ This scope owns:
 - Instance tab chrome keeps a Launcher tab as the first tab whenever any
   instance UI tab is open. Selecting Launcher clears the active shell-owned
   view and leaves the launcher surface usable below the tab strip.
+  Dragging an attached tab label reorders attached tabs; releasing it outside
+  the strip uses the existing shell-owned detach path. After the drag threshold,
+  temporarily hide the active native view so it cannot intercept the gesture;
+  restore its bounds on reorder or cancellation. Keep the real tab stationary
+  during the gesture and show a floating tab copy plus an insertion marker.
   Connected instance tabs should display only the tab/instance name, not the
   URL, so short names stay compact in the tab strip.
 - Each Instance tab shows a separately accessible computer button immediately

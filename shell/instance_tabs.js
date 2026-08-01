@@ -298,6 +298,31 @@ function makeTabsSnapshot(tabs, activeTabId) {
   };
 }
 
+function reorderAttachedInstanceTabs(tabs, orderedIds) {
+  if (!(tabs instanceof Map) || !Array.isArray(orderedIds)) return null;
+  const attachedIds = Array.from(tabs, ([id, tab]) => tab?.detached === true ? null : id).filter(Boolean);
+  if (
+    orderedIds.length !== attachedIds.length ||
+    new Set(orderedIds).size !== orderedIds.length ||
+    orderedIds.some((id) => typeof id !== 'string' || !attachedIds.includes(id))
+  ) {
+    return null;
+  }
+  if (orderedIds.every((id, index) => id === attachedIds[index])) return tabs;
+
+  let index = 0;
+  const reordered = new Map();
+  for (const [id, tab] of tabs) {
+    if (tab?.detached === true) {
+      reordered.set(id, tab);
+      continue;
+    }
+    const nextId = orderedIds[index++];
+    reordered.set(nextId, tabs.get(nextId));
+  }
+  return reordered;
+}
+
 function findInstanceTabByWebContents(tabs, webContents) {
   const source = tabs instanceof Map ? tabs.values() : [];
   for (const tab of source) {
@@ -362,6 +387,7 @@ module.exports = {
   instanceTabLoginRecoveryTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
+  reorderAttachedInstanceTabs,
   findInstanceTabByWebContents,
   instanceContextMenuActions,
   reloadInstanceWebContents,

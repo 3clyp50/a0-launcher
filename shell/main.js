@@ -26,6 +26,7 @@ const {
   instanceTabLoginRecoveryTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
+  reorderAttachedInstanceTabs,
   findInstanceTabByWebContents,
   instanceContextMenuActions,
   reloadInstanceWebContents,
@@ -2440,6 +2441,16 @@ function setActiveInstanceTab(id) {
 function selectInstanceHome() {
   activeInstanceTabId = '';
   applyActiveInstanceTabBounds();
+  sendInstanceTabsEvent();
+  return getInstanceTabsSnapshot();
+}
+
+function setInstanceTabOrder(orderedIds) {
+  const reordered = reorderAttachedInstanceTabs(instanceTabs, orderedIds);
+  if (!reordered) {
+    throw createTabTargetError('INVALID_INPUT', 'Invalid Instance tab order.');
+  }
+  instanceTabs = reordered;
   sendInstanceTabsEvent();
   return getInstanceTabsSnapshot();
 }
@@ -5060,6 +5071,17 @@ ipcMain.handle('docker-manager:selectInstanceTab', async (_event, body) => {
 ipcMain.handle('docker-manager:selectInstanceHome', async () => {
   try {
     return selectInstanceHome();
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:reorderInstanceTabs', async (_event, body) => {
+  try {
+    if (!isPlainObject(body) || !Array.isArray(body.ids)) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    }
+    return setInstanceTabOrder(body.ids);
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

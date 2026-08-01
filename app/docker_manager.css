@@ -2816,6 +2816,33 @@ body.dm-instance-home-active .dm-page {
   border-color: var(--color-highlight);
 }
 
+.dm-instance-tab.dragging {
+  opacity: 0.28;
+}
+
+.dm-instance-tab-drag-ghost {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 5000;
+  margin: 0;
+  opacity: 0.94;
+  pointer-events: none;
+  box-shadow: 0 0.65rem 1.5rem rgb(0 0 0 / 42%);
+  will-change: transform;
+}
+
+.dm-instance-tab-drop-marker {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 5001;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--color-highlight);
+  pointer-events: none;
+  box-shadow: 0 0 0.55rem color-mix(in srgb, var(--color-highlight) 60%, transparent);
+  will-change: transform;
+}
+
 .dm-instance-tab .material-symbols-outlined {
   flex: 0 0 auto;
 }
@@ -2833,6 +2860,11 @@ body.dm-instance-home-active .dm-page {
   font: inherit;
   padding: 0.15rem;
   text-align: left;
+  touch-action: none;
+}
+
+.dm-instance-tab-select:active {
+  cursor: grabbing;
 }
 
 .dm-instance-tab-copy {

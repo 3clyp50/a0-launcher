@@ -18,6 +18,7 @@ const {
   instanceTabLoginRecoveryTarget,
   cliCredentialsAllowedForTarget,
   makeTabsSnapshot,
+  reorderAttachedInstanceTabs,
   findInstanceTabByWebContents,
   instanceContextMenuActions,
   reloadInstanceWebContents,
@@ -370,6 +371,20 @@ test('makeTabsSnapshot keeps a detached Host access lease available to Instance 
     }],
     activeTabId: ''
   });
+});
+
+test('reorderAttachedInstanceTabs applies exact attached order without moving detached slots', () => {
+  const tabs = new Map([
+    ['first', { id: 'first' }],
+    ['detached', { id: 'detached', detached: true }],
+    ['second', { id: 'second' }],
+    ['third', { id: 'third' }]
+  ]);
+
+  const reordered = reorderAttachedInstanceTabs(tabs, ['third', 'first', 'second']);
+  assert.deepEqual(Array.from(reordered.keys()), ['third', 'detached', 'first', 'second']);
+  assert.equal(reorderAttachedInstanceTabs(tabs, ['first', 'first', 'third']), null);
+  assert.equal(reorderAttachedInstanceTabs(tabs, ['first', 'missing', 'third']), null);
 });
 
 test('Instance tab lookup recognizes embedded page and detached header WebContents', () => {

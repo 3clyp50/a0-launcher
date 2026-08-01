@@ -140,7 +140,8 @@ This scope owns:
 - Do not add marketing-page structure to the app entrypoint. The first screen is
   the usable launcher.
 - Instance tab chrome, including the Launcher tab that returns to the launcher,
-  is renderer-owned, but embedded Agent Zero pages are not. The renderer
+  is renderer-owned, including attached-tab drag ordering and drag-out detach
+  intent, but embedded Agent Zero pages are not. The renderer
   computes the tab viewport bounds and sends them through preload; the shell
   owns the `WebContentsView` attached to that rectangle. Register window resize
   handling independently of the asynchronously loaded tab component so native

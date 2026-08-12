@@ -30,6 +30,7 @@ const {
   findInstanceTabByWebContents,
   instanceContextMenuActions,
   reloadInstanceWebContents,
+  isInstanceTabReloadShortcut,
   detachedInstanceContentBounds
 } = require('./instance_tabs');
 const { formatLauncherVersion } = require('./launcher_update');
@@ -5239,6 +5240,18 @@ protocol.registerSchemesAsPrivileged([{
   scheme: 'a0app',
   privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true }
 }]);
+
+app.on('web-contents-created', (_event, webContents) => {
+  webContents.on('before-input-event', (event, input) => {
+    if (!isInstanceTabReloadShortcut(input)) return;
+    const tab = webContents === mainWindow?.webContents
+      ? instanceTabs.get(activeInstanceTabId)
+      : findInstanceTabByWebContents(instanceTabs, webContents);
+    if (!tab) return;
+    event.preventDefault();
+    reloadInstanceWebContents(tab.view?.webContents);
+  });
+});
 
 // App lifecycle
 app.whenReady().then(async () => {

@@ -362,6 +362,10 @@ function reloadInstanceWebContents(webContents) {
   return true;
 }
 
+function isInstanceTabReloadShortcut(input) {
+  return input?.type === 'keyDown' && input.key === 'F5';
+}
+
 function detachedInstanceContentBounds(bounds, visible = true) {
   if (!visible) return { x: 0, y: 0, width: 0, height: 0 };
   const width = Math.max(0, Math.floor(Number(bounds?.width) || 0));
@@ -391,5 +395,6 @@ module.exports = {
   findInstanceTabByWebContents,
   instanceContextMenuActions,
   reloadInstanceWebContents,
+  isInstanceTabReloadShortcut,
   detachedInstanceContentBounds
 };

@@ -22,6 +22,7 @@ const {
   findInstanceTabByWebContents,
   instanceContextMenuActions,
   reloadInstanceWebContents,
+  isInstanceTabReloadShortcut,
   detachedInstanceContentBounds
 } = require('./instance_tabs');
 
@@ -474,4 +475,10 @@ test('instance reload bypasses stale HTTP cache', () => {
   assert.equal(reloadInstanceWebContents(webContents), true);
   assert.equal(reloads, 1);
   assert.equal(reloadInstanceWebContents({ isDestroyed: () => true }), false);
+});
+
+test('Instance F5 shortcut accepts only key down', () => {
+  assert.equal(isInstanceTabReloadShortcut({ type: 'keyDown', key: 'F5' }), true);
+  assert.equal(isInstanceTabReloadShortcut({ type: 'keyUp', key: 'F5' }), false);
+  assert.equal(isInstanceTabReloadShortcut({ type: 'keyDown', key: 'r' }), false);
 });

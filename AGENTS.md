@@ -67,7 +67,8 @@ Architecture contracts:
   closes it. Agent Zero pages expose no Host access menu or Launcher bridge.
 - Attached Instance tabs can be reordered by dragging their labels. Releasing a
   dragged tab outside the tab strip detaches it through the same shell-owned
-  reparenting path as the dedicated Detach button.
+  reparenting path as the dedicated Detach button. F5 refreshes the active
+  attached or detached Instance page through the shell-owned reload path.
 - Launcher startup asynchronously installs the official A0 CLI when it is
   missing or lacks the Launcher gateway contract, and updates it when a newer
   release is available. Installing the CLI grants no host capability by itself:

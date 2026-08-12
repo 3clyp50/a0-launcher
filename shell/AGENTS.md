@@ -124,9 +124,10 @@ This scope owns:
   should open through the user's external browser. Embedded and detached Agent Zero UI
   web contents
   should attach the same shell-owned edit context menu so selected text and
-  editable fields keep normal copy/paste behavior. Instance-tab refreshes must
-  bypass the HTTP cache so an Agent Zero restart cannot strand aborted UI assets
-  in the embedded view.
+  editable fields keep normal copy/paste behavior. F5 from an active attached or
+  detached Instance surface must refresh that Instance page through the same
+  cache-bypassing path as its Reload button, so an Agent Zero restart cannot
+  strand aborted UI assets in the embedded view.
 - Each eligible Launcher-owned Instance surface may own exactly one outbound
   `a0 gateway` child. Start it only after an embedded tab opens, keep it alive
   across Launcher-home selection and in-tab reloads, and transfer that same

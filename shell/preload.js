@@ -98,7 +98,10 @@ contextBridge.exposeInMainWorld('launcherUpdater', launcherUpdaterDebugAPI);
 
 contextBridge.exposeInMainWorld('dockerManagerAPI', {
   getState: () => ipcRenderer.invoke('docker-manager:getState'),
-  refresh: () => ipcRenderer.invoke('docker-manager:refresh'),
+  refresh: (options = {}) => {
+    const opts = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:refresh', { forceRefresh: opts.forceRefresh !== false });
+  },
   installOrSync: (tag, options) => {
     const opts = options && typeof options === 'object' ? options : {};
     return ipcRenderer.invoke('docker-manager:install', {
@@ -166,6 +169,29 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     return ipcRenderer.invoke('docker-manager:setHostAccessSettings', {
       onboardingComplete: value.onboardingComplete === true,
       defaults: value.defaults && typeof value.defaults === 'object' ? value.defaults : {}
+    });
+  },
+  saveSettings: (settings) => {
+    const value = settings && typeof settings === 'object' ? settings : {};
+    const ports = value.portPreferences && typeof value.portPreferences === 'object' ? value.portPreferences : {};
+    const storage = value.storagePreferences && typeof value.storagePreferences === 'object' ? value.storagePreferences : {};
+    const defaults = value.instanceDefaults && typeof value.instanceDefaults === 'object' ? value.instanceDefaults : {};
+    const hostAccess = value.hostAccess && typeof value.hostAccess === 'object' ? value.hostAccess : {};
+    return ipcRenderer.invoke('docker-manager:setSettings', {
+      portPreferences: { ui: ports.ui, ssh: ports.ssh },
+      storagePreferences: {
+        mode: typeof storage.mode === 'string' ? storage.mode : '',
+        hostRoot: typeof storage.hostRoot === 'string' ? storage.hostRoot : '',
+        hostPathMode: typeof storage.hostPathMode === 'string' ? storage.hostPathMode : '',
+        volumePrefix: typeof storage.volumePrefix === 'string' ? storage.volumePrefix : ''
+      },
+      instanceDefaults: {
+        models: defaults.models && typeof defaults.models === 'object' ? defaults.models : {}
+      },
+      hostAccess: {
+        onboardingComplete: hostAccess.onboardingComplete === true,
+        defaults: hostAccess.defaults && typeof hostAccess.defaults === 'object' ? hostAccess.defaults : {}
+      }
     });
   },
   setInstanceHostAccess: (target, config) => {

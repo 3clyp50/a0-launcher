@@ -261,18 +261,39 @@ async function saveAllSettings() {
   settingsSaveInProgress = true;
   setSaveSettingsDisabled(true);
   try {
-    const portsOk = (await actions.setPortPreferences?.(readPortPreferences(), { quiet: true })) === true;
-    const storageOk = Boolean(await actions.setStoragePreferences?.(readStoragePreferences(), { quiet: true }));
-    const hostAccessOk = await actions.setHostAccessSettings?.({
-      onboardingComplete: true,
-      defaults: hostAccessDefaults
-    }) === true;
+    const portPreferences = readPortPreferences();
+    const storagePreferences = readStoragePreferences();
+    let portsOk = false;
+    let storageOk = false;
+    let hostAccessOk = false;
     let defaultsOk = false;
 
-    if (envResult.ok) {
-      defaultsOk = await actions.setInstanceDefaults?.(instanceDefaults, { quiet: true }) === true;
+    if (envResult.ok && typeof actions.saveSettings === "function") {
+      const saved = await actions.saveSettings({
+        portPreferences,
+        storagePreferences,
+        instanceDefaults,
+        hostAccess: {
+          onboardingComplete: true,
+          defaults: hostAccessDefaults
+        }
+      });
+      portsOk = saved?.portPreferences === true;
+      storageOk = saved?.storagePreferences === true;
+      hostAccessOk = saved?.hostAccess === true;
+      defaultsOk = saved?.instanceDefaults === true;
     } else {
-      window.toastFrontendError?.(envResult.message, "Agent Zero");
+      portsOk = (await actions.setPortPreferences?.(portPreferences, { quiet: true })) === true;
+      storageOk = Boolean(await actions.setStoragePreferences?.(storagePreferences, { quiet: true }));
+      hostAccessOk = await actions.setHostAccessSettings?.({
+        onboardingComplete: true,
+        defaults: hostAccessDefaults
+      }) === true;
+      if (envResult.ok) {
+        defaultsOk = await actions.setInstanceDefaults?.(instanceDefaults, { quiet: true }) === true;
+      } else {
+        window.toastFrontendError?.(envResult.message, "Agent Zero");
+      }
     }
 
     if (portsOk) clearPortDirty();

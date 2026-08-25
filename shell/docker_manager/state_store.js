@@ -141,14 +141,25 @@ function isDistinctPorts(prefs) {
   return a !== b;
 }
 
+function normalizePortPreferences(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    ui: normalizePort(source.ui, DEFAULT_PORT_PREFERENCES.ui),
+    ssh: normalizePort(source.ssh, DEFAULT_PORT_PREFERENCES.ssh)
+  };
+}
+
+function portPreferencesForWrite(value) {
+  const prefs = normalizePortPreferences(value);
+  if (isDistinctPorts(prefs)) return prefs;
+  const error = new Error('Invalid port preferences');
+  error.code = 'INVALID_PORT_PREFERENCES';
+  throw error;
+}
+
 async function readPortPreferences() {
   const state = await readJson(stateFile(), {});
-  const pp = state?.portPreferences && typeof state.portPreferences === 'object' ? state.portPreferences : {};
-
-  const prefs = {
-    ui: normalizePort(pp.ui, DEFAULT_PORT_PREFERENCES.ui),
-    ssh: normalizePort(pp.ssh, DEFAULT_PORT_PREFERENCES.ssh)
-  };
+  const prefs = normalizePortPreferences(state?.portPreferences);
 
   if (!isDistinctPorts(prefs)) {
     return { ...DEFAULT_PORT_PREFERENCES };
@@ -157,18 +168,7 @@ async function readPortPreferences() {
 }
 
 async function writePortPreferences(portPreferences) {
-  const prefsIn = portPreferences && typeof portPreferences === 'object' ? portPreferences : {};
-  const prefs = {
-    ui: normalizePort(prefsIn.ui, DEFAULT_PORT_PREFERENCES.ui),
-    ssh: normalizePort(prefsIn.ssh, DEFAULT_PORT_PREFERENCES.ssh)
-  };
-
-  if (!isDistinctPorts(prefs)) {
-    const err = new Error('Invalid port preferences');
-    err.code = 'INVALID_PORT_PREFERENCES';
-    throw err;
-  }
-
+  const prefs = portPreferencesForWrite(portPreferences);
   const state = await readJson(stateFile(), {});
   await writeJson(stateFile(), { ...state, portPreferences: prefs, updatedAt: new Date().toISOString() });
   return prefs;
@@ -272,11 +272,10 @@ async function readHostAccessSettings() {
   return settings;
 }
 
-async function writeHostAccessSettings(value = {}) {
-  const state = await readJson(stateFile(), {});
-  const current = normalizeHostAccessSettings(state?.hostAccess);
+function mergeHostAccessSettings(currentValue, value = {}) {
+  const current = normalizeHostAccessSettings(currentValue);
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const next = normalizeHostAccessSettings({
+  return normalizeHostAccessSettings({
     ...current,
     onboardingComplete: typeof source.onboardingComplete === 'boolean'
       ? source.onboardingComplete
@@ -294,12 +293,56 @@ async function writeHostAccessSettings(value = {}) {
       : current.defaults,
     instances: current.instances
   });
+}
+
+async function writeHostAccessSettings(value = {}) {
+  const state = await readJson(stateFile(), {});
+  const next = mergeHostAccessSettings(state?.hostAccess, value);
   await writeJson(stateFile(), {
     ...state,
     hostAccess: next,
     updatedAt: new Date().toISOString()
   });
   return next;
+}
+
+async function writeSettings(value = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const state = await readJson(stateFile(), {});
+  let portPreferences;
+  let portPreferencesSaved = true;
+  try {
+    portPreferences = portPreferencesForWrite(source.portPreferences);
+  } catch (error) {
+    if (error?.code !== 'INVALID_PORT_PREFERENCES') throw error;
+    portPreferences = normalizePortPreferences(state?.portPreferences);
+    if (!isDistinctPorts(portPreferences)) portPreferences = { ...DEFAULT_PORT_PREFERENCES };
+    portPreferencesSaved = false;
+  }
+  const storagePreferences = normalizeStoragePreferences(source.storagePreferences);
+  const instanceDefaults = normalizeInstanceDefaults(source.instanceDefaults);
+  const hostAccess = mergeHostAccessSettings(state?.hostAccess, source.hostAccess);
+
+  await writeJson(stateFile(), {
+    ...state,
+    ...(portPreferencesSaved ? { portPreferences } : {}),
+    storagePreferences,
+    instanceDefaults,
+    hostAccess,
+    updatedAt: new Date().toISOString()
+  });
+  return {
+    portPreferences,
+    storagePreferences,
+    instanceDefaults,
+    hostAccess,
+    saved: {
+      portPreferences: portPreferencesSaved,
+      storagePreferences: true,
+      instanceDefaults: true,
+      hostAccess: true
+    }
+  };
 }
 
 async function writeInstanceHostAccess(kind, id, value = {}) {
@@ -984,6 +1027,7 @@ module.exports = {
   // Launcher host access
   readHostAccessSettings,
   writeHostAccessSettings,
+  writeSettings,
   writeInstanceHostAccess,
 
   // Remote instances

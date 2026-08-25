@@ -90,21 +90,14 @@ test('Settings save persists every sub-tab payload and a disabled Host access de
     },
     addEventListener() {},
     dockerManagerActions: {
-      async setPortPreferences(payload, options) {
-        calls.push(['ports', payload, options, elements.get('saveSettingsBtn').disabled]);
-        return true;
-      },
-      async setStoragePreferences(payload, options) {
-        calls.push(['storage', payload, options, elements.get('saveSettingsBtn').disabled]);
-        return { ok: true };
-      },
-      async setHostAccessSettings(payload) {
-        calls.push(['host-access', payload, elements.get('saveSettingsBtn').disabled]);
-        return true;
-      },
-      async setInstanceDefaults(payload, options) {
-        calls.push(['defaults', payload, options, elements.get('saveSettingsBtn').disabled]);
-        return true;
+      async saveSettings(payload) {
+        calls.push(['settings', payload, elements.get('saveSettingsBtn').disabled]);
+        return {
+          portPreferences: true,
+          storagePreferences: true,
+          hostAccess: true,
+          instanceDefaults: true
+        };
       }
     },
     toastFrontendSuccess(message, title) {
@@ -121,37 +114,41 @@ test('Settings save persists every sub-tab payload and a disabled Host access de
   const { saveAllSettings } = await import('./settings.js');
   await saveAllSettings();
 
-  assert.deepEqual(calls.slice(0, 4), [
-    ['ports', { ui: 7777, ssh: undefined }, { quiet: true }, true],
-    ['storage', {
-      mode: 'named_volume',
-      hostRoot: '/tmp/agent-zero',
-      hostPathMode: 'exact',
-      volumePrefix: 'custom-a0'
-    }, { quiet: true }, true],
-    ['host-access', {
-      onboardingComplete: true,
-      defaults: {
-        configured: false,
-        masterEnabled: false,
-        folder: '/home/eclypso',
-        scopes: {
-          files: true,
-          file_write: true,
-          code_execution: true,
-          browser: false,
-          computer_use: false
-        },
-        browserSelection: 'chromium:default'
+  assert.deepEqual(calls[0], [
+    'settings',
+    {
+      portPreferences: { ui: 7777, ssh: undefined },
+      storagePreferences: {
+        mode: 'named_volume',
+        hostRoot: '/tmp/agent-zero',
+        hostPathMode: 'exact',
+        volumePrefix: 'custom-a0'
+      },
+      instanceDefaults: {
+        models: {
+          Main: { provider: 'openrouter', model: '', apiKey: '' },
+          Utility: { provider: 'openrouter', model: '', apiKey: '' },
+          Embedding: { provider: 'huggingface', model: '', apiKey: '' }
+        }
+      },
+      hostAccess: {
+        onboardingComplete: true,
+        defaults: {
+          configured: false,
+          masterEnabled: false,
+          folder: '/home/eclypso',
+          scopes: {
+            files: true,
+            file_write: true,
+            code_execution: true,
+            browser: false,
+            computer_use: false
+          },
+          browserSelection: 'chromium:default'
+        }
       }
-    }, true],
-    ['defaults', {
-      models: {
-        Main: { provider: 'openrouter', model: '', apiKey: '' },
-        Utility: { provider: 'openrouter', model: '', apiKey: '' },
-        Embedding: { provider: 'huggingface', model: '', apiKey: '' }
-      }
-    }, { quiet: true }, true]
+    },
+    true
   ]);
   assert.deepEqual(calls.at(-1), ['success', { message: 'Settings saved.', title: 'Agent Zero' }]);
   assert.equal(elements.get('saveSettingsBtn').disabled, false);

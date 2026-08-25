@@ -4168,6 +4168,18 @@ async function setHostAccessSettings(settings) {
   return hostAccess;
 }
 
+async function setSettings(settings) {
+  requireNoRunningOperation();
+  const saved = await stateStore.writeSettings(settings);
+  publishCachedState({
+    portPreferences: saved.portPreferences,
+    storagePreferences: saved.storagePreferences,
+    instanceDefaults: saved.instanceDefaults,
+    hostAccess: saved.hostAccess
+  });
+  return saved;
+}
+
 async function setInstanceHostAccess(kind, id, settings) {
   const saved = await stateStore.writeInstanceHostAccess(kind, id, settings);
   const hostAccess = await stateStore.readHostAccessSettings();
@@ -6214,6 +6226,7 @@ module.exports = {
   setInstanceDefaults,
   getHostAccessSettings,
   setHostAccessSettings,
+  setSettings,
   setInstanceHostAccess,
   selectRuntimeEndpoint,
   provisionRuntime,

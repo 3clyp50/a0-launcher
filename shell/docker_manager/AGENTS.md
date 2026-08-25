@@ -90,6 +90,10 @@ This scope owns:
   inspection rather than renderer guesses.
 - Persist user preferences and remote instances through `state_store.js`; do not
   invent parallel files.
+- The Settings page persists port, workspace storage, Instance defaults, and
+  Host access defaults through one combined state-store write and cached-state
+  publication. Duplicate ports keep the previous valid port pair while the
+  other Settings sections save and report their own success.
 - Host access persistence lives in `state_store.js`: compatibility-only
   onboarding state, local defaults, optional default folder, per-Instance
   configured/master state, five permission scopes, browser selection, and the

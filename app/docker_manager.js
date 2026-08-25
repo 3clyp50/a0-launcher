@@ -236,6 +236,7 @@ function snapshot() {
     runtimeDiagnostics: store.runtimeDiagnostics || null,
     progress: store.progress || null,
     portPreferences: store.portPreferences || null,
+    storagePreferences: store.storagePreferences || null,
     instanceDefaults: normalizeInstanceDefaults(store.instanceDefaults),
     hostAccess: store.hostAccess || null,
     cli: store.cli || { installed: false, installing: false, command: "" },
@@ -559,8 +560,9 @@ async function loadMeta() {
   }
 }
 
-async function refresh() {
+async function refresh(options = {}) {
   const api = window.dockerManagerAPI;
+  const forceRefresh = options?.forceRefresh !== false;
   if (!api) {
     store.error = "Agent Zero controls are not available.";
     store.dockerAvailable = false;
@@ -575,7 +577,7 @@ async function refresh() {
 
   try {
     const stateRequest = typeof api.refresh === "function"
-      ? api.refresh()
+      ? api.refresh({ forceRefresh })
       : typeof api.getState === "function" ? api.getState() : null;
     const [inventory, state] = await Promise.all([
       typeof api.getInventory === "function" ? api.getInventory() : null,
@@ -645,7 +647,7 @@ function scheduleNavRefresh(tab) {
   window.clearTimeout(navRefreshTimer);
   navRefreshTimer = window.setTimeout(() => {
     navRefreshTimer = 0;
-    refresh();
+    refresh({ forceRefresh: false });
   }, 0);
 }
 
@@ -766,7 +768,7 @@ async function removeVolume(volumeName) {
       return;
     }
     setBanner("info", `Removed volume ${volumeName}`);
-    await refresh();
+    await refresh({ forceRefresh: false });
   } catch (e) {
     setBanner("error", e?.message || "Failed to remove volume");
   }
@@ -807,7 +809,7 @@ async function pruneVolumes() {
       return;
     }
     setBanner("info", "Unused volumes cleared.");
-    await refresh();
+    await refresh({ forceRefresh: false });
   } catch (e) {
     setBanner("error", e?.message || "Failed to prune volumes");
   }
@@ -1090,6 +1092,32 @@ async function setHostAccessSettings(settings = {}) {
   }
 }
 
+async function saveSettings(settings = {}) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.saveSettings !== "function") return null;
+  try {
+    const result = await api.saveSettings(settings);
+    if (isErrorResponse(result)) {
+      setBanner("error", result.message);
+      return null;
+    }
+    store.portPreferences = result?.portPreferences || store.portPreferences;
+    store.storagePreferences = result?.storagePreferences || store.storagePreferences;
+    store.instanceDefaults = normalizeInstanceDefaults(result?.instanceDefaults || store.instanceDefaults);
+    store.hostAccess = result?.hostAccess || store.hostAccess;
+    emitState();
+    return {
+      portPreferences: result?.saved?.portPreferences === true,
+      storagePreferences: result?.saved?.storagePreferences === true,
+      instanceDefaults: result?.saved?.instanceDefaults === true,
+      hostAccess: result?.saved?.hostAccess === true
+    };
+  } catch (error) {
+    setBanner("error", error?.message || "Unable to save Settings");
+    return null;
+  }
+}
+
 async function setInstanceHostAccess(target = {}, config = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.setInstanceHostAccess !== "function") return false;
@@ -1323,7 +1351,7 @@ function schedulePostOperationRefresh(progress = null) {
   const delays = isCompletedInstall ? [350, 1500, 3500] : [350];
   postOperationRefreshTimers = delays.map((delay, index) => window.setTimeout(() => {
     if (index === 0) postOperationRefreshTimer = 0;
-    refresh();
+    refresh({ forceRefresh: false });
   }, delay));
   postOperationRefreshTimer = postOperationRefreshTimers[0] || 0;
 }
@@ -1342,7 +1370,7 @@ async function runDockerOperation(label, action, successMessage) {
     }
     if (successMessage) setBanner("info", successMessage);
     if (res?.opId) return res;
-    await refresh();
+    await refresh({ forceRefresh: false });
     return res;
   } catch (e) {
     const message = e?.message || `${label} failed`;
@@ -1901,6 +1929,7 @@ window.dockerManagerActions = {
   syncInstanceTabBounds,
   setInstanceDefaults,
   setHostAccessSettings,
+  ...(typeof window.dockerManagerAPI?.saveSettings === "function" ? { saveSettings } : {}),
   setInstanceHostAccess,
   chooseHostAccessFolder,
   retryHostGateway,

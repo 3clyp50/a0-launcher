@@ -4314,9 +4314,10 @@ ipcMain.handle('docker-manager:getState', async () => {
   }
 });
 
-ipcMain.handle('docker-manager:refresh', async () => {
+ipcMain.handle('docker-manager:refresh', async (_event, body) => {
   try {
-    const state = await dockerManager.refreshDockerManager({ forceRefresh: true });
+    const forceRefresh = !isPlainObject(body) || body.forceRefresh !== false;
+    const state = await dockerManager.refreshDockerManager({ forceRefresh });
     return sanitizeDockerManagerState(state);
   } catch (error) {
     return dockerManager.toErrorResponse(error);
@@ -4337,6 +4338,52 @@ ipcMain.handle('docker-manager:setHostAccessSettings', async (_event, body) => {
     const saved = await dockerManager.setHostAccessSettings(update);
     for (const tab of instanceTabs.values()) void restartHostGatewayForTab(tab);
     return publicHostAccessSettings(saved);
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:setSettings', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid Settings request' });
+    }
+    const ports = isPlainObject(body.portPreferences) ? body.portPreferences : {};
+    const storage = isPlainObject(body.storagePreferences) ? body.storagePreferences : {};
+    const defaults = isPlainObject(body.instanceDefaults) ? body.instanceDefaults : {};
+    const hostAccess = isPlainObject(body.hostAccess) ? body.hostAccess : {};
+    const saved = await dockerManager.setSettings({
+      portPreferences: { ui: ports.ui, ssh: ports.ssh },
+      storagePreferences: {
+        mode: typeof storage.mode === 'string' ? storage.mode : '',
+        hostRoot: typeof storage.hostRoot === 'string' ? storage.hostRoot : '',
+        hostPathMode: typeof storage.hostPathMode === 'string' ? storage.hostPathMode : '',
+        volumePrefix: typeof storage.volumePrefix === 'string' ? storage.volumePrefix : ''
+      },
+      instanceDefaults: { models: isPlainObject(defaults.models) ? defaults.models : {} },
+      hostAccess: {
+        onboardingComplete: hostAccess.onboardingComplete === true,
+        defaults: isPlainObject(hostAccess.defaults) ? hostAccess.defaults : {}
+      }
+    });
+    for (const tab of instanceTabs.values()) void restartHostGatewayForTab(tab);
+    const sanitized = sanitizeDockerManagerState({
+      portPreferences: saved.portPreferences,
+      storagePreferences: saved.storagePreferences,
+      instanceDefaults: saved.instanceDefaults
+    });
+    return {
+      portPreferences: sanitized.portPreferences,
+      storagePreferences: sanitized.storagePreferences,
+      instanceDefaults: sanitized.instanceDefaults,
+      hostAccess: publicHostAccessSettings(saved.hostAccess),
+      saved: {
+        portPreferences: saved.saved?.portPreferences === true,
+        storagePreferences: saved.saved?.storagePreferences === true,
+        instanceDefaults: saved.saved?.instanceDefaults === true,
+        hostAccess: saved.saved?.hostAccess === true
+      }
+    };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

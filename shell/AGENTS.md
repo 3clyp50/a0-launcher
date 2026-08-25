@@ -246,6 +246,13 @@ This scope owns:
   report progress through Docker Manager events instead of blocking the renderer.
   The sanitized progress bridge should preserve explicit product state flags
   such as `uiReady` when the renderer depends on them for handoff behavior.
+- Docker Manager refresh IPC accepts only a bounded forced/non-forced choice.
+  Initial loading and explicit Refresh use forced remote freshness; tab
+  navigation and post-operation reconciliation use normal caches while still
+  rebuilding live local Docker state.
+- The Settings page may submit its four owned preference sections through one
+  named IPC intent. Validate and sanitize every section, persist one combined
+  state update, and restart Host access leases through the existing shell path.
 - Sanitized Docker Manager state may expose bounded health-derived runtime
   identity fields for local and saved remote Instances; never forward arbitrary
   health response content.

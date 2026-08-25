@@ -86,8 +86,9 @@ This scope owns:
 - Once a long-running operation returns an operation ID, let progress and state
   events drive its visible lifecycle; accepting the operation must not wait for
   an immediate full inventory refresh.
-- Local instance card `Start`, `Stop`, and `Delete` are background queued
-  actions. They must not open the global operation modal or make the page inert;
+- Local instance card `Start`, `Stop`, `Restart`, and `Delete` are background
+  queued actions. They must not open the global operation modal or make the
+  page inert;
   show queue/running state on the affected card and surface failures with toast
   feedback. If the Instance was deleted but its workspace folder remains, label
   the toast as a folder cleanup failure rather than a failed Instance deletion.

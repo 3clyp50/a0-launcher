@@ -36,6 +36,7 @@ globalThis.window = {
 
 const {
   bindOpenableCardHeader,
+  backgroundOperationCanStop,
   backgroundOperationLabel,
   computeCardMenuPlacement,
   deleteInstanceStorageModel,
@@ -291,6 +292,11 @@ test('instance power menu allows stop while start is waiting for UI', () => {
   );
 });
 
+test('instance power menu allows stop while restart is waiting for UI', () => {
+  assert.equal(backgroundOperationCanStop({ type: 'restart', status: 'running' }), true);
+  assert.equal(backgroundOperationCanStop({ type: 'restart', status: 'queued' }), false);
+});
+
 test('background operation labels use running progress messages', () => {
   assert.equal(
     backgroundOperationLabel({ type: 'start', status: 'running', message: 'Waiting for UI' }),
@@ -304,6 +310,18 @@ test('background operation labels use running progress messages', () => {
     backgroundOperationLabel({ type: 'start', status: 'running', message: '' }),
     'Starting'
   );
+  assert.equal(backgroundOperationLabel({ type: 'restart', status: 'queued' }), 'Queued restart');
+  assert.equal(backgroundOperationLabel({ type: 'restart', status: 'running' }), 'Restarting');
+});
+
+test('running Instance menu uses Docker native forced restart', async () => {
+  const [rendererSource, managerSource] = await Promise.all([
+    readFile(new URL('./local-testing.js', import.meta.url), 'utf8'),
+    readFile(new URL('../../../../shell/docker_manager/index.js', import.meta.url), 'utf8')
+  ]);
+  assert.match(rendererSource, /menuButton\("restart_alt", "Restart"/);
+  assert.match(rendererSource, /restartLocalInstance\?\.\(containerId\)/);
+  assert.match(managerSource, /restartContainer\(target\.containerId, \{ t: 0 \}\)/);
 });
 
 test('delete dialog storage model exposes folder choices and platform opener labels', () => {

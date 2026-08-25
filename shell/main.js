@@ -4013,7 +4013,7 @@ function sanitizeDockerManagerState(state) {
   }
 
   const backgroundOperations = [];
-  const allowedBackgroundTypes = new Set(['start', 'stop', 'delete_instance']);
+  const allowedBackgroundTypes = new Set(['start', 'stop', 'restart', 'delete_instance']);
   const allowedBackgroundStatuses = new Set(['queued', 'running', 'failed', 'completed']);
   for (const op of backgroundIn) {
     if (!isPlainObject(op)) continue;
@@ -4598,6 +4598,20 @@ ipcMain.handle('docker-manager:stopLocalInstance', async (_event, body) => {
     const accepted = await dockerManager.stopLocalInstance(containerId);
     if (!accepted || typeof accepted.opId !== 'string') {
       return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Stop did not return an opId' });
+    }
+    return { opId: accepted.opId, queued: accepted.queued === true, background: accepted.background === true };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:restartLocalInstance', async (_event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const containerId = typeof body.containerId === 'string' ? body.containerId : '';
+    const accepted = await dockerManager.restartLocalInstance(containerId);
+    if (!accepted || typeof accepted.opId !== 'string') {
+      return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Restart did not return an opId' });
     }
     return { opId: accepted.opId, queued: accepted.queued === true, background: accepted.background === true };
   } catch (error) {

@@ -69,6 +69,9 @@ Architecture contracts:
   dragged tab outside the tab strip detaches it through the same shell-owned
   reparenting path as the dedicated Detach button. F5 refreshes the active
   attached or detached Instance page through the shell-owned reload path.
+- A running local Instance menu exposes `Restart`. It uses Docker's native
+  immediate container restart through the per-Instance background queue and
+  waits for the Agent Zero UI to become reachable again.
 - Launcher startup asynchronously installs the official A0 CLI when it is
   missing or lacks the Launcher gateway contract, and updates it when a newer
   release is available. Installing the CLI grants no host capability by itself:

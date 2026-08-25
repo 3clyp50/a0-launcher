@@ -116,10 +116,10 @@ This scope owns:
   progress in a background toast so the existing install can still be used.
   Non-onboarding image installs may offer `Download in background`, which moves
   that operation into the same progress toast without stopping the download.
-- Local instance card `Start`, `Stop`, and `Delete` are the exception: they are
-  accepted as background queued per-container actions so a slow or hanging
-  container mutation does not block the rest of the launcher. Show only the
-  affected card as queued/running and report failures with toast feedback.
+- Local instance card `Start`, `Stop`, `Restart`, and `Delete` are the exception:
+  they are accepted as background queued per-container actions so a slow or
+  hanging container mutation does not block the rest of the launcher. Show
+  only the affected card as queued/running and report failures with toast feedback.
 - The Agent Zero setup slideshow belongs only to the image pull/extract wait in
   the install operation modal. Do not show it during Docker runtime setup or
   short preflight checks. Slides should use renderer-visible still image assets
@@ -220,10 +220,10 @@ This scope owns:
   renderer console when the Instances card state changes; keep it bounded to
   visible card/action/version fields and never include credentials.
   Secondary management and inspection actions such as `Rename`, `See logs`,
-  `Open storage folder`, `Clone`, `Open A0 CLI`, dynamic `Start`/`Stop`, and
-  `Delete` belong in the card overflow menu so they always apply to the
-  specific instance shown. Local Instance deletion must use a launcher dialog,
-  not a native confirm; when persistent `/a0/usr` storage is known, the dialog
+  `Open storage folder`, `Clone`, `Open A0 CLI`, `Restart`, dynamic
+  `Start`/`Stop`, and `Delete` belong in the card overflow menu so they always
+  apply to the specific instance shown. Local Instance deletion must use a
+  launcher dialog, not a native confirm; when persistent `/a0/usr` storage is known, the dialog
   should offer explicit keep/delete storage choices and a host-folder opener
   only for host-backed storage.
   The visual header area of a running local card or saved remote card may

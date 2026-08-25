@@ -113,6 +113,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
   removeInstalledImage: (tag) => ipcRenderer.invoke('docker-manager:removeInstalledImage', { tag }),
   startActive: () => ipcRenderer.invoke('docker-manager:startActive'),
   startLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:startLocalInstance', { containerId }),
+  restartLocalInstance: (containerId) => ipcRenderer.invoke('docker-manager:restartLocalInstance', { containerId }),
   cloneLocalInstance: (containerId, options) => {
     const opts = options && typeof options === 'object' ? options : {};
     const hasWorkspaceCategories = Object.prototype.hasOwnProperty.call(opts, 'workspaceCategories');

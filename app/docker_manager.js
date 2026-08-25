@@ -248,6 +248,7 @@ function snapshot() {
 function backgroundOperationFailureLabel(operation = {}) {
   if (operation.type === "start") return "Start failed";
   if (operation.type === "stop") return "Stop failed";
+  if (operation.type === "restart") return "Restart failed";
   if (operation.errorCode === "INSTANCE_DELETED_STORAGE_REMAINS") return "Folder cleanup failed";
   if (operation.type === "delete_instance") return "Delete failed";
   return "Instance action failed";
@@ -1414,6 +1415,16 @@ async function startLocalInstance(containerId) {
   );
 }
 
+async function restartLocalInstance(containerId) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.restartLocalInstance !== "function") return;
+  return runDockerOperation(
+    "Restart",
+    () => api.restartLocalInstance(containerId || ""),
+    "Instance restart requested."
+  );
+}
+
 async function cloneLocalInstance(containerId, options = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.cloneLocalInstance !== "function") return false;
@@ -1890,6 +1901,7 @@ window.dockerManagerActions = {
   removeInstalledImage,
   startActive,
   startLocalInstance,
+  restartLocalInstance,
   cloneLocalInstance,
   backupLocalInstance,
   restoreLocalInstance,

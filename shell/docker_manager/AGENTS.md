@@ -13,10 +13,10 @@ for the renderer.
 
 This scope owns:
 
-- `index.js`: Docker Manager service, state assembly, install/sync/start/stop,
-  activation, rollback, retained-instance, remote-instance, per-container clone
-  and log inspection, port, storage, developer custom-image runs, runtime setup,
-  and progress operations.
+- `index.js`: Docker Manager service, state assembly,
+  install/sync/start/stop/restart, activation, rollback, retained-instance,
+  remote-instance, per-container clone and log inspection, port, storage,
+  developer custom-image runs, runtime setup, and progress operations.
 - `state_store.js`: persisted launcher state under Electron `userData`,
   including preferences, remote instances, local instance display names, and
   local instance colour/icon overrides, plus Launcher Host access defaults and
@@ -235,7 +235,7 @@ This scope owns:
   canonical `/a0/usr` mount. Explicit ephemeral runs should still be labeled
   with storage metadata even though they do not receive the mount. Clones must
   receive a fresh workspace rather than reusing the source workspace mount.
-- Per-container start/stop/delete/clone/rename/appearance actions from the
+- Per-container start/stop/restart/delete/clone/rename/appearance actions from the
   Instances card menu still belong in this product layer. Container mutations must target
   the requested container id, return an operation id, refresh state afterward,
   and keep storage-volume deletion separate from container deletion. Rename and
@@ -246,7 +246,7 @@ This scope owns:
   and emit the cached product state after persistence. Do not rebuild Docker,
   GitHub, or registry-derived state when the operation cannot have changed it;
   remote health probing may continue asynchronously from the patched record.
-- Local instance card start/stop/delete actions run through an in-memory
+- Local instance card start/stop/restart/delete actions run through an in-memory
   per-container background queue and do not occupy the global Docker Manager
   operation slot. They return `{ opId, queued: true, background: true }`, publish
   `backgroundOperations` in state, and keep heavier flows such as install,

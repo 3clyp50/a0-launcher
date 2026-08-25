@@ -269,6 +269,9 @@ This scope owns:
   `shell/docker_adapter`. Appearance selection may accept only bounded palette
   and icon IDs and must stay launcher metadata. Long-running container
   mutations report progress.
+- Per-instance Restart is a named Docker Manager intent. It must use the
+  adapter's native immediate container restart, stay in the per-container
+  background queue, and wait for UI readiness before reporting completion.
 - Per-instance deletion may remove persistent workspace storage only after an
   explicit renderer choice. Root-owned host-workspace contents must be cleaned
   through the Docker adapter, and a cleanup failure after container deletion

@@ -4905,6 +4905,7 @@ async function stopLocalInstance(containerId) {
     return { opId: existingStop.opId, queued: existingStop.status === 'queued', background: true };
   }
   abortRunningBackgroundOperationForContainer(id, 'start');
+  abortRunningBackgroundOperationForContainer(id, 'restart');
 
   return enqueueContainerOperation({
     type: 'stop',
@@ -4925,6 +4926,34 @@ async function stopLocalInstance(containerId) {
       if (state === 'running') {
         await docker.stopContainer(target.containerId, { t: 10 });
       }
+    }
+  });
+}
+
+async function restartLocalInstance(containerId) {
+  const imageRepo = getBackendImageRepo();
+  const id = assertContainerId(containerId);
+
+  return enqueueContainerOperation({
+    type: 'restart',
+    containerId: id,
+    message: 'Restarting',
+    run: async (targetId, opId, runOptions = {}) => {
+      const docker = await getManagedDocker(imageRepo);
+      const containers = await docker.listContainers(imageRepo);
+      const target = (containers || []).find((c) => c && c.containerId === targetId) || null;
+
+      if (!target || !target.containerId) {
+        const err = new Error('Instance not found');
+        err.code = 'INSTANCE_NOT_FOUND';
+        throw err;
+      }
+
+      await docker.restartContainer(target.containerId, { t: 0 });
+      await waitForStartedLocalInstanceUi(docker, target.containerId, {
+        onStatus: (patch) => updateBackgroundOperation(opId, patch),
+        signal: runOptions.signal
+      });
     }
   });
 }
@@ -6209,6 +6238,7 @@ module.exports = {
   removeInstalledImage,
   startActiveInstance,
   startLocalInstance,
+  restartLocalInstance,
   cloneLocalInstance,
   migrateLocalInstanceStorage,
   backupLocalInstance,

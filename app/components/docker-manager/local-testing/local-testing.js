@@ -226,8 +226,13 @@ function backgroundOperationLabel(operation) {
   if (message) return message;
   if (operation.type === "start") return queued ? "Queued start" : "Starting";
   if (operation.type === "stop") return queued ? "Queued stop" : "Stopping";
+  if (operation.type === "restart") return queued ? "Queued restart" : "Restarting";
   if (operation.type === "delete_instance") return queued ? "Queued delete" : "Deleting";
   return queued ? "Queued" : "Working";
+}
+
+function backgroundOperationCanStop(operation) {
+  return operation?.status === "running" && (operation.type === "start" || operation.type === "restart");
 }
 
 function progressPresentedAsToast(progress = null) {
@@ -290,7 +295,7 @@ function logInstanceCardDiagnostics(containers, state) {
     const powerMenu = instancePowerMenuConfig({
       isRunning,
       canStart,
-      canStop: backgroundOperation?.type === "start" && backgroundOperation.status === "running",
+      canStop: backgroundOperationCanStop(backgroundOperation),
       containerId,
       containerOperationRunning
     });
@@ -1447,7 +1452,7 @@ function renderDockerInstance(list, c, state) {
   actions.className = "dm-card-actions";
   const isRunning = st === "running";
   const canStartLocalInstance = !isRunning && !!containerId;
-  const canStopStartingInstance = backgroundOperation?.type === "start" && backgroundOperation.status === "running";
+  const canStopStartingInstance = backgroundOperationCanStop(backgroundOperation);
   const powerMenuItem = instancePowerMenuConfig({
     isRunning,
     canStart: canStartLocalInstance,
@@ -1615,6 +1620,12 @@ function renderDockerInstance(list, c, state) {
       disabled: cliInstalling,
       title: cliInstalling ? "A0 CLI is being prepared" : "Install A0 CLI on this computer"
     }),
+    isRunning ? menuButton("restart_alt", "Restart", () => {
+      window.dockerManagerActions?.restartLocalInstance?.(containerId);
+    }, {
+      disabled: !containerId || containerOperationRunning,
+      title: containerOperationRunning ? "An action is already queued for this instance" : "Force restart this container"
+    }) : null,
     menuButton(powerMenuItem.icon, powerMenuItem.label, () => {
       if (powerMenuItem.action === "start") {
         window.dockerManagerActions?.startLocalInstance?.(containerId);
@@ -1834,6 +1845,7 @@ function render(state) {
 
 export {
   bindOpenableCardHeader,
+  backgroundOperationCanStop,
   backgroundOperationLabel,
   computeCardMenuPlacement,
   deleteInstanceStorageModel,

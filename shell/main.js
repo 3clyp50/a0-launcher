@@ -190,8 +190,8 @@ const LOCAL_INDEX_FILE = USING_LOCAL_CONTENT ? path.join(LOCAL_REPO_DIR, 'app', 
 const GITHUB_REPO = getGithubRepo();
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 const CONTENT_ASSET_NAME = 'content.json';
-const SPLASH_ENTRY_ANIMATION_MS = 1600;
-const SPLASH_EXIT_ANIMATION_MS = 180;
+const SPLASH_ENTRY_ANIMATION_MS = 600;
+const SPLASH_EXIT_ANIMATION_MS = 120;
 
 if (USING_LOCAL_CONTENT) {
   console.log(`Using local dev content: ${LOCAL_INDEX_FILE}`);
@@ -1333,11 +1333,7 @@ async function loadAppContent() {
   }
 }
 
-async function continueToAppContent(options = {}) {
-  const delayMs = Number.isFinite(Number(options.delayMs)) ? Math.max(0, Number(options.delayMs)) : 0;
-  if (delayMs > 0) {
-    await wait(delayMs);
-  }
+async function continueToAppContent() {
   if (mainWindowMode === 'splash') {
     const remainingEntryMs = SPLASH_ENTRY_ANIMATION_MS - Math.max(0, Date.now() - mainWindowCreatedAt);
     if (remainingEntryMs > 0) await wait(remainingEntryMs);
@@ -1393,9 +1389,11 @@ function createWindow(mode = 'splash') {
   mainWindowCreatedAt = Date.now();
   attachWindowDiagnostics(windowRef);
 
-  if (isSplash) {
-    windowRef.loadFile(path.join(__dirname, 'loading.html'));
-  }
+  const loadPromise = isSplash
+    ? windowRef.loadFile(path.join(__dirname, 'loading.html')).catch((error) => {
+        console.error('[startup] Could not load the splash window.', error);
+      })
+    : Promise.resolve();
 
   windowRef.once('ready-to-show', () => {
     if (!windowRef.isDestroyed()) windowRef.show();
@@ -1408,6 +1406,7 @@ function createWindow(mode = 'splash') {
       mainWindowMode = '';
     }
   });
+  return loadPromise;
 }
 
 async function playSplashExitAnimation(splashWindow) {
@@ -5328,10 +5327,7 @@ app.whenReady().then(async () => {
   void ensureA0CliInstalled().catch((error) => {
     console.warn('[a0-cli] automatic install or update failed', error?.message || error);
   });
-  createWindow();
-
-  // Wait a moment for loading screen to render
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await createWindow();
 
   const launcherUpdateCheck = checkForLauncherUpdates({ userInitiated: false });
 
@@ -5344,8 +5340,7 @@ app.whenReady().then(async () => {
     if (shouldHoldStartupForLauncherUpdate()) {
       return;
     }
-    // Small delay for visual feedback
-    await continueToAppContent({ delayMs: 800 });
+    await continueToAppContent();
   }
 });
 
@@ -5364,7 +5359,7 @@ app.on('before-quit', (event) => {
 
 app.on('activate', async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    await createWindow();
 
     if (contentInitialized) {
       // Content already initialized - load directly without update check
@@ -5381,19 +5376,18 @@ app.on('activate', async () => {
         if (success) {
           contentInitialized = true;
           if (!shouldHoldStartupForLauncherUpdate()) {
-            await continueToAppContent({ delayMs: 800 });
+            await continueToAppContent();
           }
         }
       }
     } else {
       // First activation or previous init failed - run full initialization
-      await new Promise(resolve => setTimeout(resolve, 500));
       const success = await initializeAppContent();
 
       if (success) {
         contentInitialized = true;
         if (!shouldHoldStartupForLauncherUpdate()) {
-          await continueToAppContent({ delayMs: 800 });
+          await continueToAppContent();
         }
       }
     }

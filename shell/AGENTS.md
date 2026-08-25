@@ -196,7 +196,9 @@ This scope owns:
 - Startup begins in a transparent, frameless splash window that shows only the
   launcher icon and title. Before app content opens, `shell/main.js` sends the
   splash exit event, replaces that splash with the normal framed app window,
-  then loads `a0app://content/index.html`.
+  then loads `a0app://content/index.html`. Keep the JavaScript hold durations
+  aligned with the CSS animations, wait for the splash document itself instead
+  of guessing its readiness, and do not add secondary decorative waits.
 - Release bundles may contain legacy string file entries or structured
   `{ encoding, data }` entries. The loader must preserve `utf8` text and decode
   `base64` binary assets while rejecting unsafe paths.
@@ -247,9 +249,10 @@ This scope owns:
   The sanitized progress bridge should preserve explicit product state flags
   such as `uiReady` when the renderer depends on them for handoff behavior.
 - Docker Manager refresh IPC accepts only a bounded forced/non-forced choice.
-  Initial loading and explicit Refresh use forced remote freshness; tab
-  navigation and post-operation reconciliation use normal caches while still
-  rebuilding live local Docker state.
+  Initial loading, tab navigation, and post-operation reconciliation use normal
+  remote caches while rebuilding live local Docker state. Startup follows that
+  first usable snapshot with a non-blocking forced remote refresh when its
+  catalog predates the launch. Explicit Refresh remains forced.
 - The Settings page may submit its four owned preference sections through one
   named IPC intent. Validate and sanitize every section, persist one combined
   state update, and restart Host access leases through the existing shell path.

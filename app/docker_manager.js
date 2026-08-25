@@ -563,6 +563,7 @@ async function loadMeta() {
 async function refresh(options = {}) {
   const api = window.dockerManagerAPI;
   const forceRefresh = options?.forceRefresh !== false;
+  let refreshedState = null;
   if (!api) {
     store.error = "Agent Zero controls are not available.";
     store.dockerAvailable = false;
@@ -598,6 +599,7 @@ async function refresh(options = {}) {
       store.error = state.message;
       setBanner("error", state.message);
     } else {
+      refreshedState = state;
       store.uiUrl = state?.uiUrl || "";
       store.versions = Array.isArray(state?.versions) ? state.versions : [];
       store.retainedInstances = Array.isArray(state?.retainedInstances) ? state.retainedInstances : [];
@@ -635,6 +637,7 @@ async function refresh(options = {}) {
     emitState();
     maybeStartPendingFirstInstanceFromState(snapshot());
   }
+  return refreshedState;
 }
 
 const NAV_REFRESH_TABS = new Set(["versions", "sessions", "advanced"]);
@@ -2067,5 +2070,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       // ignore; tab state can still arrive through the live subscription
     }
   }
-  await refresh();
+  const refreshStartedAt = Date.now();
+  const initialState = await refresh({ forceRefresh: false });
+  const initialSyncMs = Date.parse(initialState?.lastSyncedAt || "");
+  if (!Number.isFinite(initialSyncMs) || initialSyncMs < refreshStartedAt) {
+    window.setTimeout(() => {
+      const request = window.dockerManagerAPI?.refresh?.({ forceRefresh: true });
+      request?.catch?.(() => {});
+    }, 0);
+  }
 });

@@ -129,6 +129,11 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
   and `Continue` actions; `Update` downloads the updater payload and then
   runs `a0 update` before restarting through `quitAndInstall()` once the payload
   is ready. A CLI update failure remains non-blocking and is logged.
+- Do not hold ordinary startup for decorative delay beyond the brief splash
+  entry and exit animations. The first renderer state should rebuild live local
+  Docker data from normal remote caches, then refresh remote metadata fully in
+  the background when the cached catalog predates that launch; explicit Refresh
+  remains a forced freshness check.
 - Packaged DevTools expose `window.space.debugReinstall(version)` plus
   `checkForUpdates()`, `downloadUpdate()`, and `installUpdate()` for targeted
   updater testing against a specific release version. This is a debugging

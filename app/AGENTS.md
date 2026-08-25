@@ -37,8 +37,10 @@ This scope owns:
   and operations that actually change Docker inventory.
 - User navigation to data-heavy tabs and post-operation reconciliation should
   request a non-forced refresh: rebuild live local Docker state while honoring
-  normal release and registry caches. Initial loading and the explicit Refresh
-  action remain forced freshness checks.
+  normal release and registry caches. Initial loading uses the same fast path,
+  then requests a non-blocking forced refresh when the cached catalog predates
+  that launch so remote metadata becomes current without delaying first usable
+  state. The explicit Refresh action stays forced.
 - Components invoke behavior through `window.dockerManagerActions`, not through
   raw IPC names.
 - Host access UI renders only shell-sanitized configuration and transient

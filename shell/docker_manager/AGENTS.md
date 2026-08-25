@@ -237,6 +237,11 @@ This scope owns:
   and keep storage-volume deletion separate from container deletion. Rename and
   Colour/Icon selection are fast launcher metadata updates and may return
   synchronously.
+- Synchronous launcher-only metadata updates, including Settings, local
+  Instance identity, credentials, and saved remote Instance edits, should patch
+  and emit the cached product state after persistence. Do not rebuild Docker,
+  GitHub, or registry-derived state when the operation cannot have changed it;
+  remote health probing may continue asynchronously from the patched record.
 - Local instance card start/stop/delete actions run through an in-memory
   per-container background queue and do not occupy the global Docker Manager
   operation slot. They return `{ opId, queued: true, background: true }`, publish

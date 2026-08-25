@@ -315,6 +315,8 @@ This scope owns:
   except for the first-pull defaults prompt.
   Its single visible save action should persist every Settings sub-tab, including
   edited fields in inactive panels.
+  Saving these launcher preferences should finish from their returned state
+  deltas without waiting for unrelated Docker, release, or registry discovery.
 - `Open UI` opens local and remote instances in a launcher tab by default.
   Reopening the same target focuses the existing tab. Detach moves the existing
   page view below the same Launcher header in a standalone secure Electron

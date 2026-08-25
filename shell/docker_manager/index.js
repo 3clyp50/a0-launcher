@@ -1707,18 +1707,6 @@ function applyRemoteInstanceCredentials(remoteInstances, remoteInstanceCredentia
   });
 }
 
-async function remoteInstancesForState(options = {}) {
-  await ensureRuntimeIdentityCacheLoaded();
-  const [remoteInstances, remoteInstanceCredentials] = await Promise.all([
-    stateStore.readRemoteInstances(),
-    stateStore.readRemoteInstanceCredentialsMetadata()
-  ]);
-  return enrichRemoteInstancesWithHealth(
-    applyRemoteInstanceCredentials(remoteInstances, remoteInstanceCredentials),
-    options
-  );
-}
-
 async function waitForHttpPort(host, port, options = {}) {
   const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 60_000;
   const intervalMs = Number.isFinite(Number(options.intervalMs)) ? Number(options.intervalMs) : 450;
@@ -1937,6 +1925,34 @@ const _warmLayerSizes = { running: false, lastImageRepo: '', lastStartedAtMs: 0 
 const _backgroundOperations = new Map();
 const _backgroundAbortControllers = new Map();
 const _containerOperationChains = new Map();
+
+function publishCachedState(patch = {}) {
+  if (!_cachedState) return;
+  _refreshRequestSequence += 1;
+  _cachedState = { ..._cachedState, ...patch };
+  events.emit('state', _cachedState);
+}
+
+function patchCachedLocalInstance(containerId, patch = {}) {
+  if (!Array.isArray(_cachedState?.containers)) return;
+  publishCachedState({
+    containers: _cachedState.containers.map((container) =>
+      container?.containerId === containerId ? { ...container, ...patch } : container
+    )
+  });
+}
+
+function patchCachedRemoteInstance(instanceId, patch = {}, options = {}) {
+  if (!Array.isArray(_cachedState?.remoteInstances)) return;
+  let found = false;
+  const remoteInstances = _cachedState.remoteInstances.map((remote) => {
+    if (remote?.id !== instanceId) return remote;
+    found = true;
+    return { ...remote, ...patch };
+  });
+  if (!found && options?.append === true) remoteInstances.push({ ...patch, id: instanceId });
+  publishCachedState({ remoteInstances: enrichRemoteInstancesWithHealth(remoteInstances) });
+}
 
 function backgroundOperationsSnapshot() {
   return Array.from(_backgroundOperations.values()).map((op) => ({ ...op }));
@@ -2686,6 +2702,30 @@ function assertContainerId(value) {
     throw err;
   }
   return v;
+}
+
+async function requireLocalInstanceId(containerId) {
+  const id = assertContainerId(containerId);
+  const imageRepo = getBackendImageRepo();
+  const docker = await getManagedDocker(imageRepo);
+  const cached = (Array.isArray(_cachedState?.containers) ? _cachedState.containers : [])
+    .some((container) => container?.containerId === id);
+
+  if (cached) {
+    try {
+      await docker.inspectContainer(id);
+      return id;
+    } catch {
+      // Fall through to the repository-scoped inventory for stable error handling.
+    }
+  }
+
+  const containers = await docker.listContainers(imageRepo);
+  if ((containers || []).some((container) => container?.containerId === id)) return id;
+
+  const error = new Error('Instance not found');
+  error.code = 'INSTANCE_NOT_FOUND';
+  throw error;
 }
 
 function assertDataLossAck(value) {
@@ -4094,33 +4134,27 @@ async function setRetentionPolicy(keepCount) {
   requireNoRunningOperation();
   const kc = assertKeepCount(keepCount);
   const policy = await stateStore.writeRetentionPolicy({ keepCount: kc });
-  await refreshDockerManager({ forceRefresh: false });
+  publishCachedState({ retentionPolicy: policy });
   return policy;
 }
 
 async function setPortPreferences(portPreferences) {
   requireNoRunningOperation();
   const prefs = await stateStore.writePortPreferences(portPreferences);
-  await refreshDockerManager({ forceRefresh: false });
+  publishCachedState({ portPreferences: prefs });
   return prefs;
 }
 
 async function setStoragePreferences(storagePreferences) {
   requireNoRunningOperation();
   const prefs = await stateStore.writeStoragePreferences(storagePreferences);
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, storagePreferences: prefs };
-    events.emit('state', _cachedState);
-  }
+  publishCachedState({ storagePreferences: prefs });
   return prefs;
 }
 
 async function setInstanceDefaults(instanceDefaults) {
   const defaults = await stateStore.writeInstanceDefaults(instanceDefaults);
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, instanceDefaults: defaults };
-    events.emit('state', _cachedState);
-  }
+  publishCachedState({ instanceDefaults: defaults });
   return defaults;
 }
 
@@ -4130,20 +4164,14 @@ async function getHostAccessSettings() {
 
 async function setHostAccessSettings(settings) {
   const hostAccess = await stateStore.writeHostAccessSettings(settings);
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, hostAccess };
-    events.emit('state', _cachedState);
-  }
+  publishCachedState({ hostAccess });
   return hostAccess;
 }
 
 async function setInstanceHostAccess(kind, id, settings) {
   const saved = await stateStore.writeInstanceHostAccess(kind, id, settings);
   const hostAccess = await stateStore.readHostAccessSettings();
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, hostAccess };
-    events.emit('state', _cachedState);
-  }
+  publishCachedState({ hostAccess });
   return saved;
 }
 
@@ -4364,18 +4392,14 @@ async function resumeRuntimeSetupIfPending() {
 
 async function addRemoteInstance(remoteInstance) {
   const saved = await stateStore.writeRemoteInstance(remoteInstance);
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, remoteInstances: await remoteInstancesForState({ forceRefresh: true }) };
-    events.emit('state', _cachedState);
-  }
+  patchCachedRemoteInstance(saved.id, saved, { append: true });
   return saved;
 }
 
 async function deleteRemoteInstance(id) {
   const result = await stateStore.deleteRemoteInstance(id);
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, remoteInstances: await remoteInstancesForState() };
-    events.emit('state', _cachedState);
+  if (Array.isArray(_cachedState?.remoteInstances)) {
+    publishCachedState({ remoteInstances: _cachedState.remoteInstances.filter((remote) => remote?.id !== id) });
   }
   return result;
 }
@@ -4387,10 +4411,7 @@ async function renameRemoteInstance(id, name) {
     name,
     url: found.url
   });
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, remoteInstances: await remoteInstancesForState() };
-    events.emit('state', _cachedState);
-  }
+  patchCachedRemoteInstance(saved.id, saved);
   return saved;
 }
 
@@ -4404,10 +4425,7 @@ async function setRemoteInstanceAppearance(id, appearance = {}) {
   if (Object.prototype.hasOwnProperty.call(appearance, 'color')) next.color = appearance.color;
   if (Object.prototype.hasOwnProperty.call(appearance, 'icon')) next.icon = appearance.icon;
   const saved = await stateStore.writeRemoteInstance(next);
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, remoteInstances: await remoteInstancesForState() };
-    events.emit('state', _cachedState);
-  }
+  patchCachedRemoteInstance(saved.id, saved);
   return saved;
 }
 
@@ -4426,20 +4444,14 @@ async function getRemoteInstance(id) {
 async function setRemoteInstanceCredentials(id, credentials = {}) {
   const found = await getRemoteInstance(id);
   const saved = await stateStore.writeRemoteInstanceCredentials(found.id, credentials);
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, remoteInstances: await remoteInstancesForState() };
-    events.emit('state', _cachedState);
-  }
+  patchCachedRemoteInstance(found.id, { launcherCredentials: saved });
   return saved;
 }
 
 async function clearRemoteInstanceCredentials(id) {
   const found = await getRemoteInstance(id);
   await stateStore.deleteRemoteInstanceCredentials(found.id);
-  if (_cachedState) {
-    _cachedState = { ..._cachedState, remoteInstances: await remoteInstancesForState() };
-    events.emit('state', _cachedState);
-  }
+  patchCachedRemoteInstance(found.id, { launcherCredentials: null });
   return { instanceId: found.id, cleared: true };
 }
 
@@ -5296,74 +5308,32 @@ async function restoreLocalInstance(containerId, inputPath) {
 }
 
 async function renameLocalInstance(containerId, name) {
-  const imageRepo = getBackendImageRepo();
-  const id = assertContainerId(containerId);
-  const docker = await getManagedDocker(imageRepo);
-  const containers = await docker.listContainers(imageRepo);
-  const target = (containers || []).find((c) => c && c.containerId === id) || null;
-
-  if (!target || !target.containerId) {
-    const err = new Error('Instance not found');
-    err.code = 'INSTANCE_NOT_FOUND';
-    throw err;
-  }
-
+  const id = await requireLocalInstanceId(containerId);
   const saved = await stateStore.writeLocalInstanceName(id, name);
-  await refreshDockerManager({ forceRefresh: false }).catch(() => {});
-  return { containerId: id, instanceName: saved.name };
+  const result = { containerId: id, instanceName: saved.name };
+  patchCachedLocalInstance(id, { instanceName: result.instanceName });
+  return result;
 }
 
 async function setLocalInstanceAppearance(containerId, appearance = {}) {
-  const imageRepo = getBackendImageRepo();
-  const id = assertContainerId(containerId);
-  const docker = await getManagedDocker(imageRepo);
-  const containers = await docker.listContainers(imageRepo);
-  const target = (containers || []).find((c) => c && c.containerId === id) || null;
-
-  if (!target || !target.containerId) {
-    const err = new Error('Instance not found');
-    err.code = 'INSTANCE_NOT_FOUND';
-    throw err;
-  }
-
+  const id = await requireLocalInstanceId(containerId);
   const saved = await stateStore.writeLocalInstanceAppearance(id, appearance);
-  await refreshDockerManager({ forceRefresh: false }).catch(() => {});
-  return { containerId: id, color: saved.color || '', icon: saved.icon || '' };
+  const result = { containerId: id, color: saved.color || '', icon: saved.icon || '' };
+  patchCachedLocalInstance(id, { instanceColor: result.color, instanceIcon: result.icon });
+  return result;
 }
 
 async function setLocalInstanceCredentials(containerId, credentials = {}) {
-  const imageRepo = getBackendImageRepo();
-  const id = assertContainerId(containerId);
-  const docker = await getManagedDocker(imageRepo);
-  const containers = await docker.listContainers(imageRepo);
-  const target = (containers || []).find((c) => c && c.containerId === id) || null;
-
-  if (!target || !target.containerId) {
-    const err = new Error('Instance not found');
-    err.code = 'INSTANCE_NOT_FOUND';
-    throw err;
-  }
-
+  const id = await requireLocalInstanceId(containerId);
   const saved = await stateStore.writeLocalInstanceCredentials(id, credentials);
-  await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+  patchCachedLocalInstance(id, { launcherCredentials: saved });
   return saved;
 }
 
 async function clearLocalInstanceCredentials(containerId) {
-  const imageRepo = getBackendImageRepo();
-  const id = assertContainerId(containerId);
-  const docker = await getManagedDocker(imageRepo);
-  const containers = await docker.listContainers(imageRepo);
-  const target = (containers || []).find((c) => c && c.containerId === id) || null;
-
-  if (!target || !target.containerId) {
-    const err = new Error('Instance not found');
-    err.code = 'INSTANCE_NOT_FOUND';
-    throw err;
-  }
-
+  const id = await requireLocalInstanceId(containerId);
   await stateStore.deleteLocalInstanceCredentials(id);
-  await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+  patchCachedLocalInstance(id, { launcherCredentials: null });
   return { containerId: id, cleared: true };
 }
 

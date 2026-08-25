@@ -520,10 +520,27 @@ function upsertRemoteInstance(remote = null) {
   const url = typeof remote.url === "string" ? remote.url.trim() : "";
   if (!id || !url) return;
   const current = Array.isArray(store.remoteInstances) ? store.remoteInstances : [];
+  const existing = current.find((item) => item?.id === id) || {};
   store.remoteInstances = [
     ...current.filter((item) => item?.id !== id),
-    remote
+    { ...existing, ...remote }
   ];
+}
+
+function patchLocalInstance(containerId, patch = {}) {
+  const id = typeof containerId === "string" ? containerId.trim() : "";
+  if (!id) return;
+  store.containers = (Array.isArray(store.containers) ? store.containers : []).map((container) =>
+    container?.containerId === id ? { ...container, ...patch } : container
+  );
+}
+
+function patchRemoteInstance(instanceId, patch = {}) {
+  const id = typeof instanceId === "string" ? instanceId.trim() : "";
+  if (!id) return;
+  store.remoteInstances = (Array.isArray(store.remoteInstances) ? store.remoteInstances : []).map((remote) =>
+    remote?.id === id ? { ...remote, ...patch } : remote
+  );
 }
 
 async function loadMeta() {
@@ -923,7 +940,6 @@ async function removeInstalledImage(tag) {
       return false;
     }
     setBanner("success", "Install removed.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to remove install");
@@ -1105,7 +1121,6 @@ async function setInstanceHostAccess(target = {}, config = {}) {
       emitState();
     }
     setBanner("info", "Host access settings saved.");
-    await refresh();
     return res || true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to save Host access settings");
@@ -1326,6 +1341,7 @@ async function runDockerOperation(label, action, successMessage) {
       return res;
     }
     if (successMessage) setBanner("info", successMessage);
+    if (res?.opId) return res;
     await refresh();
     return res;
   } catch (e) {
@@ -1390,7 +1406,6 @@ async function backupLocalInstance(containerId) {
       return false;
     }
     setBanner("info", "Backup requested.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to start backup");
@@ -1409,7 +1424,6 @@ async function restoreLocalInstance(containerId) {
       return false;
     }
     setBanner("info", "Restore requested.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to start restore");
@@ -1438,8 +1452,8 @@ async function renameLocalInstance(containerId, name) {
       setBanner("error", res.message);
       return false;
     }
+    patchLocalInstance(res?.containerId || containerId, { instanceName: res?.instanceName || name || "" });
     setBanner("info", "Instance renamed.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to rename instance");
@@ -1456,8 +1470,11 @@ async function setLocalInstanceAppearance(containerId, appearance = {}) {
       setBanner("error", res.message);
       return false;
     }
+    patchLocalInstance(res?.containerId || containerId, {
+      instanceColor: res?.color || "",
+      instanceIcon: res?.icon || ""
+    });
     setBanner("info", "Instance appearance saved.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to save Instance appearance");
@@ -1478,8 +1495,8 @@ async function setLocalInstanceCredentials(containerId, credentials = {}) {
       setBanner("error", res.message);
       return false;
     }
+    patchLocalInstance(res?.containerId || containerId, { launcherCredentials: res });
     setBanner("info", "Instance credentials saved.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to save instance credentials");
@@ -1496,8 +1513,8 @@ async function clearLocalInstanceCredentials(containerId) {
       setBanner("error", res.message);
       return false;
     }
+    patchLocalInstance(res?.containerId || containerId, { launcherCredentials: null });
     setBanner("info", "Instance credentials cleared.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to clear instance credentials");
@@ -1518,8 +1535,8 @@ async function setRemoteInstanceCredentials(id, credentials = {}) {
       setBanner("error", res.message);
       return false;
     }
+    patchRemoteInstance(res?.instanceId || id, { launcherCredentials: res });
     setBanner("info", "Instance credentials saved.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to save instance credentials");
@@ -1536,8 +1553,8 @@ async function clearRemoteInstanceCredentials(id) {
       setBanner("error", res.message);
       return false;
     }
+    patchRemoteInstance(res?.instanceId || id, { launcherCredentials: null });
     setBanner("info", "Instance credentials cleared.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to clear instance credentials");
@@ -1720,7 +1737,6 @@ async function addRemoteInstance(remote = {}) {
     }
     upsertRemoteInstance(res);
     setBanner("info", "Remote Instance added.");
-    await refresh();
     return res || true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to add remote Instance");
@@ -1737,8 +1753,9 @@ async function deleteRemoteInstance(id) {
       setBanner("error", res.message);
       return false;
     }
+    store.remoteInstances = (Array.isArray(store.remoteInstances) ? store.remoteInstances : [])
+      .filter((remote) => remote?.id !== id);
     setBanner("info", "Remote instance removed.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to remove remote instance");
@@ -1755,8 +1772,8 @@ async function renameRemoteInstance(id, name) {
       setBanner("error", res.message);
       return false;
     }
+    upsertRemoteInstance(res);
     setBanner("info", "Remote instance renamed.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to rename remote instance");
@@ -1773,8 +1790,8 @@ async function setRemoteInstanceAppearance(id, appearance = {}) {
       setBanner("error", res.message);
       return false;
     }
+    upsertRemoteInstance(res);
     setBanner("info", "Instance appearance saved.");
-    await refresh();
     return true;
   } catch (e) {
     setBanner("error", e?.message || "Unable to save Instance appearance");
@@ -1894,8 +1911,9 @@ window.dockerManagerActions = {
     try {
       const res = await api.setPortPreferences(prefs);
       if (isErrorResponse(res)) { setBanner("error", res.message); return false; }
+      store.portPreferences = res;
       if (!options?.quiet) setBanner("info", "Port preferences saved.");
-      await refresh();
+      else emitState();
       return true;
     } catch (e) {
       setBanner("error", e?.message || "Failed to save port preferences");
@@ -1908,8 +1926,8 @@ window.dockerManagerActions = {
     try {
       const res = await api.setRetentionPolicy(keepCount);
       if (isErrorResponse(res)) { setBanner("error", res.message); return false; }
+      store.retentionPolicy = res;
       setBanner("info", "Retention policy saved.");
-      await refresh();
       return true;
     } catch (e) {
       setBanner("error", e?.message || "Failed to save retention policy");

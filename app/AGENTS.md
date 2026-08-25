@@ -31,6 +31,10 @@ This scope owns:
 - `app/docker_manager.js` owns the canonical renderer snapshot. Components read
   state from the `dm:state` event or `window.__dmLastState`; they should not
   each call the Docker APIs independently.
+- Fast Settings and per-Instance metadata actions must apply their sanitized
+  returned state delta to the canonical snapshot instead of forcing a Docker,
+  GitHub, and registry refresh. Keep full refreshes for explicit refresh intent
+  and operations that actually change Docker inventory.
 - Components invoke behavior through `window.dockerManagerActions`, not through
   raw IPC names.
 - Host access UI renders only shell-sanitized configuration and transient
@@ -73,6 +77,9 @@ This scope owns:
   the modal flow exists. Post-onboarding image downloads may be moved into a
   background progress toast by explicit user action; first-run image downloads
   must keep visible progress.
+- Once a long-running operation returns an operation ID, let progress and state
+  events drive its visible lifecycle; accepting the operation must not wait for
+  an immediate full inventory refresh.
 - Local instance card `Start`, `Stop`, and `Delete` are background queued
   actions. They must not open the global operation modal or make the page inert;
   show queue/running state on the affected card and surface failures with toast

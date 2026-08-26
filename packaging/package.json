@@ -4,6 +4,6 @@
   "description": "Native desktop packaging toolchain for Agent Zero Launcher.",
   "dependencies": {
     "electron": "^42.5.1",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.15.6"
   }
 }

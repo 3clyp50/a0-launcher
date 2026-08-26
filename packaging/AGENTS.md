@@ -38,6 +38,10 @@ npm install --prefix packaging
   `package.json` `build` config and do not carry a second product identity.
 - Packaging scripts must not publish directly. GitHub Release upload is owned
   by `.github/workflows/build.yml`.
+- Keep electron-builder at 26.15.6 or newer within v26. Earlier releases can
+  produce NSIS app archives whose executable filters the install-time extractor
+  silently skips, leaving Windows installs without the launcher executable and
+  Electron runtime DLLs.
 - Use `A0_LAUNCHER_APP_VERSION` and `A0_LAUNCHER_RELEASE_TAG` for CI-provided
   release versions. Two-segment tags such as `v1.5` are the public release
   shape; build them as semver `1.5.0` where tooling requires it, but stage

@@ -14,6 +14,10 @@ This scope owns:
 
 - `DockerInterface.mjs`: abstract interface, environment detection, host parsing,
   Dockerode option normalization, singleton construction, and shared typedefs.
+- `DockerCli.mjs`: cross-platform Docker CLI discovery and fixed Dockerfile or
+  Compose project command execution against the selected runtime endpoint.
+- `docker_cli.test.mjs`: command-shape and non-destructive Compose regression
+  checks.
 - `getDocker.js`: CommonJS bridge that dynamically imports the ESM interface for
   `shell/docker_manager`.
 - `RuntimeProvisioner.mjs`: platform provisioner base and shared process helpers.
@@ -187,6 +191,10 @@ This scope owns:
   remove the helper.
 - Log processing should normalize stream events into stable progress messages and
   preserve enough detail for cancellation/failure diagnosis.
+- Docker project execution may use the installed Compose plugin or legacy
+  `docker-compose` fallback. Keep paths in argument arrays, never invoke a
+  shell, bind `DOCKER_HOST` to the adapter's selected endpoint, bound returned
+  output, and keep the action allowlist inside the adapter.
 
 ## Work Guidance
 

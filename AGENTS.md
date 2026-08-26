@@ -148,6 +148,13 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
 - Normal Create local Instance pickers list only Agent Zero releases and local
   Agent Zero builds. Arbitrary Docker images belong to the Advanced developer
   flow and must not appear as normal versions or setup choices.
+- Advanced Developer is a file-first Docker workspace. It may open bounded
+  project-root Dockerfiles, Compose YAML, `.dockerignore`, and `.env.example`
+  files; edit them through the bundled code editor; save or export them through
+  named shell-owned file intents; and run only fixed Validate, Build, Up, Stop,
+  Logs, and Down actions against the selected Docker runtime. Keep quick custom
+  image execution as a subordinate one-off flow and never expose generic shell
+  or Docker command execution.
 - Local and saved remote Instance cards derive their running code identity from
   Agent Zero's `/api/health` Git metadata. A local Instance without health
   metadata may show the bounded branch from `/a0/.git/HEAD`, but health-derived

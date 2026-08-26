@@ -38,6 +38,8 @@ const RUNTIME_IDENTITY_CACHE_MAX_ENTRIES = 512;
 const CONTAINER_LOG_DEFAULT_LINES = 400;
 const CONTAINER_LOG_MAX_LINES = 1500;
 const CONTAINER_LOG_MAX_CHARS = 12_000;
+const DEVELOPER_PROJECT_OUTPUT_MAX_CHARS = 12_000;
+const DEVELOPER_PROJECT_ACTIONS = Object.freeze(['validate', 'build', 'up', 'stop', 'down', 'logs']);
 const RUNTIME_SETUP_RESUME_ARG = '--a0-resume-runtime-setup';
 const RUNTIME_SETUP_RUNONCE_VALUE = 'AgentZeroLauncherResumeRuntimeSetup';
 const execFileAsync = promisify(execFile);
@@ -3159,6 +3161,83 @@ function normalizeCustomImageOptions(options = {}) {
   };
 }
 
+function developerProjectFileKind(fileName) {
+  const name = String(fileName || '').trim();
+  if (!name || path.basename(name) !== name) return '';
+  if (/\.ya?ml$/i.test(name)) return 'compose';
+  if (/^(?:Dockerfile|Containerfile)(?:[._-][A-Za-z0-9_-]+)*$/i.test(name)) return 'dockerfile';
+  return '';
+}
+
+function developerProjectAction(value) {
+  const action = String(value || '').trim();
+  if (!DEVELOPER_PROJECT_ACTIONS.includes(action)) {
+    const error = new Error('Unsupported developer project action.');
+    error.code = 'INVALID_ACTION';
+    throw error;
+  }
+  return action;
+}
+
+async function normalizeDeveloperProjectOptions(options = {}) {
+  const raw = isPlainObject(options) ? options : {};
+  const action = developerProjectAction(raw.action);
+  const selectedRoot = String(raw.projectRoot || '').trim();
+  if (!path.isAbsolute(selectedRoot)) {
+    const error = new Error('Invalid developer project folder.');
+    error.code = 'INVALID_INPUT';
+    throw error;
+  }
+  const projectRoot = await fs.realpath(selectedRoot);
+  if (projectRoot === path.parse(projectRoot).root || projectRoot === path.resolve(os.homedir())) {
+    const error = new Error('Choose a dedicated project folder.');
+    error.code = 'PROJECT_TOO_BROAD';
+    throw error;
+  }
+  const rootStat = await fs.stat(projectRoot);
+  if (!rootStat.isDirectory()) {
+    const error = new Error('Invalid developer project folder.');
+    error.code = 'INVALID_INPUT';
+    throw error;
+  }
+
+  const fileName = String(raw.fileName || '').trim();
+  const fileKind = developerProjectFileKind(fileName);
+  if (!fileKind || (raw.fileKind && raw.fileKind !== fileKind)) {
+    const error = new Error('Choose a Dockerfile or Compose YAML file.');
+    error.code = 'INVALID_INPUT';
+    throw error;
+  }
+  if (fileKind === 'dockerfile' && !['validate', 'build'].includes(action)) {
+    const error = new Error('This action requires a Compose file.');
+    error.code = 'INVALID_ACTION';
+    throw error;
+  }
+  const filePath = path.join(projectRoot, fileName);
+  const fileStat = await fs.lstat(filePath);
+  if (!fileStat.isFile() || fileStat.size > 1024 * 1024) {
+    const error = new Error('Developer files must be regular files no larger than 1 MB.');
+    error.code = 'INVALID_INPUT';
+    throw error;
+  }
+
+  let imageTag = '';
+  if (fileKind === 'dockerfile' && action === 'build') {
+    const split = splitImageAndTag(String(raw.imageTag || ''), 'latest');
+    imageTag = assertCustomImageSpec({ image: split.image, tag: split.tag }).imageRef;
+  }
+  return { action, projectRoot, fileName, fileKind, imageTag };
+}
+
+function boundedDeveloperOutput(value) {
+  const text = String(value || '').replace(/\r/g, '');
+  return text.length <= DEVELOPER_PROJECT_OUTPUT_MAX_CHARS ? text : text.slice(-DEVELOPER_PROJECT_OUTPUT_MAX_CHARS);
+}
+
+function developerOutputLine(value, fallback = '') {
+  return boundedDeveloperOutput(value).split('\n').map((line) => line.trim()).filter(Boolean).at(-1)?.slice(0, 240) || fallback;
+}
+
 function clampContainerLogLines(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return CONTAINER_LOG_DEFAULT_LINES;
@@ -6017,6 +6096,100 @@ async function runCustomImage(options = {}) {
   return { opId };
 }
 
+async function inspectDeveloperProject(options = {}) {
+  const project = await normalizeDeveloperProjectOptions(options);
+  if (!['validate', 'logs'].includes(project.action)) {
+    const error = new Error('Unsupported developer project inspection.');
+    error.code = 'INVALID_ACTION';
+    throw error;
+  }
+  const docker = await getManagedDocker(getBackendImageRepo());
+  const result = await docker.runDeveloperProject({
+    ...project,
+    timeoutMs: project.action === 'logs' ? 30_000 : 60_000
+  });
+  const output = boundedDeveloperOutput(result?.output);
+  return {
+    action: project.action,
+    ok: true,
+    output: output || (project.action === 'logs' ? 'No project logs.' : `${project.fileName} is valid.`)
+  };
+}
+
+async function runDeveloperProject(options = {}) {
+  const project = await normalizeDeveloperProjectOptions(options);
+  if (!['build', 'up', 'stop', 'down'].includes(project.action)) {
+    const error = new Error('Unsupported developer project operation.');
+    error.code = 'INVALID_ACTION';
+    throw error;
+  }
+
+  const labels = {
+    build: { running: 'Building project', complete: 'Build complete' },
+    up: { running: 'Starting project', complete: 'Project started' },
+    stop: { running: 'Stopping project', complete: 'Project stopped' },
+    down: { running: 'Taking project down', complete: 'Project removed' }
+  };
+  const label = labels[project.action];
+  const opId = beginOperation('developer_project', project.action);
+  const controller = new AbortController();
+  _abortControllers.set(opId, controller);
+
+  (async () => {
+    let output = '';
+    try {
+      const docker = await getManagedDocker(getBackendImageRepo());
+      updateOperationProgress({
+        headline: label.running,
+        message: label.running,
+        detail: `Using ${project.fileName}`,
+        developerOutput: '',
+        progress: null,
+        indeterminate: true,
+        canCancel: true
+      });
+      const result = await docker.runDeveloperProject({
+        ...project,
+        signal: controller.signal,
+        timeoutMs: 30 * 60_000,
+        onOutput: (nextOutput) => {
+          output = boundedDeveloperOutput(nextOutput);
+          updateOperationProgress({
+            detail: developerOutputLine(output, label.running),
+            developerOutput: output
+          });
+        }
+      });
+      output = boundedDeveloperOutput(result?.output || output);
+      finishOperation('completed', null);
+      updateOperationProgress({
+        progress: 100,
+        message: label.complete,
+        detail: developerOutputLine(output, label.complete),
+        developerOutput: output || label.complete
+      });
+    } catch (error) {
+      output = boundedDeveloperOutput(error?.output || output);
+      if (error?.code === 'ABORT_ERR' || controller.signal.aborted) {
+        finishOperation('canceled', 'Canceled');
+        updateOperationProgress({ developerOutput: output || 'Canceled.' });
+        return;
+      }
+      logDockerManagerError('runDeveloperProject', error, { opId, action: project.action, fileName: project.fileName });
+      const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Docker project action failed';
+      finishOperation('failed', message, error?.code || null);
+      updateOperationProgress({ developerOutput: output || message });
+    } finally {
+      _abortControllers.delete(opId);
+      await refreshDockerManager({ forceRefresh: false }).catch(() => {});
+    }
+  })().catch((error) => {
+    logDockerManagerError('runDeveloperProject.unhandled', error, { opId, action: project.action });
+  });
+
+  return { opId };
+}
+
 async function cancelOperation(opId) {
   const id = (opId || '').trim();
   if (!id) {
@@ -6040,7 +6213,7 @@ async function cancelOperation(opId) {
 
   updateOperationProgress({
     message: 'Canceling',
-    detail: 'Canceling download...',
+    detail: _currentOperation.type === 'developer_project' ? 'Canceling Docker action...' : 'Canceling download...',
     progress: null,
     indeterminate: true,
     canCancel: false
@@ -6275,6 +6448,8 @@ module.exports = {
   activateRetainedInstance,
   activateTag,
   runCustomImage,
+  inspectDeveloperProject,
+  runDeveloperProject,
   cancelOperation,
   getDockerInventory,
   getLocalInstanceLogs,

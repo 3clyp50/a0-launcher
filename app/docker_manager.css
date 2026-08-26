@@ -1376,6 +1376,299 @@ body {
   flex-wrap: wrap;
 }
 
+.dm-developer-toolbar,
+.dm-developer-file-actions,
+.dm-developer-action-buttons,
+.dm-developer-output-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.dm-developer-toolbar {
+  justify-content: flex-end;
+}
+
+.dm-developer-project-heading {
+  min-width: 0;
+}
+
+.dm-developer-toolbar .material-symbols-outlined,
+.dm-developer-file-actions .material-symbols-outlined,
+.dm-developer-action-buttons .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.dm-developer-new-file {
+  position: relative;
+}
+
+.dm-developer-new-file > summary {
+  list-style: none;
+}
+
+.dm-developer-new-file > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dm-developer-new-file-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  display: grid;
+  gap: 0.1rem;
+  min-width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid var(--dm-line-soft);
+  border-radius: var(--dm-radius-max);
+  background: var(--dm-surface-strong);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+}
+
+.dm-developer-workbench {
+  display: grid;
+  grid-template-areas:
+    "editor"
+    "actions"
+    "output";
+  gap: 1rem;
+  min-width: 0;
+}
+
+.dm-developer-editor-panel {
+  grid-area: editor;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.dm-developer-project-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0 0 0.35rem;
+  border-bottom: 1px solid var(--dm-line-soft);
+}
+
+.dm-developer-file-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.dm-developer-file-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  max-width: 15rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--dm-radius-max) var(--dm-radius-max) 0 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: 500 0.78rem "Rubik", Arial, Helvetica, sans-serif;
+  padding: 0.35rem 0.65rem;
+  white-space: nowrap;
+}
+
+.dm-developer-file-tab span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dm-developer-file-tab:hover,
+.dm-developer-file-tab.is-active {
+  background: transparent;
+  color: var(--color-text);
+}
+
+.dm-developer-file-tab.is-active {
+  border-bottom-color: var(--color-highlight);
+  font-weight: 700;
+}
+
+.dm-developer-file-dirty {
+  color: var(--color-highlight);
+  font-size: 0.55rem;
+}
+
+.dm-developer-editor-shell {
+  position: relative;
+  min-height: clamp(15rem, 32vh, 28rem);
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: #0d1117;
+}
+
+.dm-developer-file-actions .button {
+  padding: 0.35rem 0.5rem;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  opacity: 0.78;
+}
+
+.dm-developer-file-actions .button:hover:not(:disabled) {
+  background: var(--color-background-hover);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.dm-developer-editor {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.dm-developer-editor-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 2rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.dm-developer-editor-empty .material-symbols-outlined {
+  color: var(--color-highlight);
+  font-size: 2rem;
+}
+
+.dm-developer-editor-empty strong {
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.dm-developer-editor-empty span:last-child {
+  max-width: 32rem;
+  font-size: 0.78rem;
+}
+
+.dm-developer-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dm-developer-tag-field {
+  flex: 0 1 18rem;
+  min-width: 14rem;
+}
+
+.dm-developer-context {
+  margin-left: auto;
+  max-width: min(32rem, 42vw);
+  overflow: hidden;
+  padding-bottom: 0.45rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-developer-output {
+  grid-area: output;
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+}
+
+.dm-developer-output-head {
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+.dm-developer-output-text {
+  min-height: 6rem;
+  max-height: 15rem;
+  margin: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: 0.76rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dm-developer-output-text.is-error {
+  color: #ff9aa9;
+}
+
+@media (min-width: 1180px) {
+  .dm-developer-workbench {
+    grid-template-areas:
+      "editor output"
+      "actions actions";
+    grid-template-columns: minmax(0, 2fr) minmax(18rem, 0.9fr);
+    align-items: stretch;
+  }
+
+  .dm-developer-output {
+    grid-template-rows: auto minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .dm-developer-output-text {
+    min-height: 0;
+    max-height: none;
+    height: 100%;
+    padding: 0;
+  }
+}
+
+.dm-developer-trust-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.dm-developer-trust-note span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dm-developer-trust-note .material-symbols-outlined {
+  color: var(--color-text-muted);
+  font-size: 1rem;
+}
+
+.dm-quick-run {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--dm-line-soft);
+}
+
+.dm-quick-run summary {
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.dm-quick-run-body {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+}
+
 .dm-settings-save {
   flex: 0 0 auto;
   justify-content: flex-end;
@@ -3388,6 +3681,33 @@ body.dm-instance-home-active .dm-page {
     align-items: stretch;
   }
 
+  .dm-developer-toolbar,
+  .dm-developer-file-actions,
+  .dm-developer-action-buttons,
+  .dm-developer-new-file,
+  .dm-developer-toolbar .button,
+  .dm-developer-file-actions .button,
+  .dm-developer-action-buttons .button {
+    width: 100%;
+  }
+
+  .dm-developer-project-bar,
+  .dm-developer-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dm-developer-file-tabs,
+  .dm-developer-tag-field {
+    width: 100%;
+  }
+
+  .dm-developer-context {
+    margin-left: 0;
+    max-width: none;
+    white-space: normal;
+  }
+
   .dm-diagnostic-summary,
   .dm-diagnostic-row {
     grid-template-columns: 1fr;
@@ -3400,9 +3720,14 @@ body.dm-instance-home-active .dm-page {
 
   .dm-advanced-actions,
   .dm-settings-actions,
-  #copyComposeBtn,
   #advancedPruneVolumesBtn,
   #saveSettingsBtn {
     width: 100%;
+  }
+}
+
+@media (max-height: 700px) {
+  .dm-developer-editor-shell {
+    min-height: 10rem;
   }
 }

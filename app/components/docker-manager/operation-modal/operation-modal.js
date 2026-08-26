@@ -51,6 +51,7 @@ function operationHeadline(progress = null) {
     backup_workspace: { running: "Backing up /a0/usr", failed: "Backup failed", canceled: "Backup canceled" },
     restore_workspace: { running: "Restoring /a0/usr", failed: "Restore failed", canceled: "Restore canceled" },
     developer_run: { running: "Running developer image", failed: "Developer image failed", canceled: "Developer image canceled" },
+    developer_project: { running: "Running Docker project", failed: "Docker project failed", canceled: "Docker project canceled" },
     operation: { running: "Working on Agent Zero", failed: "Operation failed", canceled: "Operation canceled" }
   };
   const entry = labels[type] || labels.operation;

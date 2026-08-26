@@ -15,6 +15,8 @@ This scope owns:
   protocol, main windows, IPC handlers, shell actions, and Docker Manager event
   forwarding.
 - `shell/preload.js`: safe renderer bridge exposed through `contextBridge`.
+- `shell/developer_projects.js`: bounded, renderer-owned Docker project file
+  sessions for native open, save, export, and project action targeting.
 - `shell/credential_prompt.html` and `shell/credential_prompt.css`: static
   content and native-window layout for the shell-owned credential consent
   modal. Reuse the Launcher's shared dialog styles and never receive credential
@@ -238,6 +240,12 @@ This scope owns:
   pass image, tag, environment, port, mount, and pull preferences, but shell code
   must keep validation and Docker execution behind `shell/docker_manager`; do not
   add generic shell or Docker command IPC.
+- Developer project files stay shell-owned: native dialogs authorize one
+  dedicated project folder per renderer, the renderer receives an opaque token
+  plus bounded UTF-8 root-file contents, and saves may target only supported
+  project-root filenames. Export uses a separate native save dialog. Docker
+  project execution resolves the token back to the authorized root and passes
+  only fixed Validate, Build, Up, Stop, Logs, or Down intents to Docker Manager.
 - Create local Instance may select only Agent Zero releases and local Agent Zero
   builds. Arbitrary Docker image execution remains an Advanced developer intent.
 - Docker CLI discovery for that sign-in flow should honor explicit

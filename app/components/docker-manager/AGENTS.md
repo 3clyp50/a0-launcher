@@ -42,8 +42,8 @@ This scope owns:
   Colour/Icon selection, launcher-saved credential controls for local and saved
   remote Instances, clone/log inspection controls, remote instance CRUD, and
   instance opening.
-- `advanced/`: tabbed developer-mode custom image runner with inline Docker
-  Compose composer, diagnostics, and storage-volume maintenance.
+- `advanced/`: tabbed Dockerfile/Compose project workspace, subordinate custom
+  image runner, diagnostics, and storage-volume maintenance.
 - `settings/`: port, workspace, Host access, and saved Instance provider/model
   defaults.
 - `instance-tabs/`: browser-style attached and detached tab chrome, Launcher
@@ -187,10 +187,17 @@ This scope owns:
   outcomes instead of internal preferences: create a folder named after the
   Instance, choose a custom folder, or use a named Docker volume. The named
   Instance folder under the default workspace root should be first/default.
-- The Advanced tab may expose developer-mode custom image, tag, environment,
-  port, mount, and editable Compose-file controls in the Developer sub-tab.
-  Validate through Docker Manager IPC, and never expose a generic command
-  runner or a runtime-candidate browser.
+- The Advanced tab exposes a file-first Docker workspace in the Developer
+  sub-tab. Open project folders or individual root files through native shell
+  dialogs; edit Dockerfiles, Compose YAML, `.dockerignore`, and `.env.example`
+  with the bundled Ace editor; keep Save distinct from Export; and validate or
+  run only the fixed Build, Up, Stop, Logs, and Down intents through Docker
+  Manager IPC. The project root is the build context, Down keeps storage
+  volumes, opening another project or closing with unsaved edits warns first,
+  and renderer state receives opaque project tokens rather than host paths.
+  Keep custom image, tag, environment, port, and mount execution as the
+  collapsed quick-run path. Never expose a generic command runner or a
+  runtime-candidate browser.
 - Advanced should keep developer controls and their related Compose editing
   together in the Developer sub-tab. Diagnostics and Storage volumes remain
   separate sub-tabs so the page avoids multiple boxed panels at once.

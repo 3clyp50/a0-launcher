@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { DockerInterface } from '../DockerInterface.mjs';
+import { runDeveloperProjectCommand } from '../DockerCli.mjs';
 import { resolveDockerAuthConfigForImage } from './DockerAuthConfig.mjs';
 import { DockerHubRegistry } from './DockerHubRegistry.mjs';
 import {
@@ -475,6 +476,13 @@ export class DockerodeDocker extends DockerInterface {
     } catch (error) {
       throw normalizeDockerError(error, { op: 'getRuntimeDiagnostics', env: this.#envSummary() });
     }
+  }
+
+  async runDeveloperProject(options = {}) {
+    return runDeveloperProjectCommand({
+      ...options,
+      dockerHost: this.env?.dockerHost?.raw || ''
+    });
   }
 
   async listRemoteTags(imageRepo) {

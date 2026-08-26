@@ -9,6 +9,7 @@ const { createHash } = require('node:crypto');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const dockerManager = require('./docker_manager');
+const developerProjects = require('./developer_projects');
 const {
   normalizeInstanceColor,
   normalizeInstanceIcon,
@@ -95,6 +96,7 @@ const PUBLIC_RESOURCE_LINKS = Object.freeze({
   apiDashboard: 'https://www.agent-zero.ai/p/community/api-dashboard/',
   support: 'https://discord.gg/8bz37YKSwT'
 });
+const developerProjectCleanupOwners = new Set();
 
 function isTruthyEnv(value) {
   const v = (value || '').trim().toLowerCase();
@@ -3694,6 +3696,39 @@ async function openHostFolder(folderPath) {
   }
 }
 
+async function chooseDeveloperProject(ownerWindow, ownerId, mode) {
+  const openFile = mode === 'file';
+  const options = {
+    title: openFile ? 'Open Docker Project File' : 'Open Docker Project',
+    buttonLabel: openFile ? 'Open File' : 'Open Project',
+    defaultPath: os.homedir(),
+    properties: openFile ? ['openFile'] : ['openDirectory', 'createDirectory']
+  };
+  const result = ownerWindow && !ownerWindow.isDestroyed()
+    ? await dialog.showOpenDialog(ownerWindow, options)
+    : await dialog.showOpenDialog(options);
+  if (result?.canceled) return { canceled: true };
+  const selected = Array.isArray(result?.filePaths) ? result.filePaths[0] : '';
+  if (!selected) return { canceled: true };
+  const root = openFile ? path.dirname(selected) : selected;
+  return developerProjects.loadDeveloperProject(ownerId, root, openFile ? selected : '');
+}
+
+async function exportDeveloperFile(ownerWindow, fileName, content) {
+  const suggestedName = developerProjects.developerFileKind(fileName) ? fileName : 'compose.yaml';
+  const options = {
+    title: 'Export Docker Project File',
+    buttonLabel: 'Export',
+    defaultPath: path.join(app.getPath('downloads'), suggestedName),
+    properties: ['createDirectory', 'showOverwriteConfirmation']
+  };
+  const result = ownerWindow && !ownerWindow.isDestroyed()
+    ? await dialog.showSaveDialog(ownerWindow, options)
+    : await dialog.showSaveDialog(options);
+  if (result?.canceled || !result?.filePath) return { canceled: true };
+  return developerProjects.writeDeveloperExport(result.filePath, content);
+}
+
 function backupDateStamp() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -4218,6 +4253,9 @@ function sanitizeDockerManagerProgress(progress) {
   if (typeof progress.message === 'string') out.message = progress.message;
   if (typeof progress.headline === 'string') out.headline = progress.headline;
   if (typeof progress.detail === 'string') out.detail = progress.detail;
+  if (progress.type === 'developer_project' && typeof progress.developerOutput === 'string') {
+    out.developerOutput = progress.developerOutput.slice(-12_000);
+  }
   if (typeof progress.phase === 'string' || progress.phase === null) out.phase = progress.phase;
   if (typeof progress.indeterminate === 'boolean') out.indeterminate = progress.indeterminate;
   if (typeof progress.uiReady === 'boolean') out.uiReady = progress.uiReady;
@@ -4996,6 +5034,97 @@ ipcMain.handle('docker-manager:runCustomImage', async (_event, body) => {
     const accepted = await dockerManager.runCustomImage(options);
     if (!accepted || typeof accepted.opId !== 'string') {
       return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Custom image run did not return an opId' });
+    }
+    return { opId: accepted.opId };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:openDeveloperProject', async (event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    const mode = body.mode === 'file' ? 'file' : 'folder';
+    const ownerId = event.sender.id;
+    const project = await chooseDeveloperProject(BrowserWindow.fromWebContents(event.sender), ownerId, mode);
+    if (!developerProjectCleanupOwners.has(ownerId)) {
+      developerProjectCleanupOwners.add(ownerId);
+      event.sender.once('destroyed', () => {
+        developerProjects.closeDeveloperProjects(ownerId);
+        developerProjectCleanupOwners.delete(ownerId);
+      });
+    }
+    return project;
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:saveDeveloperProjectFile', async (event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    return await developerProjects.saveDeveloperProjectFile(
+      event.sender.id,
+      typeof body.projectToken === 'string' ? body.projectToken : '',
+      typeof body.fileName === 'string' ? body.fileName : '',
+      typeof body.content === 'string' ? body.content : ''
+    );
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:exportDeveloperFile', async (event, body) => {
+  try {
+    if (!isPlainObject(body)) return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid request' });
+    return await exportDeveloperFile(
+      BrowserWindow.fromWebContents(event.sender),
+      typeof body.fileName === 'string' ? body.fileName : '',
+      typeof body.content === 'string' ? body.content : ''
+    );
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:inspectDeveloperProject', async (event, body) => {
+  try {
+    if (!isPlainObject(body) || !['validate', 'logs'].includes(body.action)) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid developer project action' });
+    }
+    const target = await developerProjects.developerProjectTarget(
+      event.sender.id,
+      typeof body.projectToken === 'string' ? body.projectToken : '',
+      typeof body.fileName === 'string' ? body.fileName : ''
+    );
+    const result = await dockerManager.inspectDeveloperProject({ ...target, action: body.action });
+    return {
+      ok: result?.ok === true,
+      action: result?.action === 'logs' ? 'logs' : 'validate',
+      output: typeof result?.output === 'string' ? result.output.slice(-12_000) : ''
+    };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:runDeveloperProject', async (event, body) => {
+  try {
+    if (!isPlainObject(body) || !['build', 'up', 'stop', 'down'].includes(body.action)) {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Invalid developer project action' });
+    }
+    const target = await developerProjects.developerProjectTarget(
+      event.sender.id,
+      typeof body.projectToken === 'string' ? body.projectToken : '',
+      typeof body.fileName === 'string' ? body.fileName : ''
+    );
+    const accepted = await dockerManager.runDeveloperProject({
+      ...target,
+      action: body.action,
+      imageTag: typeof body.imageTag === 'string' ? body.imageTag : ''
+    });
+    if (!accepted || typeof accepted.opId !== 'string') {
+      return dockerManager.toErrorResponse({ code: 'INTERNAL_ERROR', message: 'Docker project action did not return an opId' });
     }
     return { opId: accepted.opId };
   } catch (error) {

@@ -25,66 +25,153 @@
     <div class="dm-advanced-tab-panels">
       <section id="advancedPanelDeveloper" class="dm-advanced-tab-panel is-active" role="tabpanel" aria-labelledby="advancedTabDeveloper" data-advanced-panel="developer">
         <div class="dm-advanced-panel-head">
-          <div>
-            <h3 id="developerModeTitle" class="dm-advanced-title">Developer mode</h3>
-            <div class="sv-subtitle">Custom images, tags, environment, ports, and mounts</div>
+          <div class="dm-developer-project-heading">
+            <h3 id="developerModeTitle" class="dm-advanced-title">Docker workspace</h3>
+            <div id="developerProjectSummary" class="sv-subtitle">Open a project folder or create a Docker file</div>
           </div>
-        </div>
-
-        <div class="dm-advanced-form">
-          <div class="dm-field">
-            <label for="advancedImageInput">Image</label>
-            <input id="advancedImageInput" class="dm-text-input" type="text" autocomplete="off" placeholder="agent0ai/agent-zero">
-          </div>
-          <div class="dm-field">
-            <label for="advancedTagInput">Tag</label>
-            <input id="advancedTagInput" class="dm-text-input" type="text" autocomplete="off" placeholder="latest">
-          </div>
-          <div class="dm-field">
-            <label for="advancedInstanceNameInput">Instance name</label>
-            <input id="advancedInstanceNameInput" class="dm-text-input" type="text" maxlength="64" autocomplete="off" placeholder="brave-ada">
-          </div>
-          <div class="dm-field">
-            <label for="advancedPortsInput">Ports</label>
-            <input id="advancedPortsInput" class="dm-text-input" type="text" autocomplete="off" placeholder="0:80, 0:22">
-          </div>
-          <label class="dm-checkbox-line">
-            <input id="advancedPullToggle" type="checkbox" checked>
-            <span>Pull before run</span>
-          </label>
-          <div class="dm-field">
-            <label for="advancedEnvInput">Environment variables</label>
-            <textarea id="advancedEnvInput" class="dm-textarea" spellcheck="false" placeholder="KEY=value"></textarea>
-          </div>
-          <div class="dm-field">
-            <label for="advancedMountsInput">Mounts</label>
-            <textarea id="advancedMountsInput" class="dm-textarea" spellcheck="false" placeholder="/host/path:/container/path:rw"></textarea>
-          </div>
-        </div>
-
-        <div class="dm-advanced-actions">
-          <button id="runCustomImageBtn" class="button confirm" type="button">
-            <span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
-            <span>Run image</span>
-          </button>
-        </div>
-
-        <div class="dm-compose-inline">
-          <div class="dm-advanced-panel-head">
-            <div>
-              <h3 class="dm-advanced-title">Docker Compose</h3>
-              <div class="sv-subtitle">Compose file</div>
-            </div>
-            <button id="copyComposeBtn" class="button" type="button">
-              <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
-              <span>Copy Compose</span>
+          <div class="dm-developer-toolbar">
+            <button id="openDeveloperProjectBtn" class="button confirm" type="button">
+              <span class="material-symbols-outlined" aria-hidden="true">folder_open</span>
+              <span>Open project</span>
+            </button>
+            <details class="dm-developer-new-file">
+              <summary class="button">
+                <span class="material-symbols-outlined" aria-hidden="true">note_add</span>
+                <span>New file</span>
+                <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+              </summary>
+              <div class="dm-developer-new-file-menu" role="menu">
+                <button id="newComposeBtn" class="dm-card-menu-item" type="button" role="menuitem">
+                  <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                  <span>Compose file</span>
+                </button>
+                <button id="newDockerfileBtn" class="dm-card-menu-item" type="button" role="menuitem">
+                  <span class="material-symbols-outlined" aria-hidden="true">deployed_code</span>
+                  <span>Dockerfile</span>
+                </button>
+              </div>
+            </details>
+            <button id="openDeveloperFileBtn" class="button" type="button">
+              <span class="material-symbols-outlined" aria-hidden="true">upload_file</span>
+              <span>Import file</span>
             </button>
           </div>
-          <div class="dm-field dm-compose-field">
-            <label for="composePreview">YAML</label>
-            <textarea id="composePreview" class="dm-textarea dm-compose-preview" spellcheck="false"></textarea>
+        </div>
+
+        <div class="dm-developer-workbench">
+          <div class="dm-developer-editor-panel">
+            <div class="dm-developer-project-bar">
+              <div id="developerFileTabs" class="dm-developer-file-tabs" role="tablist" aria-label="Docker project files"></div>
+              <div class="dm-developer-file-actions">
+                <button id="saveDeveloperFileBtn" class="button" type="button" disabled>
+                  <span class="material-symbols-outlined" aria-hidden="true">save</span>
+                  <span>Save</span>
+                </button>
+                <button id="exportDeveloperFileBtn" class="button" type="button" disabled>
+                  <span class="material-symbols-outlined" aria-hidden="true">download</span>
+                  <span>Export</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="dm-developer-editor-shell">
+              <div id="developerEditorEmpty" class="dm-developer-editor-empty">
+                <span class="material-symbols-outlined" aria-hidden="true">deployed_code</span>
+                <strong>No Docker project open</strong>
+                <span>Open a folder, import a file, or create a Compose file or Dockerfile.</span>
+              </div>
+              <div id="developerEditor" class="dm-developer-editor" aria-label="Docker project editor"></div>
+            </div>
+          </div>
+
+          <div class="dm-developer-actions">
+            <div id="developerImageTagField" class="dm-field dm-developer-tag-field" hidden>
+              <label for="developerImageTagInput">Image tag</label>
+              <input id="developerImageTagInput" class="dm-text-input" type="text" autocomplete="off" value="a0-developer:latest">
+            </div>
+            <div class="dm-developer-action-buttons">
+              <button id="validateDeveloperProjectBtn" class="button" type="button" disabled>
+                <span class="material-symbols-outlined" aria-hidden="true">check_circle</span>
+                <span>Validate</span>
+              </button>
+              <button id="buildDeveloperProjectBtn" class="button" type="button" disabled>
+                <span class="material-symbols-outlined" aria-hidden="true">build</span>
+                <span>Build</span>
+              </button>
+              <button id="upDeveloperProjectBtn" class="button confirm" type="button" disabled>
+                <span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
+                <span>Start</span>
+              </button>
+              <button id="stopDeveloperProjectBtn" class="button" type="button" title="Stop project containers without removing them" disabled>
+                <span class="material-symbols-outlined" aria-hidden="true">stop</span>
+                <span>Stop</span>
+              </button>
+              <button id="logsDeveloperProjectBtn" class="button" type="button" disabled>
+                <span class="material-symbols-outlined" aria-hidden="true">subject</span>
+                <span>Logs</span>
+              </button>
+              <button id="downDeveloperProjectBtn" class="button cancel" type="button" title="Remove project containers and networks; keep storage volumes" disabled>
+                <span class="material-symbols-outlined" aria-hidden="true">arrow_downward</span>
+                <span>Take down</span>
+              </button>
+            </div>
+            <div id="developerActionContext" class="sv-subtitle dm-developer-context">Project root is the build context</div>
+          </div>
+
+          <div class="dm-developer-output">
+            <div class="dm-developer-output-head">
+              <h4 class="dm-advanced-title">Output</h4>
+            </div>
+            <pre id="developerOutputText" class="dm-developer-output-text" aria-live="polite">Open or create a project to begin.</pre>
           </div>
         </div>
+
+        <div class="dm-developer-trust-note">
+          <span class="material-symbols-outlined" aria-hidden="true">shield</span>
+          <span>Dockerfiles and Compose files execute with the selected runtime's permissions. Review imported files before running them.</span>
+        </div>
+
+        <details class="dm-quick-run">
+          <summary>Quick run image</summary>
+          <div class="dm-quick-run-body">
+            <div class="dm-advanced-form">
+              <div class="dm-field">
+                <label for="advancedImageInput">Image</label>
+                <input id="advancedImageInput" class="dm-text-input" type="text" autocomplete="off" placeholder="agent0ai/agent-zero">
+              </div>
+              <div class="dm-field">
+                <label for="advancedTagInput">Tag</label>
+                <input id="advancedTagInput" class="dm-text-input" type="text" autocomplete="off" placeholder="latest">
+              </div>
+              <div class="dm-field">
+                <label for="advancedInstanceNameInput">Instance name</label>
+                <input id="advancedInstanceNameInput" class="dm-text-input" type="text" maxlength="64" autocomplete="off" placeholder="brave-ada">
+              </div>
+              <div class="dm-field">
+                <label for="advancedPortsInput">Ports</label>
+                <input id="advancedPortsInput" class="dm-text-input" type="text" autocomplete="off" placeholder="0:80, 0:22">
+              </div>
+              <label class="dm-checkbox-line">
+                <input id="advancedPullToggle" type="checkbox" checked>
+                <span>Pull before run</span>
+              </label>
+              <div class="dm-field">
+                <label for="advancedEnvInput">Environment variables</label>
+                <textarea id="advancedEnvInput" class="dm-textarea" spellcheck="false" placeholder="KEY=value"></textarea>
+              </div>
+              <div class="dm-field">
+                <label for="advancedMountsInput">Mounts</label>
+                <textarea id="advancedMountsInput" class="dm-textarea" spellcheck="false" placeholder="/host/path:/container/path:rw"></textarea>
+              </div>
+            </div>
+            <div class="dm-advanced-actions">
+              <button id="runCustomImageBtn" class="button confirm" type="button">
+                <span class="material-symbols-outlined" aria-hidden="true">play_arrow</span>
+                <span>Run image</span>
+              </button>
+            </div>
+          </div>
+        </details>
       </section>
 
       <section id="advancedPanelDiagnostics" class="dm-advanced-tab-panel" role="tabpanel" aria-labelledby="advancedTabDiagnostics" data-advanced-panel="diagnostics" hidden>

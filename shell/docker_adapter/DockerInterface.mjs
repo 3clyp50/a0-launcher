@@ -340,6 +340,15 @@ export class DockerInterface {
   }
 
   /**
+   * Run one bounded Dockerfile or Compose project action through the active runtime.
+   * @param {Object} _options
+   * @returns {Promise<{output: string, exitCode: number}>}
+   */
+  async runDeveloperProject(_options) {
+    throw new Error('DockerInterface.runDeveloperProject is abstract');
+  }
+
+  /**
    * List remote tags for an image repo (DI-005).
    * @param {string} imageRepo
    * @returns {Promise<string[]>}

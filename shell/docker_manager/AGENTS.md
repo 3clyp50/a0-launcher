@@ -16,7 +16,8 @@ This scope owns:
 - `index.js`: Docker Manager service, state assembly,
   install/sync/start/stop/restart, activation, rollback, retained-instance,
   remote-instance, per-container clone and log inspection, port, storage,
-  developer custom-image runs, runtime setup, and progress operations.
+  developer custom-image and Docker project runs, runtime setup, and progress
+  operations.
 - `state_store.js`: persisted launcher state under Electron `userData`,
   including preferences, remote instances, local instance display names, and
   local instance colour/icon overrides, plus Launcher Host access defaults and
@@ -43,6 +44,11 @@ This scope owns:
   repositories and tags. Validate image names, tags, environment variables,
   port mappings, and mounts before Dockerode sees them; label created containers
   with `a0.launcher.role=developer` so the Instances tab can manage them.
+- Developer project actions accept only shell-resolved dedicated project roots
+  and regular root files. Compose actions are fixed to Validate, Build, Up,
+  Stop, Logs, and Down; Dockerfile actions are fixed to Validate and Build.
+  Long-running actions use normal progress/cancellation, bound output to 12 KB,
+  and Down must not remove storage volumes.
 - Runtime-wide local image discovery remains available for Advanced developer
   controls, while normal Create local Instance choices use only Agent Zero
   releases and local Agent Zero builds.

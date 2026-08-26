@@ -322,6 +322,41 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
       pull: opts.pull !== false
     });
   },
+  openDeveloperProject: (mode = 'folder') => ipcRenderer.invoke('docker-manager:openDeveloperProject', {
+    mode: mode === 'file' ? 'file' : 'folder'
+  }),
+  saveDeveloperProjectFile: (options) => {
+    const opts = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:saveDeveloperProjectFile', {
+      projectToken: typeof opts.projectToken === 'string' ? opts.projectToken : '',
+      fileName: typeof opts.fileName === 'string' ? opts.fileName : '',
+      content: typeof opts.content === 'string' ? opts.content : ''
+    });
+  },
+  exportDeveloperFile: (options) => {
+    const opts = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:exportDeveloperFile', {
+      fileName: typeof opts.fileName === 'string' ? opts.fileName : '',
+      content: typeof opts.content === 'string' ? opts.content : ''
+    });
+  },
+  inspectDeveloperProject: (options) => {
+    const opts = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:inspectDeveloperProject', {
+      projectToken: typeof opts.projectToken === 'string' ? opts.projectToken : '',
+      fileName: typeof opts.fileName === 'string' ? opts.fileName : '',
+      action: typeof opts.action === 'string' ? opts.action : ''
+    });
+  },
+  runDeveloperProject: (options) => {
+    const opts = options && typeof options === 'object' ? options : {};
+    return ipcRenderer.invoke('docker-manager:runDeveloperProject', {
+      projectToken: typeof opts.projectToken === 'string' ? opts.projectToken : '',
+      fileName: typeof opts.fileName === 'string' ? opts.fileName : '',
+      action: typeof opts.action === 'string' ? opts.action : '',
+      imageTag: typeof opts.imageTag === 'string' ? opts.imageTag : ''
+    });
+  },
   activateRetainedInstance: (containerId, dataLossAck) =>
     ipcRenderer.invoke('docker-manager:activateRetainedInstance', { containerId, dataLossAck }),
   cancel: (opId) => ipcRenderer.invoke('docker-manager:cancel', { opId }),

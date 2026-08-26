@@ -7,8 +7,12 @@ const ADVANCED_TAB_KEY = "dm-advanced-active-tab";
 const ADVANCED_TABS = ["developer", "diagnostics", "storage"];
 
 let lastState = window.__dmLastState || {};
-let lastGeneratedCompose = "";
-let composeManual = false;
+let developerEditor = null;
+let editorChangeMuted = false;
+let editorRetryTimer = 0;
+let activeFileName = "";
+let lastDeveloperProgressKey = "";
+let project = { token: "", name: "", files: [], warnings: [] };
 
 function byId(id) { return document.getElementById(id); }
 
@@ -139,6 +143,7 @@ function applyAdvancedTab(tab, { persist = true, focus = false } = {}) {
     panel.classList.toggle("is-active", selected);
     panel.hidden = !selected;
   });
+  if (activeTab === "developer") window.setTimeout(() => developerEditor?.resize?.(), 0);
 }
 
 function bindAdvancedTabs() {
@@ -169,7 +174,7 @@ function readImagePair() {
   return splitImageTag(imageValue, tagValue);
 }
 
-function readForm() {
+function readQuickRunForm() {
   const pair = readImagePair();
   const name = sanitizeName(byId("advancedInstanceNameInput")?.value || defaultInstanceName(pair.tag, lastState));
   return {
@@ -217,20 +222,6 @@ function buildComposeYaml(form) {
   return `${out.join("\n")}\n`;
 }
 
-function updateComposePreview() {
-  const preview = byId("composePreview");
-  const nextCompose = buildComposeYaml(readForm());
-  if (preview) {
-    const canReplace = !composeManual || !preview.value.trim() || preview.value === lastGeneratedCompose;
-    if (canReplace) {
-      preview.value = nextCompose;
-      composeManual = false;
-    }
-  }
-  lastGeneratedCompose = nextCompose;
-  updateActionState();
-}
-
 function syncDefaultName() {
   const nameInput = byId("advancedInstanceNameInput");
   if (!nameInput || nameInput.dataset.dirty) return;
@@ -259,57 +250,338 @@ function setInitialFormValues() {
   if (nameInput && !nameInput.value) nameInput.value = defaultInstanceName(DEFAULT_TAG, lastState);
 }
 
-function updateActionState() {
-  const runBtn = byId("runCustomImageBtn");
-  const operationRunning = lastState?.progress?.status === "running";
-  if (runBtn) runBtn.disabled = operationRunning;
+function developerFileKind(name) {
+  const value = String(name || "").trim();
+  if (/\.ya?ml$/i.test(value)) return "compose";
+  if (/^(?:Dockerfile|Containerfile)(?:[._-][A-Za-z0-9_-]+)*$/i.test(value)) return "dockerfile";
+  if (value === ".dockerignore") return "dockerignore";
+  if (value === ".env.example") return "env_example";
+  return "";
 }
 
-async function copyCompose() {
-  const preview = byId("composePreview");
-  const text = preview?.value || buildComposeYaml(readForm());
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      preview?.focus();
-      preview?.select();
-      document.execCommand("copy");
-    }
-    window.toastFrontendSuccess?.("Compose file copied.", "Agent Zero", 2, "dm-advanced-compose");
-  } catch {
-    window.toastFrontendError?.("Unable to copy Compose file.", "Agent Zero");
+function activeFile() {
+  return project.files.find((file) => file.name === activeFileName) || null;
+}
+
+function composeFile() {
+  const active = activeFile();
+  return active?.kind === "compose" ? active : project.files.find((file) => file.kind === "compose") || null;
+}
+
+function syncActiveFileFromEditor() {
+  const file = activeFile();
+  if (file && developerEditor) file.content = developerEditor.getValue();
+}
+
+function fileIsDirty(file) {
+  return !!file && file.content !== file.savedContent;
+}
+
+function hasDirtyFiles() {
+  syncActiveFileFromEditor();
+  return project.files.some(fileIsDirty);
+}
+
+function editorMode(file) {
+  if (file?.kind === "compose") return "ace/mode/yaml";
+  if (file?.kind === "dockerfile") return "ace/mode/dockerfile";
+  if (file?.kind === "dockerignore") return "ace/mode/gitignore";
+  if (file?.kind === "env_example") return "ace/mode/sh";
+  return "ace/mode/text";
+}
+
+function initDeveloperEditor() {
+  if (developerEditor) return true;
+  if (!window.ace || !byId("developerEditor")) {
+    window.clearTimeout(editorRetryTimer);
+    editorRetryTimer = window.setTimeout(initDeveloperEditor, 50);
+    return false;
+  }
+  window.ace.config.set("basePath", "a0ui/vendor/ace-min");
+  developerEditor = window.ace.edit("developerEditor");
+  developerEditor.setTheme("ace/theme/github_dark");
+  developerEditor.setOptions({
+    fontSize: "13px",
+    showPrintMargin: false,
+    tabSize: 2,
+    useSoftTabs: true,
+    wrap: false
+  });
+  developerEditor.session.setUseWorker(false);
+  developerEditor.on("change", () => {
+    if (editorChangeMuted) return;
+    const file = activeFile();
+    if (!file) return;
+    file.content = developerEditor.getValue();
+    renderFileTabs();
+    updateActionState();
+  });
+  developerEditor.commands.addCommand({
+    name: "saveDeveloperFile",
+    bindKey: { win: "Ctrl-S", mac: "Command-S" },
+    exec: () => { void saveActiveDeveloperFile(); }
+  });
+  renderDeveloperEditor();
+  return true;
+}
+
+function setOutput(text, tone = "") {
+  const output = byId("developerOutputText");
+  if (output) {
+    output.textContent = String(text || "");
+    output.classList.toggle("is-error", tone === "error");
   }
 }
 
-function scrollPanelBy(input, deltaY) {
-  const scroller = input?.closest?.(".dm-advanced-tab-panel");
-  if (!scroller) return false;
-  const before = scroller.scrollTop;
-  scroller.scrollTop += deltaY;
-  return scroller.scrollTop !== before;
+function renderFileTabs() {
+  const tabs = byId("developerFileTabs");
+  if (!tabs) return;
+  tabs.innerHTML = "";
+  for (const file of project.files) {
+    const button = document.createElement("button");
+    const selected = file.name === activeFileName;
+    button.type = "button";
+    button.className = `dm-developer-file-tab${selected ? " is-active" : ""}`;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+    button.title = file.name;
+    const name = document.createElement("span");
+    name.textContent = file.name;
+    button.appendChild(name);
+    if (fileIsDirty(file)) {
+      const dirty = document.createElement("span");
+      dirty.className = "dm-developer-file-dirty";
+      dirty.textContent = "●";
+      dirty.setAttribute("aria-label", "Unsaved");
+      button.appendChild(dirty);
+    }
+    button.addEventListener("click", () => setActiveDeveloperFile(file.name));
+    tabs.appendChild(button);
+  }
 }
 
-function bindWheelPassthrough(input) {
-  if (!input || input.dataset.dmWheelPassthrough) return;
-  input.dataset.dmWheelPassthrough = "1";
-  input.addEventListener("wheel", (event) => {
-    const maxScrollTop = input.scrollHeight - input.clientHeight;
-    if (maxScrollTop <= 1) {
-      if (scrollPanelBy(input, event.deltaY)) event.preventDefault();
-      return;
-    }
+function renderDeveloperEditor() {
+  const file = activeFile();
+  const editorEl = byId("developerEditor");
+  const empty = byId("developerEditorEmpty");
+  if (empty) empty.hidden = !!file;
+  if (editorEl) editorEl.hidden = !file;
+  if (!developerEditor || !file) return;
+  editorChangeMuted = true;
+  developerEditor.session.setMode(editorMode(file));
+  developerEditor.setValue(file.content, -1);
+  developerEditor.clearSelection();
+  editorChangeMuted = false;
+  window.setTimeout(() => developerEditor.resize(), 0);
+}
 
-    const atTop = input.scrollTop <= 0;
-    const atBottom = input.scrollTop >= maxScrollTop - 1;
-    if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
-      if (scrollPanelBy(input, event.deltaY)) event.preventDefault();
-    }
-  }, { passive: false });
+function setActiveDeveloperFile(fileName) {
+  syncActiveFileFromEditor();
+  activeFileName = project.files.some((file) => file.name === fileName) ? fileName : "";
+  renderFileTabs();
+  renderDeveloperEditor();
+  updateActionState();
+}
+
+function defaultDeveloperImageTag() {
+  const name = String(project.name || "a0-developer")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^[._-]+|[._-]+$/g, "") || "a0-developer";
+  return `${name}:latest`;
+}
+
+function renderProject() {
+  const summary = byId("developerProjectSummary");
+  if (summary) {
+    summary.textContent = project.token
+      ? `${project.name} · ${project.files.length} file${project.files.length === 1 ? "" : "s"}`
+      : "Open a project folder or create a Docker file";
+  }
+  const tagInput = byId("developerImageTagInput");
+  if (tagInput && tagInput.dataset.project !== project.token) {
+    tagInput.value = defaultDeveloperImageTag();
+    tagInput.dataset.project = project.token;
+  }
+  renderFileTabs();
+  renderDeveloperEditor();
+  updateActionState();
+}
+
+function loadProject(result) {
+  const files = Array.isArray(result?.files) ? result.files : [];
+  project = {
+    token: typeof result?.token === "string" ? result.token : "",
+    name: typeof result?.name === "string" ? result.name : "",
+    files: files.map((file) => {
+      const content = typeof file?.content === "string" ? file.content : "";
+      return {
+        name: String(file?.name || ""),
+        kind: developerFileKind(file?.name),
+        content,
+        savedContent: content
+      };
+    }).filter((file) => file.name && file.kind),
+    warnings: Array.isArray(result?.warnings) ? result.warnings : []
+  };
+  activeFileName = project.files.some((file) => file.name === result?.selectedFile)
+    ? result.selectedFile
+    : project.files[0]?.name || "";
+  renderProject();
+  if (project.warnings.length) setOutput(project.warnings.join("\n"), "error");
+  else setOutput(project.files.length ? "Project opened." : "Project folder opened. Create a Docker file to begin.");
+}
+
+function updateActionState() {
+  const operationRunning = lastState?.progress?.status === "running";
+  const file = activeFile();
+  const compose = composeFile();
+  const actionable = file?.kind === "compose" || file?.kind === "dockerfile";
+  const setDisabled = (id, disabled) => { const button = byId(id); if (button) button.disabled = !!disabled; };
+  const setVisible = (id, visible) => { const button = byId(id); if (button) button.hidden = !visible; };
+  setDisabled("runCustomImageBtn", operationRunning);
+  setVisible("saveDeveloperFileBtn", !!project.token && !!file && fileIsDirty(file));
+  setDisabled("saveDeveloperFileBtn", operationRunning);
+  setVisible("exportDeveloperFileBtn", !!file);
+  setDisabled("exportDeveloperFileBtn", operationRunning);
+  for (const id of ["validateDeveloperProjectBtn", "buildDeveloperProjectBtn"]) {
+    setVisible(id, !!project.token && actionable);
+    setDisabled(id, operationRunning);
+  }
+  for (const id of ["upDeveloperProjectBtn", "stopDeveloperProjectBtn", "logsDeveloperProjectBtn", "downDeveloperProjectBtn"]) {
+    setVisible(id, !!project.token && !!compose);
+    setDisabled(id, operationRunning);
+  }
+  const tagField = byId("developerImageTagField");
+  if (tagField) tagField.hidden = file?.kind !== "dockerfile";
+  const context = byId("developerActionContext");
+  if (context) context.textContent = project.token ? `Build context: ${project.name}` : "Project root is the build context";
+}
+
+async function openDeveloperProject(mode = "folder") {
+  if (hasDirtyFiles() && !window.confirm("Discard unsaved Docker project changes?")) return false;
+  const result = await window.dockerManagerActions?.openDeveloperProject?.(mode);
+  if (!result || result.canceled) return false;
+  loadProject(result);
+  return true;
+}
+
+async function createDeveloperFile(kind) {
+  if (!project.token && !(await openDeveloperProject("folder"))) return;
+  const name = kind === "compose" ? "compose.yaml" : "Dockerfile";
+  const existing = project.files.find((file) => file.name === name);
+  if (existing) return setActiveDeveloperFile(existing.name);
+  const content = kind === "compose"
+    ? buildComposeYaml(readQuickRunForm())
+    : `FROM ${DEFAULT_IMAGE}:${DEFAULT_TAG}\n\n# Add image customizations here.\n`;
+  project.files.push({ name, kind, content, savedContent: null });
+  setActiveDeveloperFile(name);
+  setOutput(`${name} created. Save it before running Docker.`);
+}
+
+async function saveDeveloperFile(file) {
+  if (!project.token || !file) return false;
+  if (file.name === activeFileName) syncActiveFileFromEditor();
+  if (!fileIsDirty(file)) return true;
+  const result = await window.dockerManagerActions?.saveDeveloperProjectFile?.({
+    projectToken: project.token,
+    fileName: file.name,
+    content: file.content
+  });
+  if (!result) return false;
+  file.savedContent = file.content;
+  renderFileTabs();
+  updateActionState();
+  return true;
+}
+
+async function saveActiveDeveloperFile() {
+  const file = activeFile();
+  if (!(await saveDeveloperFile(file))) return false;
+  window.toastFrontendSuccess?.(`${file.name} saved.`, "Docker workspace", 2, "dm-developer-save");
+  return true;
+}
+
+async function saveDirtyDeveloperFiles() {
+  syncActiveFileFromEditor();
+  for (const file of project.files.filter(fileIsDirty)) {
+    if (!(await saveDeveloperFile(file))) return false;
+  }
+  return true;
+}
+
+async function exportActiveDeveloperFile() {
+  syncActiveFileFromEditor();
+  const file = activeFile();
+  if (!file) return;
+  const result = await window.dockerManagerActions?.exportDeveloperFile?.({ fileName: file.name, content: file.content });
+  if (!result || result.canceled) return;
+  window.toastFrontendSuccess?.(`${result.name || file.name} exported.`, "Docker workspace", 2, "dm-developer-export");
+}
+
+function actionFile(action) {
+  if (["up", "stop", "down", "logs"].includes(action)) return composeFile();
+  const file = activeFile();
+  return file?.kind === "compose" || file?.kind === "dockerfile" ? file : null;
+}
+
+async function inspectDeveloperProject(action) {
+  const file = actionFile(action);
+  if (!file || !(await saveDirtyDeveloperFiles())) return;
+  setOutput(action === "logs" ? "Loading logs..." : `Validating ${file.name}...`);
+  const result = await window.dockerManagerActions?.inspectDeveloperProject?.({
+    projectToken: project.token,
+    fileName: file.name,
+    action
+  });
+  if (!result) {
+    setOutput(`${action === "logs" ? "Log request" : "Validation"} failed.`, "error");
+    return;
+  }
+  setOutput(result.output);
+}
+
+function confirmDeveloperAction(action) {
+  if (action === "build") {
+    return window.confirm(`Build ${project.name}? Dockerfiles can run commands and send this project folder to the selected Docker runtime.`);
+  }
+  if (action === "up") {
+    return window.confirm(`Start ${project.name}? Compose can access host paths and use the permissions declared in the project.`);
+  }
+  if (action === "down") {
+    return window.confirm(`Take ${project.name} down? Project containers and networks will be removed. Storage volumes are kept.`);
+  }
+  return true;
+}
+
+async function runDeveloperProject(action) {
+  const file = actionFile(action);
+  if (!file || !confirmDeveloperAction(action) || !(await saveDirtyDeveloperFiles())) return;
+  const result = await window.dockerManagerActions?.runDeveloperProject?.({
+    projectToken: project.token,
+    fileName: file.name,
+    action,
+    imageTag: byId("developerImageTagInput")?.value || ""
+  });
+  if (!result?.opId) {
+    setOutput("Docker project action was not started.", "error");
+    return;
+  }
+  setOutput(`${action === "build" ? "Build" : action === "up" ? "Start" : action === "stop" ? "Stop" : "Take down"} requested.`);
+}
+
+function renderDeveloperProgress(state) {
+  const progress = state?.progress;
+  if (progress?.type !== "developer_project" || !progress?.opId) return;
+  const key = `${progress.opId}:${progress.status}:${progress.developerOutput || progress.detail || progress.message || ""}`;
+  if (key === lastDeveloperProgressKey) return;
+  lastDeveloperProgressKey = key;
+  const tone = progress.status === "failed" ? "error" : "";
+  setOutput(progress.developerOutput || progress.detail || progress.message || "Working...", tone);
 }
 
 async function runCustomImage() {
-  const form = readForm();
+  const form = readQuickRunForm();
   const ok = await window.dockerManagerActions?.runCustomImage?.({
     image: form.image,
     tag: form.tag,
@@ -547,6 +819,7 @@ function render(state) {
   }
   renderDiagnostics(lastState);
   renderVolumes(lastState);
+  renderDeveloperProgress(lastState);
   updateActionState();
 }
 
@@ -563,44 +836,48 @@ function bind() {
   imageInput?.addEventListener("input", () => {
     syncEmbeddedTagFromImage();
     syncDefaultName();
-    updateComposePreview();
   });
   tagInput?.addEventListener("input", () => {
     tagInput.dataset.dirty = "1";
     const pair = readImagePair();
     if (tagInput.value.trim() && tagInput.value !== pair.tag) tagInput.value = pair.tag;
     syncDefaultName();
-    updateComposePreview();
   });
   nameInput?.addEventListener("input", () => {
     nameInput.dataset.dirty = "1";
-    updateComposePreview();
   });
 
-  [
-    byId("advancedPortsInput"),
-    byId("advancedEnvInput"),
-    byId("advancedMountsInput"),
-    byId("advancedPullToggle")
-  ].forEach((input) => {
-    input?.addEventListener("input", updateComposePreview);
-    input?.addEventListener("change", updateComposePreview);
+  byId("newComposeBtn")?.addEventListener("click", () => {
+    document.querySelector(".dm-developer-new-file")?.removeAttribute("open");
+    void createDeveloperFile("compose");
   });
-
-  byId("copyComposeBtn")?.addEventListener("click", copyCompose);
+  byId("newDockerfileBtn")?.addEventListener("click", () => {
+    document.querySelector(".dm-developer-new-file")?.removeAttribute("open");
+    void createDeveloperFile("dockerfile");
+  });
+  byId("openDeveloperProjectBtn")?.addEventListener("click", () => { void openDeveloperProject("folder"); });
+  byId("openDeveloperFileBtn")?.addEventListener("click", () => { void openDeveloperProject("file"); });
+  byId("saveDeveloperFileBtn")?.addEventListener("click", () => { void saveActiveDeveloperFile(); });
+  byId("exportDeveloperFileBtn")?.addEventListener("click", () => { void exportActiveDeveloperFile(); });
+  byId("validateDeveloperProjectBtn")?.addEventListener("click", () => { void inspectDeveloperProject("validate"); });
+  byId("buildDeveloperProjectBtn")?.addEventListener("click", () => { void runDeveloperProject("build"); });
+  byId("upDeveloperProjectBtn")?.addEventListener("click", () => { void runDeveloperProject("up"); });
+  byId("stopDeveloperProjectBtn")?.addEventListener("click", () => { void runDeveloperProject("stop"); });
+  byId("logsDeveloperProjectBtn")?.addEventListener("click", () => { void inspectDeveloperProject("logs"); });
+  byId("downDeveloperProjectBtn")?.addEventListener("click", () => { void runDeveloperProject("down"); });
   byId("runCustomImageBtn")?.addEventListener("click", runCustomImage);
   byId("advancedPruneVolumesBtn")?.addEventListener("click", async () => {
     if (!window.confirm("Clear unused Docker volumes?")) return;
     await window.dockerManagerActions?.pruneVolumes?.();
   });
-
-  const composePreview = byId("composePreview");
-  composePreview?.addEventListener("input", () => {
-    composeManual = composePreview.value !== lastGeneratedCompose;
+  window.addEventListener("resize", () => developerEditor?.resize?.());
+  window.addEventListener("beforeunload", (event) => {
+    if (!hasDirtyFiles()) return;
+    event.preventDefault();
+    event.returnValue = "";
   });
-
-  document.querySelectorAll(".dm-advanced-page textarea").forEach(bindWheelPassthrough);
-  updateComposePreview();
+  initDeveloperEditor();
+  renderProject();
 }
 
 window.addEventListener("dm:state", (event) => render(event.detail || {}));

@@ -1661,6 +1661,82 @@ async function runCustomImage(options = {}) {
   return !isErrorResponse(res);
 }
 
+async function openDeveloperProject(mode = "folder") {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.openDeveloperProject !== "function") return null;
+  try {
+    const result = await api.openDeveloperProject(mode);
+    if (isErrorResponse(result)) {
+      setBanner("error", result.message);
+      return null;
+    }
+    return result || null;
+  } catch (error) {
+    setBanner("error", error?.message || "Unable to open Docker project");
+    return null;
+  }
+}
+
+async function saveDeveloperProjectFile(options = {}) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.saveDeveloperProjectFile !== "function") return null;
+  try {
+    const result = await api.saveDeveloperProjectFile(options);
+    if (isErrorResponse(result)) {
+      setBanner("error", result.message);
+      return null;
+    }
+    return result || null;
+  } catch (error) {
+    setBanner("error", error?.message || "Unable to save Docker project file");
+    return null;
+  }
+}
+
+async function exportDeveloperFile(options = {}) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.exportDeveloperFile !== "function") return null;
+  try {
+    const result = await api.exportDeveloperFile(options);
+    if (isErrorResponse(result)) {
+      setBanner("error", result.message);
+      return null;
+    }
+    return result || null;
+  } catch (error) {
+    setBanner("error", error?.message || "Unable to export Docker project file");
+    return null;
+  }
+}
+
+async function inspectDeveloperProject(options = {}) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.inspectDeveloperProject !== "function") return null;
+  try {
+    const result = await api.inspectDeveloperProject(options);
+    if (isErrorResponse(result)) {
+      setBanner("error", result.message);
+      return null;
+    }
+    return result || null;
+  } catch (error) {
+    setBanner("error", error?.message || "Docker project check failed");
+    return null;
+  }
+}
+
+async function runDeveloperProject(options = {}) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.runDeveloperProject !== "function") return null;
+  const action = typeof options?.action === "string" ? options.action : "";
+  const label = action === "build" ? "Build" : action === "up" ? "Start" : action === "stop" ? "Stop" : "Take down";
+  return runDockerOperation(
+    `${label} Docker project`,
+    () => api.runDeveloperProject(options),
+    `${label} requested.`
+  );
+}
+
 async function openCliTerminal(target = "") {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.openCliTerminal !== "function") return;
@@ -1919,6 +1995,11 @@ window.dockerManagerActions = {
   openLocalInstanceStorageFolder,
   activateTag,
   runCustomImage,
+  openDeveloperProject,
+  saveDeveloperProjectFile,
+  exportDeveloperFile,
+  inspectDeveloperProject,
+  runDeveloperProject,
   setStoragePreferences,
   openCliTerminal,
   installCli,

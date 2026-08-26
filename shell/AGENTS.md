@@ -140,7 +140,11 @@ This scope owns:
   Preserve explicit saved Instance choices ahead of tab/runtime snapshots;
   Settings owns local defaults and Create/Add Instance is the single initial
   opt-in point. The retained onboarding field is compatibility state only and
-  must not gate gateway startup.
+  must not gate gateway startup. Legacy loopback DevTools WebSocket browser
+  selections from older connectors normalize to automatic detection so a
+  restarted browser's port/GUID cannot remain pinned. Browser preparation's
+  outer Launcher timeout must outlive the connector's bounded CDP attach so its
+  structured result reaches the renderer.
 - Launcher gateway supervision must use the installed CLI contract and JSONL
   stdin/stdout; it must not open an inbound port or expose a generic process
   surface through preload. Pass credentials only as ephemeral environment

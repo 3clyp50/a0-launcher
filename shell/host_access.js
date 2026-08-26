@@ -36,7 +36,19 @@ function normalizeHostFolder(value) {
 }
 
 function normalizeBrowserSelection(value) {
-  return String(value || '').trim().replace(/[\r\n\0]/g, '').slice(0, 512);
+  const selection = String(value || '').trim().replace(/[\r\n\0]/g, '').slice(0, 512);
+  try {
+    const endpoint = new URL(selection);
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname.toLowerCase());
+    if (
+      ['ws:', 'wss:'].includes(endpoint.protocol)
+      && loopback
+      && /^\/devtools\/browser\/[^/]+$/i.test(endpoint.pathname)
+    ) return '';
+  } catch {
+    // Stable browser IDs are not URLs.
+  }
+  return selection;
 }
 
 function normalizeInstallationId(value) {

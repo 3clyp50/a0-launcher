@@ -75,6 +75,7 @@ const {
 
 const OPEN_UI_READY_TIMEOUT_MS = 20_000;
 const OPEN_UI_READY_INTERVAL_MS = 450;
+const HOST_BROWSER_PREPARE_TIMEOUT_MS = 75_000;
 const COMPUTER_USE_RESUME_ARG = '--a0-resume-computer-use=';
 const MAC_ACCESSIBILITY_SETUP_TIMEOUT_MS = 115000;
 
@@ -4532,7 +4533,7 @@ ipcMain.handle('docker-manager:hostGatewayCommand', async (_event, body) => {
       : await hostGatewaySupervisor.request(
         hostGatewayLeaseKey(tab),
         { action },
-        { timeoutMs: action === 'rearm_computer_use' ? 150000 : 60000 }
+        { timeoutMs: action === 'rearm_computer_use' ? 150000 : HOST_BROWSER_PREPARE_TIMEOUT_MS }
       );
     return { accepted: true, result };
   } catch (error) {

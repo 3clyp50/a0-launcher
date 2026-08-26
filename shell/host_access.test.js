@@ -6,6 +6,7 @@ const { test } = require('node:test');
 const {
   hostAccessInstanceKey,
   hostAccessMatchesGateway,
+  normalizeBrowserSelection,
   normalizeHostFolder,
   normalizeHostAccessScopes,
   normalizeHostAccessSettings,
@@ -69,6 +70,18 @@ test('legacy Files preferences retain their former read/write meaning', () => {
 test('host folders reject control-character separators', () => {
   assert.equal(normalizeHostFolder('/home/user\0/escape'), '');
   assert.equal(normalizeHostFolder('/home/user\n/escape'), '');
+});
+
+test('legacy local CDP selections migrate to automatic detection', () => {
+  assert.equal(
+    normalizeBrowserSelection('ws://localhost:9222/devtools/browser/old-guid'),
+    ''
+  );
+  assert.equal(normalizeBrowserSelection('chrome-cdp'), 'chrome-cdp');
+  assert.equal(
+    normalizeBrowserSelection('ws://browser.example:9222/devtools/browser/custom'),
+    'ws://browser.example:9222/devtools/browser/custom'
+  );
 });
 
 test('instance settings and bind-mounted workspace resolve deterministically', () => {

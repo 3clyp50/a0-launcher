@@ -205,6 +205,11 @@ This scope owns:
   then loads `a0app://content/index.html`. Keep the JavaScript hold durations
   aligned with the CSS animations, wait for the splash document itself instead
   of guessing its readiness, and do not add secondary decorative waits.
+  Actionable update text and controls must remain legible over arbitrary desktop
+  backgrounds by using solid, high-contrast Agent Zero palette surfaces. Use the
+  bundled Rubik face with a swap fallback so typography never gates startup.
+  The initial update-available view uses only Update and Continue; reserve the
+  status row for progress and failure feedback.
 - Release bundles may contain legacy string file entries or structured
   `{ encoding, data }` entries. The loader must preserve `utf8` text and decode
   `base64` binary assets while rejecting unsafe paths.

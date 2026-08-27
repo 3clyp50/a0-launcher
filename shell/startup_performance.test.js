@@ -21,3 +21,9 @@ test('startup keeps splash timing bounded and remote freshness off the critical 
   assert.match(rendererSource, /!Number\.isFinite\(initialSyncMs\) \|\| initialSyncMs < refreshStartedAt/);
   assert.match(rendererSource, /dockerManagerAPI\?\.refresh\?\.\(\{ forceRefresh: true \}\)/);
 });
+
+test('available launcher update shows actions without redundant status copy', () => {
+  assert.match(loadingSource, /statusEl\.hidden = state === 'update-available'/);
+  assert.match(loadingSource, /body\.requires-action \.status:not\(\[hidden\]\)/);
+  assert.equal(loadingSource.match(/statusEl\.hidden = false/g)?.length, 2);
+});

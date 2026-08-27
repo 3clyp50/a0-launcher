@@ -6,6 +6,13 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:">
     <title>Agent Zero Launcher</title>
     <style>
+        @font-face {
+            font-family: "Rubik";
+            font-style: normal;
+            font-weight: 500;
+            font-display: swap;
+            src: url("../app/a0ui/vendor/google/rubik/rubik-500.ttf") format("truetype");
+        }
         * {
             margin: 0;
             padding: 0;
@@ -20,7 +27,7 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: transparent;
-            color: #f4f6fb;
+            color: #fff;
             width: 100%;
             height: 100%;
             overflow: hidden;
@@ -30,6 +37,10 @@
             justify-content: center;
             -webkit-app-region: drag;
             user-select: none;
+        }
+        body.requires-action {
+            font-family: "Rubik", Arial, Helvetica, sans-serif;
+            font-weight: 500;
         }
         .container {
             text-align: center;
@@ -72,27 +83,30 @@
             border: 0;
             border-radius: 7px;
             padding: 0 16px;
-            color: #08111f;
-            background: #8fd3ff;
+            color: #fff;
+            background: #2b5ab9;
+            font-family: inherit;
             font-size: 13px;
-            font-weight: 700;
+            font-weight: 500;
             cursor: pointer;
         }
         .update-button.secondary {
-            color: #dbeafe;
-            background: rgba(255,255,255,0.12);
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16);
+            color: #fff;
+            background: #1a1a1a;
+            box-shadow: inset 0 0 0 1px #444444a8;
         }
         .update-button:disabled {
             cursor: default;
-            opacity: 0.65;
+            filter: saturate(0.45) brightness(0.82);
         }
         .status {
             font-size: 14px;
-            color: rgba(255,255,255,0.72);
+            color: #fff;
+            background: #131313;
+            border-radius: 7px;
             display: none;
             margin: 12px 0 0;
-            text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+            padding: 6px 10px;
         }
         .spinner {
             display: none;
@@ -109,7 +123,7 @@
         .error.visible {
             display: block;
         }
-        body.requires-action .status {
+        body.requires-action .status:not([hidden]) {
             display: block;
         }
     </style>
@@ -166,6 +180,7 @@
             } else if (version) {
                 statusEl.textContent = `Update ${version} is available.`;
             }
+            statusEl.hidden = state === 'update-available';
 
             continueBtn.disabled = !info.readyToContinue || state === 'installing';
             updatePanel.hidden = false;
@@ -194,6 +209,7 @@
         updateBtn.addEventListener('click', async () => {
             updateBtn.disabled = true;
             const state = latestLauncherUpdateState.state;
+            statusEl.hidden = false;
             statusEl.textContent = state === 'downloaded' ? 'Restarting to install update...' : 'Preparing update...';
             const result = await window.electronAPI?.beginLauncherUpdate?.();
             if (!result?.ok) {
@@ -211,6 +227,7 @@
 
         continueBtn.addEventListener('click', async () => {
             continueBtn.disabled = true;
+            statusEl.hidden = false;
             statusEl.textContent = 'Opening launcher...';
             const result = await window.electronAPI?.continueAfterLauncherUpdate?.();
             if (!result?.ok) {

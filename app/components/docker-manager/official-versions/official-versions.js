@@ -143,14 +143,6 @@ function latestReleaseEntry(entries) {
   return releases.find((entry) => Array.isArray(entry.badges) && entry.badges.includes("latest")) || releases[0] || null;
 }
 
-function updateActionLabel(entry, entries = []) {
-  const targetTag = entry?.publishedReleaseTag ||
-    (isLatestEntry(entry) ? latestReleaseEntry(entries)?.tag : "") ||
-    (isReleaseTag(entry) ? entry.tag : "");
-  const target = releaseMatchBadgeLabel(targetTag);
-  return target ? `Update to ${target}` : "Update";
-}
-
 function displayDateForEntry(entry, entries = []) {
   if (!entry) return null;
   if (isPinnedChannelEntry(entry)) {
@@ -277,27 +269,15 @@ function actionForEntry(entry, state) {
   return actionsForEntry(entry, state)[0] || null;
 }
 
-function actionsForEntry(entry, state, entries = []) {
+function actionsForEntry(entry, state) {
   if (entry.availability === "installing") return [];
 
   if (entry.availability === "installed" || entry.availability === "update_available" || entry.differsFromPublished) {
-    const actions = [
-      {
-        label: "Run",
-        className: "button confirm",
-        handler: () => openRunInstanceDialog({ entry, state })
-      }
-    ];
-
-    if (entry.availability === "update_available" || entry.differsFromPublished) {
-      actions.push({
-        label: updateActionLabel(entry, entries),
-        className: "button",
-        handler: () => window.dockerManagerActions?.updateInstall?.(entry.tag)
-      });
-    }
-
-    return actions;
+    return [{
+      label: "Run",
+      className: "button confirm",
+      handler: () => openRunInstanceDialog({ entry, state })
+    }];
   }
 
   if (entry.installability === "not_yet_available") {
@@ -426,7 +406,7 @@ function renderEntryCard(entry, state, entries) {
   const actions = document.createElement("div");
   actions.className = "dm-card-actions";
 
-  const cardActions = actionsForEntry(entry, state, entries) || [];
+  const cardActions = actionsForEntry(entry, state) || [];
   for (const action of cardActions) {
     const actionBtn = document.createElement("button");
     actionBtn.className = action.className;
@@ -565,7 +545,6 @@ export {
   metaPartsForEntry,
   normalizeVersionEntries,
   releaseMatchBadgeLabel,
-  updateActionLabel,
   statusForEntry
 };
 

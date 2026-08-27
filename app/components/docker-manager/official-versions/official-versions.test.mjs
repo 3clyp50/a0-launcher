@@ -24,7 +24,6 @@ const {
   normalizeVersionEntries,
   metaPartsForEntry,
   releaseMatchBadgeLabel,
-  updateActionLabel,
   statusForEntry
 } = await import('./official-versions.js');
 
@@ -53,33 +52,14 @@ test('installed active entries still expose Run for additional instances', () =>
   assert.equal(action?.disabled, undefined);
 });
 
-test('update-ready version entries keep Run and expose Update separately', () => {
+test('update-ready version entries expose only Run', () => {
   const actions = actionsForEntry({
     tag: 'ready',
     availability: 'update_available'
   }, {});
 
-  assert.deepEqual(actions.map((action) => action.label), ['Run', 'Update']);
+  assert.deepEqual(actions.map((action) => action.label), ['Run']);
   assert.equal(actions[0].className, 'button confirm');
-  assert.equal(actions[1].className, 'button');
-});
-
-test('update action labels concrete upstream target when known', () => {
-  assert.equal(updateActionLabel({
-    tag: 'ready',
-    availability: 'update_available',
-    publishedReleaseTag: 'v2.1'
-  }), 'Update to 2.1');
-
-  assert.equal(updateActionLabel({
-    tag: 'latest',
-    availability: 'update_available'
-  }, [{ tag: 'v2.1', badges: ['latest'] }]), 'Update to 2.1');
-
-  assert.equal(updateActionLabel({
-    tag: 'ready',
-    availability: 'update_available'
-  }), 'Update');
 });
 
 test('update-ready version entries do not render a duplicate status chip', () => {
@@ -95,21 +75,6 @@ test('update-ready version entries do not render a duplicate status chip', () =>
     className: 'status-installed',
     label: 'Installed'
   });
-});
-
-test('update action uses background install update flow', () => {
-  let updatedTag = '';
-  globalThis.window.dockerManagerActions = {
-    updateInstall: (tag) => { updatedTag = tag; }
-  };
-
-  const actions = actionsForEntry({
-    tag: 'latest',
-    availability: 'update_available'
-  }, {});
-  actions.find((action) => action.label === 'Update')?.handler();
-
-  assert.equal(updatedTag, 'latest');
 });
 
 test('toast progress does not change the Version card render key', () => {

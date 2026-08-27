@@ -883,10 +883,6 @@ async function installOrSync(tag, options = {}) {
   );
 }
 
-async function updateInstall(tag) {
-  return installOrSync(tag, { operationType: "update", presentation: "toast" });
-}
-
 function runAfterPullMatches(progress = null) {
   const pending = pendingRunAfterPull;
   if (!pending) return false;
@@ -1971,7 +1967,6 @@ window.dockerManagerActions = {
   provisionRuntime,
   selectRuntimeEndpoint,
   installOrSync,
-  updateInstall,
   runAfterPull,
   backgroundOperation,
   removeInstalledImage,

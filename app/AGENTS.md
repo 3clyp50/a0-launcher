@@ -120,6 +120,8 @@ This scope owns:
   renderer should present it as image cleanup and let Docker Manager report
   Docker's in-use refusal rather than trying to infer container/image bindings
   in component code.
+- Versions offers image install, run, and removal actions only. Updating belongs
+  to the specific Instance card, where it opens Agent Zero's self-update flow.
 - The compact header shows the Agent Zero wordmark without visible launcher
   version text. Shell app/content metadata may remain in renderer state for
   diagnostics and update decisions, but it should not reintroduce version or

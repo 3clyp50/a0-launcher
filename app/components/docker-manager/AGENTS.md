@@ -37,7 +37,7 @@ This scope owns:
   links.
 - `official-versions/`: Version cards, activation dialog, saved
   Instance defaults, port/env overrides, data-loss acknowledgement, and
-  update/switch actions.
+  run/switch actions.
 - `local-testing/`: local containers, per-instance action menus, rename,
   Colour/Icon selection, launcher-saved credential controls for local and saved
   remote Instances, clone/log inspection controls, remote instance CRUD, and
@@ -112,8 +112,7 @@ This scope owns:
   failure in the blocking modal until Docker Desktop is verified.
 - Post-runtime image installs, activation, rollback, start, stop, and delete
   progress should use the centered operation modal rather than a top-page
-  status strip. Updating an already-installed Version from Versions should keep
-  progress in a background toast so the existing install can still be used.
+  status strip.
   Non-onboarding image installs may offer `Download in background`, which moves
   that operation into the same progress toast without stopping the download.
 - Local instance card `Start`, `Stop`, `Restart`, and `Delete` are the exception:
@@ -164,11 +163,10 @@ This scope owns:
   and avoid inset divider lines inside the colored artwork area.
 - Running an installed tag from Versions creates another managed local instance
   and must not stop existing instances or require a data-loss acknowledgement.
-  Stale installed tags should keep `Run` visible and expose `Update` as a
-  separate action, naming the concrete upstream release when Docker Manager
-  provides one. After the run operation reports completed with the UI-ready
-  marker, the renderer should switch to the Instances tab so the new managed
-  Instance is visible.
+  Stale installed tags should keep `Run` visible; updating belongs on the
+  specific Instance card. After the run operation reports completed with the
+  UI-ready marker, the renderer should switch to the Instances tab so the new
+  managed Instance is visible.
   Removing an installed tag must go through Docker Manager image removal and
   must be non-forced so Docker refuses images still used by an Instance.
   Destructive switch, update, and retained-instance activation flows must keep

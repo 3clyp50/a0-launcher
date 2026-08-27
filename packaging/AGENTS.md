@@ -43,9 +43,9 @@ npm install --prefix packaging
   silently skips, leaving Windows installs without the launcher executable and
   Electron runtime DLLs.
 - Use `A0_LAUNCHER_APP_VERSION` and `A0_LAUNCHER_RELEASE_TAG` for CI-provided
-  release versions. Two-segment tags such as `v1.5` are the public release
-  shape; build them as semver `1.5.0` where tooling requires it, but stage
-  public assets with release version `1.5`.
+  release versions. Two-segment tags such as `v1.6` are the public release
+  shape; build them as semver `1.6.0` where tooling requires it, but stage
+  public assets with release version `1.6`.
 - Canonical public/updater asset names are:
 
 ```text

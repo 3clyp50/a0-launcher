@@ -40,6 +40,8 @@ This scope owns:
   canonical local tags (`local`, `development`, `main`).
 - Activation can target installed local builds, but still must reject unsafe tag
   strings.
+- Once an image inventory is scoped to its repository, activation must identify
+  the local image by tag, not Docker's presentation-specific image reference.
 - Developer custom-image runs may target safe arbitrary Docker image
   repositories and tags. Validate image names, tags, environment variables,
   port mappings, and mounts before Dockerode sees them; label created containers

@@ -7,6 +7,7 @@ const {
   developerContainerName,
   defaultManagedInstanceName,
   activationImageSpec,
+  localImageForTagFromList,
   normalizeActivationOptions,
   normalizeCustomImageOptions
 } = dockerManager._test;
@@ -62,6 +63,15 @@ test('activation retains the exact selected local image reference', () => {
     imageRef: 'my-agent-zero:latest'
   });
   assert.equal(activationImageSpec('2.0', 'agent0ai/agent-zero:2.0').imageRef, 'agent0ai/agent-zero:2.0');
+});
+
+test('activation finds a scoped local image by tag when Docker presents an alias', () => {
+  assert.deepEqual(
+    localImageForTagFromList([
+      { imageRef: 'docker.io/agent0ai/agent-zero:latest', tag: 'latest' }
+    ], 'latest'),
+    { imageRef: 'docker.io/agent0ai/agent-zero:latest', tag: 'latest' }
+  );
 });
 
 test('developer container name matches the requested Instance name', () => {

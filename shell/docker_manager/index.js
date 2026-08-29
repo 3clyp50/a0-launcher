@@ -1828,9 +1828,13 @@ async function localImageIdForTag(docker, imageRepo, tag) {
   }
 }
 
-function localImageIdForTagFromList(localImages, tag) {
+function localImageForTagFromList(localImages, tag) {
   const t = String(tag || '').trim();
-  const match = (Array.isArray(localImages) ? localImages : []).find((img) => img?.tag === t) || null;
+  return (Array.isArray(localImages) ? localImages : []).find((img) => img?.tag === t) || null;
+}
+
+function localImageIdForTagFromList(localImages, tag) {
+  const match = localImageForTagFromList(localImages, tag);
   return typeof match?.imageId === 'string' ? match.imageId.trim() : '';
 }
 
@@ -4921,7 +4925,7 @@ async function removeInstalledImage(tag) {
 
   const docker = await getManagedDocker(imageRepo);
   const localImages = await docker.listLocalImages(imageRepo);
-  const target = (localImages || []).find((img) => img?.tag === t) || null;
+  const target = localImageForTagFromList(localImages, t);
   if (!target?.imageRef) {
     throw makeDockerManagerError('NOT_INSTALLED', 'This version is not available locally.');
   }
@@ -5919,7 +5923,7 @@ async function activateRetainedInstance(containerId, dataLossAck) {
 }
 
 async function activateTag(tag, dataLossAck, options = {}) {
-  const { imageRepo, tag: t, imageRef } = activationImageSpec(tag, options?.imageRef);
+  const { imageRepo, tag: t } = activationImageSpec(tag, options?.imageRef);
   const ack = dataLossAck ? assertDataLossAck(dataLossAck) : 'proceed_without_backup';
   const activationOptions = normalizeActivationOptions(options, t);
   const shouldRememberCredentials =
@@ -5944,7 +5948,7 @@ async function activateTag(tag, dataLossAck, options = {}) {
       }
 
       const localImages = await docker.listLocalImages(imageRepo);
-      const hasTag = (localImages || []).some((img) => img?.imageRef === imageRef);
+      const hasTag = !!localImageForTagFromList(localImages, t);
       if (!hasTag) {
         const err = new Error('Version is not installed');
         err.code = 'NOT_INSTALLED';
@@ -6498,6 +6502,7 @@ module.exports = {
     activationImageSpec,
     normalizeCustomImageOptions,
     developerContainerName,
+    localImageForTagFromList,
     localImageIdForTag,
     removeReplacedLocalImage,
     releaseTagLabel,

@@ -42,6 +42,9 @@ npm install --prefix packaging
   produce NSIS app archives whose executable filters the install-time extractor
   silently skips, leaving Windows installs without the launcher executable and
   Electron runtime DLLs.
+- The NSIS uninstaller removes the Launcher-owned `%APPDATA%\\a0-launcher`
+  directory, including saved preferences, remote Instances, credentials, and
+  cached content.
 - Use `A0_LAUNCHER_APP_VERSION` and `A0_LAUNCHER_RELEASE_TAG` for CI-provided
   release versions. Two-segment tags such as `v1.6` are the public release
   shape; build them as semver `1.6.0` where tooling requires it, but stage

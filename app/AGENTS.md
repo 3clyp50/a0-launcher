@@ -57,8 +57,9 @@ This scope owns:
   runtime is not ready after initial state loads and no saved remote Instances
   exist, the renderer must show the startup runtime modal with a first-step
   affordance to add a remote Instance. Saved remote Instances must keep the
-  launcher usable without local Docker setup. Docker mechanics stay in the
-  shell.
+  launcher usable without local Docker setup. A state refresh must not recreate
+  the runtime modal above an open remote-Instance dialog. Docker mechanics stay
+  in the shell.
 - When first launch finds multiple distinct reachable local Docker daemons and
   no saved preference, show the existing compact runtime selector once before
   continuing. Multiple endpoint aliases for one daemon must remain one choice.

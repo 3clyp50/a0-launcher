@@ -106,4 +106,5 @@ a0_launcher_install_done_${A0LauncherInstallUniqueId}:
 
 !macro customUnInstall
   !insertmacro WriteA0LauncherInstallerLog "Installer is removing the previous app files from $INSTDIR."
+  RMDir /r "$APPDATA\${APP_PACKAGE_NAME}"
 !macroend

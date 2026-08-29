@@ -260,6 +260,22 @@ test('no Docker on Linux shows blocking setup action', () => {
   assert.equal(setupCount, 1);
 });
 
+test('remote Instance dialog suppresses a runtime-gate refresh', () => {
+  const document = installDom();
+  const remoteDialog = document.createElement('div');
+  remoteDialog.id = 'remoteInstanceDialog';
+  document.body.appendChild(remoteDialog);
+
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: false,
+    runtime: { platform: 'win32', mode: 'docker_desktop', state: 'engine_stopped' }
+  };
+
+  assert.equal(renderRuntimeGate(state, {}), false);
+  assert.equal(document.getElementById('runtimeSetupDialog'), null);
+});
+
 test('saved remote instances bypass local runtime setup', () => {
   const document = installDom();
   const state = {

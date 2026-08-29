@@ -742,6 +742,7 @@ function removeRuntimeGate() {
 }
 
 function renderRuntimeGate(state = {}, actions = {}) {
+  if (document.getElementById("remoteInstanceDialog")) return false;
   if (!shouldShowRuntimeGate(state)) {
     removeRuntimeGate();
     return false;

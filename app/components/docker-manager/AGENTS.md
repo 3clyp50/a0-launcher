@@ -66,7 +66,8 @@ This scope owns:
 - Runtime setup must offer `Add remote Instance` as a first-step path for users
   who already host Agent Zero on a VPS or URL. Saved remote Instances bypass the
   local runtime blocker so the launcher can be used without Docker installed or
-  an Agent Zero image pulled locally.
+  an Agent Zero image pulled locally. While its dialog is open, state refreshes
+  must not recreate the runtime gate above it.
 - If Docker is already reachable through the Docker Manager state, stale
   non-ready runtime assessments must not reopen the blocking runtime modal.
   Only completed runtime setup progress may keep the modal open to guide the

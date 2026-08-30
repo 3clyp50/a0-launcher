@@ -2940,19 +2940,24 @@ function getA0CliStatus() {
 }
 
 function findA0CliBinary({ requireGateway = false } = {}) {
-  const repoRoot = path.resolve(__dirname, '..');
+  const repoRoot = USING_LOCAL_CONTENT ? LOCAL_REPO_DIR : path.resolve(__dirname, '..');
   const siblingConnector = path.resolve(repoRoot, '..', 'a0-connector');
+  const siblingBinary = process.platform === 'win32'
+    ? path.join(siblingConnector, '.venv', 'Scripts', 'a0.exe')
+    : path.join(siblingConnector, '.venv', 'bin', 'a0');
+  const commandBinary = findA0CliCommandBinary();
+  const preferredCandidates = USING_LOCAL_CONTENT
+    ? [siblingBinary, commandBinary]
+    : [commandBinary, siblingBinary];
   const candidates = process.platform === 'win32'
     ? [
         process.env.A0_CLI_PATH,
-        findA0CliCommandBinary(),
-        path.join(siblingConnector, '.venv', 'Scripts', 'a0.exe'),
+        ...preferredCandidates,
         path.join(os.homedir(), '.local', 'bin', 'a0.exe')
       ]
     : [
         process.env.A0_CLI_PATH,
-        findA0CliCommandBinary(),
-        path.join(siblingConnector, '.venv', 'bin', 'a0'),
+        ...preferredCandidates,
         '/home/eclypso/a0/a0-connector/.venv/bin/a0',
         '/opt/homebrew/bin/a0',
         '/usr/local/bin/a0',

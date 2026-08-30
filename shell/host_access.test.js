@@ -34,6 +34,17 @@ test('gateway startup is not gated by legacy onboarding state', () => {
   assert.doesNotMatch(source, /!settings\.onboardingComplete/);
 });
 
+test('local content prefers the sibling development CLI without overriding A0_CLI_PATH', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  const resolver = source.slice(
+    source.indexOf('function findA0CliBinary'),
+    source.indexOf('function findCompatibleA0CliBinary')
+  );
+  assert.match(resolver, /const repoRoot = USING_LOCAL_CONTENT \? LOCAL_REPO_DIR : path\.resolve/);
+  assert.match(resolver, /const preferredCandidates = USING_LOCAL_CONTENT\s*\? \[siblingBinary, commandBinary\]\s*: \[commandBinary, siblingBinary\]/);
+  assert.match(resolver, /process\.env\.A0_CLI_PATH,\s*\.\.\.preferredCandidates/);
+});
+
 test('saved remote Instances stay server-side until explicitly configured', () => {
   const settings = normalizeHostAccessSettings({
     onboardingComplete: true,

@@ -179,6 +179,10 @@ This scope owns:
   first non-option app path in a default-app Electron launch. The default-app
   path matters for Windows RunOnce runtime setup resumes, where the original
   environment variables may be gone.
+- Local-content development prefers the adjacent `a0-connector` virtualenv over
+  the installed A0 CLI so coupled unreleased capabilities use the matching
+  gateway; explicit `A0_CLI_PATH` remains authoritative, while non-local runs
+  continue to prefer the installed CLI.
 - Non-local content comes from the configured GitHub Release `content.json`
   asset and is unpacked under Electron `userData`. Downloaded release content
   must be written to a staging directory first, then swapped into

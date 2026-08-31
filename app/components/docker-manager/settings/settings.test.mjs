@@ -6,12 +6,16 @@ function fakeElement(value = '') {
     value,
     dataset: {},
     disabled: false,
-    addEventListener() {}
+    children: [],
+    addEventListener() {},
+    appendChild(child) { this.children.push(child); },
+    replaceChildren() { this.children = []; }
   };
 }
 
 function fakeDocument(elements) {
   return {
+    createElement() { return fakeElement(); },
     getElementById(id) {
       return elements.get(id) || null;
     },
@@ -55,6 +59,10 @@ test('Settings save persists every sub-tab payload and a disabled Host access de
     ['settingsHostAccessDefaults', hostRoot],
     ['settingsHostAccessConfigured', hostConfigured],
     ['settingsHostAccessFolder', hostFolder],
+    ['a0TagEnabled', Object.assign(fakeElement(), { checked: true })],
+    ['a0TagInstance', fakeElement('local:abc123')],
+    ['a0TagProfile', fakeElement('developer')],
+    ['a0TagStatus', fakeElement()],
     ['saveSettingsBtn', fakeElement()]
   ]);
   for (const id of ['uiPortInput', 'workspaceStorageMode', 'workspaceHostRoot', 'settingsHostAccessConfigured']) {
@@ -86,6 +94,15 @@ test('Settings save persists every sub-tab payload and a disabled Host access de
           },
           browserSelection: 'chromium:default'
         }
+      },
+      a0Tag: {
+        config: {
+          enabled: true,
+          instanceKey: 'local:abc123',
+          defaultProfile: 'developer'
+        },
+        status: 'ready',
+        profiles: [{ key: 'developer', label: 'Developer' }]
       }
     },
     addEventListener() {},
@@ -96,7 +113,8 @@ test('Settings save persists every sub-tab payload and a disabled Host access de
           portPreferences: true,
           storagePreferences: true,
           hostAccess: true,
-          instanceDefaults: true
+          instanceDefaults: true,
+          a0Tag: true
         };
       }
     },
@@ -146,6 +164,12 @@ test('Settings save persists every sub-tab payload and a disabled Host access de
           },
           browserSelection: 'chromium:default'
         }
+      },
+      a0Tag: {
+        version: 1,
+        enabled: true,
+        instanceKey: 'local:abc123',
+        defaultProfile: 'developer'
       }
     },
     true

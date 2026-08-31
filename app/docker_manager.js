@@ -239,6 +239,7 @@ function snapshot() {
     storagePreferences: store.storagePreferences || null,
     instanceDefaults: normalizeInstanceDefaults(store.instanceDefaults),
     hostAccess: store.hostAccess || null,
+    a0Tag: store.a0Tag || null,
     cli: store.cli || { installed: false, installing: false, command: "" },
     retentionPolicy: store.retentionPolicy || null,
     instanceTabs: store.instanceTabs || { tabs: [], activeTabId: "" }
@@ -613,6 +614,7 @@ async function refresh(options = {}) {
       store.storagePreferences = state?.storagePreferences || null;
       store.instanceDefaults = state?.instanceDefaults || null;
       store.hostAccess = state?.hostAccess || null;
+      store.a0Tag = state?.a0Tag || null;
       store.cli = state?.cli || { installed: false, installing: false, command: "" };
       store.retentionPolicy = state?.retentionPolicy || null;
       if (!store.error) setBanner("", "");
@@ -627,6 +629,7 @@ async function refresh(options = {}) {
     if (!Array.isArray(state?.remoteInstances) && Array.isArray(inventory?.remoteInstances)) store.remoteInstances = inventory.remoteInstances;
     if (!Array.isArray(state?.backgroundOperations) && Array.isArray(inventory?.backgroundOperations)) store.backgroundOperations = inventory.backgroundOperations;
     if (!state?.hostAccess && inventory?.hostAccess) store.hostAccess = inventory.hostAccess;
+    if (!state?.a0Tag && inventory?.a0Tag) store.a0Tag = inventory.a0Tag;
     store.volumes = Array.isArray(inventory?.volumes) ? inventory.volumes : [];
   } catch (e) {
     store.error = e?.message || "Failed to load Docker inventory.";
@@ -1105,12 +1108,14 @@ async function saveSettings(settings = {}) {
     store.storagePreferences = result?.storagePreferences || store.storagePreferences;
     store.instanceDefaults = normalizeInstanceDefaults(result?.instanceDefaults || store.instanceDefaults);
     store.hostAccess = result?.hostAccess || store.hostAccess;
+    store.a0Tag = result?.a0Tag || store.a0Tag;
     emitState();
     return {
       portPreferences: result?.saved?.portPreferences === true,
       storagePreferences: result?.saved?.storagePreferences === true,
       instanceDefaults: result?.saved?.instanceDefaults === true,
-      hostAccess: result?.saved?.hostAccess === true
+      hostAccess: result?.saved?.hostAccess === true,
+      a0Tag: result?.saved?.a0Tag === true
     };
   } catch (error) {
     setBanner("error", error?.message || "Unable to save Settings");
@@ -1153,6 +1158,27 @@ async function setInstanceHostAccess(target = {}, config = {}) {
   } catch (e) {
     setBanner("error", e?.message || "Unable to save Host access settings");
     return false;
+  }
+}
+
+async function getA0TagProfiles(instanceKey) {
+  const api = window.dockerManagerAPI;
+  if (!api || typeof api.getA0TagProfiles !== "function") return null;
+  try {
+    const result = await api.getA0TagProfiles(instanceKey);
+    if (isErrorResponse(result)) {
+      setBanner("error", result.message);
+      return null;
+    }
+    store.a0Tag = {
+      ...(store.a0Tag || {}),
+      profiles: Array.isArray(result?.profiles) ? result.profiles : []
+    };
+    emitState();
+    return result;
+  } catch (error) {
+    setBanner("error", error?.message || "Unable to load Agent profiles");
+    return null;
   }
 }
 
@@ -2025,6 +2051,7 @@ window.dockerManagerActions = {
   chooseHostAccessFolder,
   retryHostGateway,
   hostGatewayCommand,
+  getA0TagProfiles,
   async setPortPreferences(prefs, options = {}) {
     const api = window.dockerManagerAPI;
     if (!api || typeof api.setPortPreferences !== "function") return false;
@@ -2076,6 +2103,7 @@ function initSubscriptions() {
         store.portPreferences = state?.portPreferences || null;
         store.instanceDefaults = state?.instanceDefaults || null;
         store.hostAccess = state?.hostAccess || null;
+        store.a0Tag = state?.a0Tag || null;
         store.cli = state?.cli || { installed: false, installing: false, command: "" };
         store.retentionPolicy = state?.retentionPolicy || null;
         emitState();

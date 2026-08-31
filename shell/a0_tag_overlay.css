@@ -1,0 +1,557 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  display: grid;
+  place-items: stretch;
+  color: var(--color-text);
+  font-family: "Rubik", Arial, Helvetica, sans-serif;
+}
+
+.a0-tag-card {
+  display: flex;
+  gap: 0.8rem;
+  margin: 8px;
+  padding: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-message-bg);
+  box-shadow: 0 12px 35px rgb(0 0 0 / 38%);
+}
+
+.a0-tag-mark {
+  display: grid;
+  flex: 0 0 2.45rem;
+  width: 2.45rem;
+  height: 2.45rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-highlight);
+  color: var(--color-message-bg);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+body[data-kind="error"] .a0-tag-mark,
+body[data-kind="warning"] .a0-tag-mark {
+  background: var(--color-accent);
+}
+
+.a0-tag-content {
+  min-width: 0;
+  flex: 1;
+}
+
+h1 {
+  margin: 0 0 0.28rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+p {
+  max-height: 8.2rem;
+  margin: 0;
+  overflow: auto;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.a0-tag-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.a0-tag-composer {
+  display: flex;
+  min-width: 0;
+  height: 154px;
+  margin: 8px;
+  padding: 0.65rem 0.75rem 0.5rem;
+  align-self: end;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-panel) 94%, transparent);
+  box-shadow: 0 18px 52px rgb(0 0 0 / 48%);
+}
+
+.a0-tag-composer-header {
+  display: flex;
+  min-width: 0;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.65rem;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.a0-tag-symbol {
+  flex: 0 0 1.8rem;
+  width: 1.8rem;
+  height: 1.8rem;
+  opacity: 0.9;
+  filter: brightness(1.45);
+}
+
+.a0-tag-composer-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.a0-tag-composer-title strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.a0-tag-profile,
+.a0-tag-close,
+.a0-tag-compose-box,
+.a0-tag-attachment-trigger,
+.a0-tag-attachment-menu,
+.a0-tag-microphone,
+.a0-tag-submit {
+  -webkit-app-region: no-drag;
+}
+
+.a0-tag-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.a0-tag-profile select {
+  max-width: 10rem;
+  height: 1.9rem;
+  padding: 0 1.8rem 0 0.62rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--color-message-bg);
+  color: var(--color-text-muted);
+  font: 500 0.76rem "Rubik", Arial, Helvetica, sans-serif;
+}
+
+.a0-tag-close {
+  flex: 0 0 1.9rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: 400 1.25rem/1 "Rubik", Arial, Helvetica, sans-serif;
+}
+
+.a0-tag-close:hover,
+.a0-tag-close:focus-visible {
+  border-color: var(--color-border);
+  background: var(--color-message-bg);
+  color: var(--color-text);
+}
+
+.a0-tag-compose-box {
+  display: flex;
+  min-height: 4.25rem;
+  align-items: center;
+  gap: 0.72rem;
+  padding: 0.42rem 0.52rem 0.42rem 0.72rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-panel) 72%, var(--color-background) 28%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 3.5%),
+    0 18px 46px rgb(0 0 0 / 18%);
+  transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.a0-tag-compose-box:focus-within {
+  border-color: color-mix(in srgb, var(--color-border) 88%, var(--color-text) 12%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 4.5%),
+    0 22px 54px rgb(0 0 0 / 22%);
+}
+
+.a0-tag-compose-box textarea {
+  min-width: 0;
+  min-height: 2.8rem;
+  flex: 1;
+  margin: 0;
+  padding: 0.68rem 0.1rem;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  caret-color: var(--color-text);
+  font: 400 1rem/1.45 "Rubik", Arial, Helvetica, sans-serif;
+  align-content: center;
+}
+
+.a0-tag-compose-box textarea::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.62;
+}
+
+.a0-tag-attachment-wrapper {
+  position: relative;
+  z-index: 3;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+.a0-tag-attachment-trigger {
+  display: flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text);
+  cursor: pointer;
+  opacity: 0.82;
+  transition: opacity 0.16s ease, background-color 0.16s ease;
+}
+
+.a0-tag-attachment-trigger:hover,
+.a0-tag-attachment-trigger:focus-visible {
+  background: color-mix(in srgb, var(--color-border) 36%, transparent);
+  opacity: 1;
+}
+
+.a0-tag-attachment-trigger:active {
+  opacity: 0.5;
+}
+
+.a0-tag-attachment-trigger svg {
+  width: 1.7rem;
+  height: 1.7rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.a0-tag-attachment-menu {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 0.25rem;
+  min-width: 11rem;
+  max-width: min(18rem, 92vw);
+  max-height: min(70vh, 20rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0.3rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-panel) 90%, black 10%);
+  box-shadow: 0 16px 38px rgb(0 0 0 / 30%);
+}
+
+.a0-tag-attachment-menu-items {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  font-family: var(--font-family-main, "Rubik", Arial, Helvetica, sans-serif);
+  font-size: 0.8125rem;
+}
+
+.a0-tag-attachment-menu-item {
+  display: flex;
+  width: 100%;
+  margin: 0;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-text);
+  cursor: pointer;
+  font-family: "Rubik", Arial, Helvetica, sans-serif;
+  opacity: 0.88;
+  text-align: left;
+  transition: background-color 0.12s ease, opacity 0.12s ease;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.a0-tag-attachment-menu-item:hover,
+.a0-tag-attachment-menu-item:focus-visible {
+  background: var(--color-background-hover);
+  opacity: 1;
+}
+
+.a0-tag-attachment-menu-item:active {
+  opacity: 0.72;
+}
+
+.a0-tag-attachment-menu-item svg {
+  flex-shrink: 0;
+  opacity: 0.88;
+}
+
+.a0-tag-attachment-menu-item .material-symbols-outlined {
+  flex-shrink: 0;
+  font-size: 18px;
+  opacity: 0.9;
+}
+
+.a0-tag-microphone,
+.a0-tag-submit {
+  display: flex;
+  flex: 0 0 3.15rem;
+  width: 3.15rem;
+  min-width: 3.15rem;
+  height: 3.15rem;
+  align-self: center;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.a0-tag-microphone {
+  background: transparent;
+  color: grey;
+}
+
+.a0-tag-microphone:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.a0-tag-microphone[data-active="true"] {
+  background: transparent;
+  color: red;
+}
+
+.a0-tag-microphone:hover svg {
+  transform: scale(1.08);
+}
+
+.a0-tag-microphone svg {
+  width: 1.35rem;
+  height: 1.5rem;
+  fill: currentColor;
+  transform-origin: center;
+  transition: color 0.2s ease, transform 0.12s ease-in-out;
+}
+
+.a0-tag-microphone:active svg {
+  transform: scale(0.92);
+}
+
+.a0-tag-submit {
+  border: 0;
+  background: #4248f1;
+  color: white;
+  transition: background-color 0.3s ease, transform 0.12s ease;
+}
+
+.a0-tag-submit:hover,
+.a0-tag-submit:focus-visible {
+  background: #353bc5;
+  filter: none;
+}
+
+.a0-tag-submit:active {
+  background: #2b309c;
+  transform: translateY(1px) scale(0.98);
+}
+
+.a0-tag-submit:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.a0-tag-submit svg {
+  width: 1.55rem;
+  height: 1.55rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.a0-tag-composer-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.a0-tag-footer-left {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.a0-tag-microphone-status,
+.a0-tag-attachment-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.2;
+  opacity: 0.82;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.a0-tag-microphone-status {
+  color: color-mix(in srgb, var(--color-warning-text) 82%, var(--color-text-muted));
+}
+
+.a0-tag-attachment-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.a0-tag-attachment-summary > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.a0-tag-attachment-summary button {
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: 400 0.95rem/1 "Rubik", Arial, Helvetica, sans-serif;
+}
+
+.a0-tag-key-hint {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  opacity: 0.72;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.a0-tag-composer[data-toast="true"] .a0-tag-key-hint {
+  visibility: hidden;
+}
+
+.a0-tag-composer[data-microphone-status="true"] .a0-tag-key-hint,
+.a0-tag-composer[data-microphone-status="true"] .a0-tag-attachment-summary {
+  display: none;
+}
+
+.a0-tag-toast {
+  position: fixed;
+  z-index: 2;
+  left: 50%;
+  bottom: 10px;
+  display: flex;
+  max-width: calc(100% - 32px);
+  padding: 0.55rem 0.7rem;
+  transform: translateX(-50%);
+  align-items: baseline;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
+  border-radius: 8px;
+  background: var(--color-message-bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 42%);
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.a0-tag-toast strong {
+  flex: 0 0 auto;
+  color: var(--color-text);
+  font-size: inherit;
+}
+
+@media (max-width: 430px) {
+  .a0-tag-composer-header {
+    gap: 0.4rem;
+  }
+
+  .a0-tag-profile {
+    gap: 0.3rem;
+  }
+
+  .a0-tag-profile select {
+    width: 6.5rem;
+  }
+
+  .a0-tag-compose-box {
+    gap: 0.42rem;
+    min-height: 4rem;
+    padding: 0.36rem 0.42rem 0.36rem 0.48rem;
+  }
+
+  .a0-tag-attachment-trigger {
+    width: 2.15rem;
+    height: 2.15rem;
+  }
+
+  .a0-tag-microphone,
+  .a0-tag-submit {
+    width: 2.75rem;
+    min-width: 2.75rem;
+    height: 2.75rem;
+    flex-basis: 2.75rem;
+  }
+}

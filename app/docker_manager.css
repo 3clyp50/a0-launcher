@@ -2768,6 +2768,22 @@ body {
   border-bottom: 1px solid var(--dm-line-soft);
 }
 
+.dm-a0-tag-shortcut {
+  width: fit-content;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--dm-line-soft);
+  border-radius: var(--dm-radius-sm);
+  background: var(--color-message-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+}
+
+.dm-a0-tag-status {
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
 .dm-settings-advanced {
   margin-top: 0.85rem;
 }

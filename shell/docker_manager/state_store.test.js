@@ -57,6 +57,12 @@ function settings(portPreferences, hostRoot) {
           computer_use: false
         }
       }
+    },
+    a0Tag: {
+      version: 1,
+      enabled: true,
+      instanceKey: 'local:abc123',
+      defaultProfile: 'developer'
     }
   };
 }
@@ -67,7 +73,8 @@ test('Settings write preserves the previous port pair when duplicate ports are r
     portPreferences: true,
     storagePreferences: true,
     instanceDefaults: true,
-    hostAccess: true
+    hostAccess: true,
+    a0Tag: true
   });
 
   const partial = await stateStore.writeSettings(settings({ ui: 6000, ssh: 6000 }, '/tmp/second'));
@@ -80,4 +87,33 @@ test('Settings write preserves the previous port pair when duplicate ports are r
   assert.equal(persisted.storagePreferences.hostRoot, '/tmp/second');
   assert.equal(persisted.instanceDefaults.models.Main.model, 'openai/gpt-5');
   assert.equal(persisted.hostAccess.onboardingComplete, true);
+  assert.deepEqual(persisted.a0Tag, {
+    version: 1,
+    enabled: true,
+    instanceKey: 'local:abc123',
+    defaultProfile: 'developer'
+  });
+});
+
+test('A0 Tag defaults off and an incomplete enabled section does not block other Settings', async () => {
+  assert.deepEqual(stateStore.normalizeA0TagSettings(null), stateStore.DEFAULT_A0_TAG_SETTINGS);
+  assert.deepEqual(stateStore.normalizeA0TagSettings({
+    enabled: true,
+    instanceKey: 'remote:remote-1',
+    defaultProfile: 'Graphic_Designer'
+  }), {
+    version: 1,
+    enabled: true,
+    instanceKey: 'remote:remote-1',
+    defaultProfile: 'Graphic_Designer'
+  });
+
+  await stateStore.writeSettings(settings({ ui: 7001, ssh: 55022 }, '/tmp/a0-tag-baseline'));
+  const incomplete = settings({ ui: 7000, ssh: 55022 }, '/tmp/third');
+  incomplete.a0Tag = { enabled: true, instanceKey: 'local:abc123', defaultProfile: '' };
+  const saved = await stateStore.writeSettings(incomplete);
+
+  assert.equal(saved.saved.a0Tag, false);
+  assert.equal(saved.storagePreferences.hostRoot, '/tmp/third');
+  assert.equal(saved.a0Tag.defaultProfile, 'developer');
 });

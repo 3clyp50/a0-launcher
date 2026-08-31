@@ -53,6 +53,12 @@ This scope owns:
   connect this computer while its Launcher tab or detached window is open.
   File read, file write, and Code execution remain preselected by default while
   browser and Computer Use are opt-in.
+- A0 Tag renderer state is limited to its normalized enabled/Instance/profile
+  settings plus bounded shortcut, status, message, profile labels, and running
+  flag. Settings may request live profiles only through the named Docker
+  Manager action. Invocation text, foreground context, screenshots, target
+  tokens, command-palette queries, model output, credentials, and child state
+  stay in the shell/gateway.
 - Runtime setup state is part of the canonical renderer snapshot. If the
   runtime is not ready after initial state loads and no saved remote Instances
   exist, the renderer must show the startup runtime modal with a first-step

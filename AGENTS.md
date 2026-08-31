@@ -65,6 +65,25 @@ Architecture contracts:
   Launcher-home selection and in-tab reload keep it alive. Disconnect suppresses
   that lease until the user reconnects from the Launcher Host access modal or
   closes it. Agent Zero pages expose no Host access menu or Launcher bridge.
+- A0 Tag is a default-off Launcher feature leased to one exact open Instance
+  surface and its existing outbound gateway. Settings owns its Instance and
+  default-profile selection; the fixed global shortcut captures an explicit
+  `@a0` or `@a0.<profile>` request when the focused app exposes a safe editable
+  range, and otherwise opens a shell-owned command palette for an explicit
+  computer-wide request. The app restored after the palette closes is the
+  natural starting context when the request refers to the current app; there is
+  no separate palette scope selector or permission mode. Each invocation creates
+  a new tagged A0 CLI chat. The Main model chooses exact field replacement or
+  ordinary Computer Use action, inheriting the gateway's existing scopes and
+  safeguards. The command palette microphone delegates to the exact leased
+  Instance tab's built-in Whisper STT store: Agent Zero retains microphone,
+  model, toast, and draft/send ownership, while Launcher receives only the
+  bounded final transcript and exposes the Instance's first-use model-loading
+  notice in its footer. Its native file/folder chooser keeps selected host
+  paths in the shell, uploads them through the already-authenticated gateway,
+  and passes only validated Agent Zero upload references to the tagged chat.
+  Do not add a daemon, passive text watcher, inbound protocol, duplicate speech
+  or upload backend, or duplicate permission matrix.
 - Attached Instance tabs can be reordered by dragging their labels. Releasing a
   dragged tab outside the tab strip detaches it through the same shell-owned
   reparenting path as the dedicated Detach button. F5 refreshes the active
@@ -203,7 +222,7 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
 Agent Zero runtime assumptions:
 
 - When discussing plugin/backend code, treat the Dockerized Agent Zero instance
-  at `localhost:32080` as the live runtime.
+  at `localhost:32081` as the live runtime.
 - If you change live runtime plugin/backend code, also copy those changes into
   the real A0 Core plugin repo:
 

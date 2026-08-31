@@ -164,6 +164,43 @@ test('gateway command failures retain structured errors and actionable status', 
   assert.equal(supervisor.statusFor('tab-1').code, 'COMPUTER_USE_SETUP_FAILED');
 });
 
+test('recoverable command failures can leave the connected gateway status intact', async () => {
+  const child = fakeChild();
+  const supervisor = new HostGatewaySupervisor({ spawn: () => child });
+  supervisor.start('tab-1', launch());
+  child.stdout.write(`${JSON.stringify({
+    type: 'status',
+    gateway: {
+      version: 1,
+      kind: 'launcher',
+      id: 'launcher-1',
+      host_label: 'My computer',
+      state: 'connected',
+      scopes: {},
+      features: [],
+      status: {}
+    }
+  })}\n`);
+  const pending = supervisor.request(
+    'tab-1',
+    { action: 'a0_tag_capture' },
+    { statusOnError: false }
+  );
+  const command = JSON.parse(child.input.trim());
+
+  child.stdout.write(`${JSON.stringify({
+    type: 'result',
+    request_id: command.request_id,
+    ok: false,
+    code: 'A0_TAG_NOT_FOUND',
+    error: 'No tag found.'
+  })}\n`);
+
+  await assert.rejects(pending, (error) => error.code === 'A0_TAG_NOT_FOUND');
+  assert.equal(supervisor.statusFor('tab-1').state, 'connected');
+  assert.equal(supervisor.statusFor('tab-1').code, '');
+});
+
 test('gateway commands reject on timeout and child exit', async () => {
   const first = fakeChild();
   const second = fakeChild();

@@ -21,7 +21,7 @@ This scope owns:
 - `state_store.js`: persisted launcher state under Electron `userData`,
   including preferences, remote instances, local instance display names, and
   local instance colour/icon overrides, plus Launcher Host access defaults and
-  per-Instance configuration.
+  per-Instance configuration, and the A0 Tag opt-in/Instance/profile choice.
 - `releases_client.js`: GitHub release discovery for Agent Zero backend
   versions.
 - `release_tags.js`: shared validation and ordering for Agent Zero release tags.
@@ -98,10 +98,16 @@ This scope owns:
   inspection rather than renderer guesses.
 - Persist user preferences and remote instances through `state_store.js`; do not
   invent parallel files.
-- The Settings page persists port, workspace storage, Instance defaults, and
-  Host access defaults through one combined state-store write and cached-state
-  publication. Duplicate ports keep the previous valid port pair while the
-  other Settings sections save and report their own success.
+- The Settings page persists port, workspace storage, Instance defaults, Host
+  access defaults, and A0 Tag through one combined state-store write and
+  cached-state publication. Duplicate ports keep the previous valid port pair
+  while the other Settings sections save and report their own success.
+- A0 Tag persists only `{ version: 1, enabled, instanceKey, defaultProfile }`.
+  Missing state defaults to disabled, malformed fields normalize empty, and an
+  incomplete enabled section preserves the previous valid A0 Tag value while
+  unrelated Settings sections save. Profiles are discovered live. Shortcut
+  registration, status, target/context/result data, and child PIDs are never
+  persisted.
 - Host access persistence lives in `state_store.js`: compatibility-only
   onboarding state, local defaults, optional default folder, per-Instance
   configured/master state, five permission scopes, browser selection, and the

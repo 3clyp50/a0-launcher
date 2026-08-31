@@ -25,6 +25,9 @@ This scope owns:
   configuration, scope dependencies, and stable Instance keys.
 - `shell/host_gateway.js`: supervised, newline-delimited JSON bridge to the
   installed `a0 gateway` child process.
+- `shell/a0_tag.js` and `shell/a0_tag_overlay.*`: A0 Tag lease/controller,
+  tagged headless child contract, GNOME Wayland shortcut fallback, and the
+  static shell-owned command/result surface.
 - `shell/a0_cli_install.js`: official A0 CLI installer command and release
   version policy used by Launcher CLI maintenance.
 - `shell/loading.html`: loading/error shell while content initializes.
@@ -166,6 +169,70 @@ This scope owns:
   send `file_read` for the separate read permission, and terminate children
   that do not publish valid status within the bounded startup window. The CLI
   reserves the older `files` argument for legacy read/write Launchers.
+- A0 Tag stays shell-owned and capability-gated on gateway feature
+  `a0_tag_v1`. The renderer may request a bounded profile list through one
+  named action, but never receives generic gateway commands, target tokens,
+  prompt context, credentials, or process handles. The selected Instance tab
+  or detached-window lease, Host access master, and Computer Use scope must be
+  live before shortcut registration and again before exact replacement.
+- A0 Tag uses `CommandOrControl+Shift+Enter`, permits one invocation, sends the
+  bounded prompt/context on stdin to a new capability-silent tagged chat, and
+  treats the Main model's validated replace/action marker as delivery metadata.
+  Replace mode may mutate only the helper's revalidated captured range and must
+  never press Enter. Action mode uses ordinary Agent Zero Computer Use and
+  reports its summary in the static sandboxed Copy/Dismiss overlay.
+- If capture fails only because the foreground app exposes no safe inline tag
+  range, the same invocation may open the static shell-owned command palette.
+  Keep it sandboxed and context-isolated, accept only a bounded query, exact
+  live profile key through the narrow local navigation intent, normalize every
+  accepted palette request to Computer scope, and close it before tagged
+  execution so the prior app can regain focus. That app is the natural starting
+  context when the request refers to the current app, not a confinement rule.
+  Protected fields, lease/permission/capability failures, and
+  apply/revalidation failures remain fail-closed errors. Palette requests have
+  no Launcher replacement target; only ordinary inherited Computer Use may
+  operate another application.
+- The palette's `+` menu may expose only Attach file and Attach folder through
+  Electron's native chooser. Exact selected paths stay in the main process and
+  may cross only the correlated `a0_tag_upload` gateway command; the sandboxed
+  renderer receives bounded basenames/counts, and tagged argv receives only
+  validated `/a0/usr/uploads/` references. Folder selection means its regular
+  files, matching the WebUI composer; do not add renderer file access, upload
+  credentials, a second HTTP client, or implicit workspace scanning.
+  Anchor the menu to its `+` trigger with the WebUI composer's four-pixel gap;
+  do not anchor it to the outer palette card.
+  On Linux Wayland, keep the transparent composer window at its expanded size
+  and switch Electron's native window shape between the closed card and the
+  open menu canvas; compositor-owned positioning makes resize/reposition move
+  the visible card. Other platforms may retain the bottom-anchored resize path.
+- The palette microphone must reuse the exact leased Instance page's bundled
+  `_whisper_stt` store through the existing narrow local navigation surface.
+  Keep raw microphone audio, device selection, silence detection, model loading,
+  transcription requests, and Agent Zero toast calls inside that authenticated
+  Instance web contents. Launcher may receive only a bounded final transcript,
+  cancellation/error state, and the plugin's configured draft/send choice.
+  Read the same Instance's status before recording and surface a bounded footer
+  notice when Whisper or its selected model must be prepared, downloaded, or
+  loaded; backend errors still use the mirrored palette toast.
+  Closing, submitting, lease loss, or pressing the microphone again must stop
+  the live plugin microphone session. Do not add an overlay preload, renderer
+  credentials, raw-audio IPC, or a second speech service.
+- Prefer Electron `globalShortcut`. On GNOME Wayland only, if the desktop lacks
+  the GlobalShortcuts portal, one reversible native custom media-key binding
+  may signal the current Launcher process. It must check conflicts, preserve
+  foreign bindings, exist only while the exact lease is ready, and remove only
+  its own path on lease loss/shutdown. The fallback command must match both the
+  current PID and its Linux process start time before signaling, so stale PID
+  reuse cannot target an unrelated process. Never replace it with a keylogger
+  or clipboard/accessibility watcher. Do not create a progress BrowserWindow
+  on Linux Wayland because it can steal the origin field's active state; use a
+  non-focusing native notification for working/busy feedback there. The
+  explicitly requested, focusable command palette is the only working-phase
+  window exception; it must be closed before model or Computer Use work starts.
+- Generic gateway command failures continue to publish actionable Host access
+  status by default. A caller may opt out only for a correlated recoverable
+  operation such as an invalid A0 Tag field; the structured request must still
+  reject while the underlying connected gateway status stays usable.
 - Embedded and detached Launcher-owned Agent Zero web contents must append
   `A0-Launcher/<version>` to the user agent. This tag identifies the shell-owned
   browsing surface; it does not grant authentication or gateway authority, and
@@ -274,7 +341,7 @@ This scope owns:
   remote caches while rebuilding live local Docker state. Startup follows that
   first usable snapshot with a non-blocking forced remote refresh when its
   catalog predates the launch. Explicit Refresh remains forced.
-- The Settings page may submit its four owned preference sections through one
+- The Settings page may submit its five owned preference sections through one
   named IPC intent. Validate and sanitize every section, persist one combined
   state update, and restart Host access leases through the existing shell path.
 - Sanitized Docker Manager state may expose bounded health-derived runtime

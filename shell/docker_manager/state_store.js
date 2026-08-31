@@ -105,6 +105,13 @@ const DEFAULT_STORAGE_PREFERENCES = Object.freeze({
   volumePrefix: 'a0-launcher'
 });
 
+const DEFAULT_A0_TAG_SETTINGS = Object.freeze({
+  version: 1,
+  enabled: false,
+  instanceKey: '',
+  defaultProfile: ''
+});
+
 const MAX_REMOTE_INSTANCES = 64;
 const MAX_LOCAL_INSTANCE_NAMES = 256;
 const MAX_LOCAL_INSTANCE_COLORS = 256;
@@ -259,6 +266,29 @@ async function writeInstanceDefaults(instanceDefaults) {
   return defaults;
 }
 
+function normalizeA0TagSettings(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const rawInstanceKey = normalizePreferenceText(source.instanceKey, 263);
+  const separator = rawInstanceKey.indexOf(':');
+  const kind = rawInstanceKey.slice(0, separator);
+  const id = rawInstanceKey.slice(separator + 1);
+  const instanceKey = separator > 0 && ['local', 'remote'].includes(kind)
+    ? hostAccessInstanceKey(kind, id)
+    : '';
+  const rawProfile = normalizePreferenceText(source.defaultProfile, 64);
+  return {
+    version: 1,
+    enabled: source.enabled === true,
+    instanceKey: instanceKey === rawInstanceKey ? instanceKey : '',
+    defaultProfile: /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(rawProfile) ? rawProfile : ''
+  };
+}
+
+async function readA0TagSettings() {
+  const state = await readJson(stateFile(), {});
+  return normalizeA0TagSettings(state?.a0Tag);
+}
+
 async function readHostAccessSettings() {
   const state = await readJson(stateFile(), {});
   const settings = normalizeHostAccessSettings(state?.hostAccess);
@@ -322,6 +352,11 @@ async function writeSettings(value = {}) {
   const storagePreferences = normalizeStoragePreferences(source.storagePreferences);
   const instanceDefaults = normalizeInstanceDefaults(source.instanceDefaults);
   const hostAccess = mergeHostAccessSettings(state?.hostAccess, source.hostAccess);
+  const currentA0Tag = normalizeA0TagSettings(state?.a0Tag);
+  const hasA0Tag = Object.prototype.hasOwnProperty.call(source, 'a0Tag');
+  const candidateA0Tag = hasA0Tag ? normalizeA0TagSettings(source.a0Tag) : currentA0Tag;
+  const a0TagSaved = !candidateA0Tag.enabled || Boolean(candidateA0Tag.instanceKey && candidateA0Tag.defaultProfile);
+  const a0Tag = a0TagSaved ? candidateA0Tag : currentA0Tag;
 
   await writeJson(stateFile(), {
     ...state,
@@ -329,6 +364,7 @@ async function writeSettings(value = {}) {
     storagePreferences,
     instanceDefaults,
     hostAccess,
+    ...(a0TagSaved ? { a0Tag } : {}),
     updatedAt: new Date().toISOString()
   });
   return {
@@ -336,11 +372,13 @@ async function writeSettings(value = {}) {
     storagePreferences,
     instanceDefaults,
     hostAccess,
+    a0Tag,
     saved: {
       portPreferences: portPreferencesSaved,
       storagePreferences: true,
       instanceDefaults: true,
-      hostAccess: true
+      hostAccess: true,
+      a0Tag: a0TagSaved
     }
   };
 }
@@ -1019,6 +1057,11 @@ module.exports = {
   normalizeStoragePreferences,
   readStoragePreferences,
   writeStoragePreferences,
+
+  // A0 Tag
+  DEFAULT_A0_TAG_SETTINGS,
+  normalizeA0TagSettings,
+  readA0TagSettings,
 
   // Instance defaults
   readInstanceDefaults,

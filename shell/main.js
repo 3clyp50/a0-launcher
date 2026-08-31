@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, Menu, net, ipcMain, shell, nativeImage, protocol, dialog, systemPreferences } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, net, ipcMain, shell, nativeImage, protocol, dialog, systemPreferences, globalShortcut, screen, clipboard, Notification } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const os = require('node:os');
@@ -73,12 +73,27 @@ const {
   resolveLauncherDebugReleaseTag,
   stageLauncherDebugRelease
 } = require('./launcher_updater_debug_release');
+const {
+  A0TagController,
+  A0TagOverlay,
+  GnomeA0TagShortcut,
+  a0TagLeaseReadiness,
+  cancelA0TagMicrophone,
+  getA0TagMicrophoneStatus,
+  normalizeA0TagConfig,
+  normalizeProfiles,
+  runA0TagMicrophone
+} = require('./a0_tag');
 
 const OPEN_UI_READY_TIMEOUT_MS = 20_000;
 const OPEN_UI_READY_INTERVAL_MS = 450;
 const HOST_BROWSER_PREPARE_TIMEOUT_MS = 75_000;
 const COMPUTER_USE_RESUME_ARG = '--a0-resume-computer-use=';
 const MAC_ACCESSIBILITY_SETUP_TIMEOUT_MS = 115000;
+
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal');
+}
 
 // Handle Squirrel.Windows startup events
 if (require('electron-squirrel-startup')) {
@@ -236,6 +251,15 @@ let a0CliEnsurePromise = null;
 let a0CliEnsureState = 'idle';
 let a0CliResolvedBinary = '';
 const pendingComputerUseSetup = new Set();
+let a0TagController = null;
+let gnomeA0TagShortcut = null;
+let a0TagRuntime = {
+  shortcut: 'CommandOrControl+Shift+Enter',
+  status: 'disabled',
+  message: 'Disabled',
+  profiles: [],
+  running: false
+};
 
 const hostGatewaySupervisor = new HostGatewaySupervisor({
   onStatus(leaseKey, status) {
@@ -1342,6 +1366,7 @@ async function continueToAppContent() {
     if (remainingEntryMs > 0) await wait(remainingEntryMs);
   }
   await loadAppContent();
+  void a0TagController?.sync?.().catch?.(() => {});
   scheduleRuntimeSetupResume();
   scheduleComputerUseSetupResume();
 }
@@ -1404,7 +1429,10 @@ function createWindow(mode = 'splash') {
 
   windowRef.on('closed', () => {
     if (mainWindow === windowRef) {
-      if (!isSplash) cleanupInstanceTabs();
+      if (!isSplash) {
+        cleanupInstanceTabs();
+        a0TagController?.dispose?.();
+      }
       mainWindow = null;
       mainWindowMode = '';
     }
@@ -1573,6 +1601,29 @@ function publicHostAccessSettings(value) {
   };
 }
 
+function publicA0TagState(value) {
+  const runtime = a0TagController?.snapshot?.() || a0TagRuntime;
+  const allowedStatuses = new Set([
+    'disabled',
+    'waiting_for_instance',
+    'waiting_for_gateway',
+    'needs_computer_use',
+    'needs_cli_update',
+    'shortcut_conflict',
+    'ready',
+    'running',
+    'error'
+  ]);
+  return {
+    config: normalizeA0TagConfig(value),
+    shortcut: 'CommandOrControl+Shift+Enter',
+    status: allowedStatuses.has(runtime?.status) ? runtime.status : 'error',
+    message: String(runtime?.message || '').slice(0, 512),
+    profiles: normalizeProfiles(runtime?.profiles),
+    running: runtime?.running === true
+  };
+}
+
 function gatewayIdForTab(settings, tab) {
   const identity = hostAccessIdentity(tab);
   return identity ? launcherGatewayId(settings?.installationId) : '';
@@ -1580,6 +1631,156 @@ function gatewayIdForTab(settings, tab) {
 
 function gatewayHostForTab(tab) {
   return gatewayHostUrl(tab?.gatewayHost || tab?.url);
+}
+
+function a0TagTabForInstanceKey(instanceKey) {
+  const key = String(instanceKey || '').trim();
+  if (!key) return null;
+  for (const tab of instanceTabs.values()) {
+    if (hostGatewayLeaseKey(tab) === key && tab?.view?.webContents && !tab.view.webContents.isDestroyed?.()) {
+      return tab;
+    }
+  }
+  return null;
+}
+
+function resolveA0TagLease(instanceKey) {
+  const tab = a0TagTabForInstanceKey(instanceKey);
+  const readiness = a0TagLeaseReadiness(tab, process.platform);
+  if (!readiness.ready) return readiness;
+  const gateway = tab.hostAccess.gateway;
+  const leaseKey = hostGatewayLeaseKey(tab);
+  return {
+    ...readiness,
+    tab,
+    leaseKey,
+    leaseToken: `${leaseKey}:${Number(tab.a0TagLeaseVersion) || 0}:${String(gateway.id || '')}`
+  };
+}
+
+async function requestA0TagGateway(instanceKey, payload, options = {}) {
+  const lease = resolveA0TagLease(instanceKey);
+  if (!lease.ready) {
+    const error = new Error(lease.message);
+    error.code = lease.code;
+    throw error;
+  }
+  return await hostGatewaySupervisor.request(lease.leaseKey, payload, {
+    ...options,
+    statusOnError: false
+  });
+}
+
+async function transcribeA0TagMicrophone(instanceKey) {
+  const initial = resolveA0TagLease(instanceKey);
+  if (!initial.ready) {
+    const error = new Error(initial.message);
+    error.code = initial.code;
+    throw error;
+  }
+  const result = await runA0TagMicrophone(initial.tab.view.webContents);
+  const current = resolveA0TagLease(instanceKey);
+  if (!current.ready || current.leaseToken !== initial.leaseToken) {
+    const error = new Error('The selected Instance lease changed before the transcript was ready.');
+    error.code = 'A0_TAG_LEASE_CHANGED';
+    throw error;
+  }
+  return result;
+}
+
+async function a0TagMicrophoneStatus(instanceKey) {
+  const initial = resolveA0TagLease(instanceKey);
+  if (!initial.ready) {
+    const error = new Error(initial.message);
+    error.code = initial.code;
+    throw error;
+  }
+  const result = await getA0TagMicrophoneStatus(initial.tab.view.webContents);
+  const current = resolveA0TagLease(instanceKey);
+  if (!current.ready || current.leaseToken !== initial.leaseToken) {
+    const error = new Error('The selected Instance lease changed while checking Whisper STT.');
+    error.code = 'A0_TAG_LEASE_CHANGED';
+    throw error;
+  }
+  return result;
+}
+
+async function cancelA0TagInstanceMicrophone(instanceKey) {
+  const tab = a0TagTabForInstanceKey(instanceKey);
+  return tab ? await cancelA0TagMicrophone(tab.view.webContents) : false;
+}
+
+async function selectA0TagAttachments(kind, parentWindow) {
+  if (!parentWindow || parentWindow.isDestroyed?.()) return [];
+  const folder = kind === 'folder';
+  const result = await dialog.showOpenDialog(parentWindow, {
+    title: folder ? 'Attach folder to Agent Zero' : 'Attach files to Agent Zero',
+    buttonLabel: folder ? 'Attach folder' : 'Attach',
+    properties: folder ? ['openDirectory'] : ['openFile', 'multiSelections']
+  });
+  return result.canceled ? [] : result.filePaths;
+}
+
+function a0CliSupportsTag(cli) {
+  const binary = existingFilePath(cli);
+  if (!binary) return false;
+  try {
+    const result = childProcess.spawnSync(binary, ['headless', '--help'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      env: { ...process.env, TERM: 'dumb', NO_COLOR: '1' },
+      windowsHide: true
+    });
+    const help = `${result.stdout || ''}\n${result.stderr || ''}`;
+    return result.status === 0 && ['--launcher-tag', '--agent-profile', '--attachment-ref']
+      .every((flag) => help.includes(flag));
+  } catch {
+    return false;
+  }
+}
+
+async function resolveA0TagLaunch(instanceKey) {
+  const initial = resolveA0TagLease(instanceKey);
+  if (!initial.ready) {
+    const error = new Error(initial.message);
+    error.code = initial.code;
+    throw error;
+  }
+  const cli = findA0CliBinary({ requireGateway: true });
+  if (!a0CliSupportsTag(cli)) {
+    const error = new Error('Update A0 CLI to use A0 Tag.');
+    error.code = 'CLI_UPDATE_REQUIRED';
+    throw error;
+  }
+  const workspace = await resolveTabHostWorkspace(initial.tab, initial.tab.hostAccessConfig || {});
+  if (!workspace.path) {
+    const error = new Error('The selected Instance has no available Host access workspace.');
+    error.code = 'HOST_FOLDER_REQUIRED';
+    throw error;
+  }
+  const credentials = await instanceCredentialsForCliTarget(initial.tab);
+  const current = resolveA0TagLease(instanceKey);
+  if (!current.ready || current.leaseToken !== initial.leaseToken) {
+    const error = new Error('The selected Instance lease changed while A0 Tag was preparing.');
+    error.code = 'A0_TAG_LEASE_CHANGED';
+    throw error;
+  }
+  const host = gatewayHostForTab(current.tab);
+  return {
+    cli,
+    host,
+    workspace: workspace.path,
+    env: a0CliLaunchEnv(host, credentials),
+    leaseToken: current.leaseToken
+  };
+}
+
+function publishA0TagRuntime(runtime) {
+  a0TagRuntime = runtime && typeof runtime === 'object' ? runtime : a0TagRuntime;
+  if (!contentInitialized || mainWindowMode !== 'app') return;
+  void dockerManager.getDockerManagerState().then((state) => {
+    sendDockerManagerEvent('docker-manager:state', sanitizeDockerManagerState(state));
+  }).catch(() => {});
 }
 
 function a0CliSupportsGateway(cli) {
@@ -1670,6 +1871,7 @@ async function persistGatewayConfigForTab(leaseKey, gateway) {
 
 async function startHostGatewayForTab(tab, { force = false } = {}) {
   if (!tab || !instanceTabs.has(tab.id)) return null;
+  tab.a0TagLeaseVersion = (Number(tab.a0TagLeaseVersion) || 0) + 1;
   const identity = hostAccessIdentity(tab);
   if (!identity) {
     setTabHostAccess(tab, hostAccessStatus('error', {
@@ -2198,6 +2400,7 @@ function sendInstanceTabsEvent() {
     const wc = tab.detachedWindow?.webContents;
     if (wc && !wc.isDestroyed()) wc.send('docker-manager:instanceTabs', snapshot);
   }
+  void a0TagController?.refresh?.().catch?.(() => {});
 }
 
 function updateOpenInstanceAppearance(kind, id, appearance = {}) {
@@ -3786,6 +3989,7 @@ function sanitizeDockerManagerState(state) {
   const storagePrefsIn = isPlainObject(state?.storagePreferences) ? state.storagePreferences : {};
   const defaultsIn = isPlainObject(state?.instanceDefaults) ? state.instanceDefaults : {};
   const hostAccessIn = normalizeHostAccessSettings(state?.hostAccess);
+  const a0TagIn = normalizeA0TagConfig(state?.a0Tag);
 
   const allowedCategory = new Set(['official_release', 'local_build']);
   const allowedAvailability = new Set(['available', 'installed', 'update_available', 'installing', 'error']);
@@ -4083,6 +4287,7 @@ function sanitizeDockerManagerState(state) {
     retentionPolicy,
     cli: getA0CliStatus(),
     instanceDefaults,
+    a0Tag: publicA0TagState(a0TagIn),
     hostAccess: {
       version: 1,
       onboardingComplete: hostAccessIn.onboardingComplete,
@@ -4395,6 +4600,7 @@ ipcMain.handle('docker-manager:setSettings', async (_event, body) => {
     const storage = isPlainObject(body.storagePreferences) ? body.storagePreferences : {};
     const defaults = isPlainObject(body.instanceDefaults) ? body.instanceDefaults : {};
     const hostAccess = isPlainObject(body.hostAccess) ? body.hostAccess : {};
+    const a0Tag = isPlainObject(body.a0Tag) ? body.a0Tag : {};
     const saved = await dockerManager.setSettings({
       portPreferences: { ui: ports.ui, ssh: ports.ssh },
       storagePreferences: {
@@ -4407,9 +4613,16 @@ ipcMain.handle('docker-manager:setSettings', async (_event, body) => {
       hostAccess: {
         onboardingComplete: hostAccess.onboardingComplete === true,
         defaults: isPlainObject(hostAccess.defaults) ? hostAccess.defaults : {}
+      },
+      a0Tag: {
+        version: 1,
+        enabled: a0Tag.enabled === true,
+        instanceKey: typeof a0Tag.instanceKey === 'string' ? a0Tag.instanceKey : '',
+        defaultProfile: typeof a0Tag.defaultProfile === 'string' ? a0Tag.defaultProfile : ''
       }
     });
     for (const tab of instanceTabs.values()) void restartHostGatewayForTab(tab);
+    await a0TagController?.sync?.(saved.a0Tag);
     const sanitized = sanitizeDockerManagerState({
       portPreferences: saved.portPreferences,
       storagePreferences: saved.storagePreferences,
@@ -4420,13 +4633,29 @@ ipcMain.handle('docker-manager:setSettings', async (_event, body) => {
       storagePreferences: sanitized.storagePreferences,
       instanceDefaults: sanitized.instanceDefaults,
       hostAccess: publicHostAccessSettings(saved.hostAccess),
+      a0Tag: publicA0TagState(saved.a0Tag),
       saved: {
         portPreferences: saved.saved?.portPreferences === true,
         storagePreferences: saved.saved?.storagePreferences === true,
         instanceDefaults: saved.saved?.instanceDefaults === true,
-        hostAccess: saved.saved?.hostAccess === true
+        hostAccess: saved.saved?.hostAccess === true,
+        a0Tag: saved.saved?.a0Tag === true
       }
     };
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:getA0TagProfiles', async (_event, body) => {
+  try {
+    if (!isPlainObject(body) || typeof body.instanceKey !== 'string') {
+      return dockerManager.toErrorResponse({ code: 'INVALID_INPUT', message: 'Choose an Agent Zero Instance.' });
+    }
+    if (!a0TagController) {
+      return dockerManager.toErrorResponse({ code: 'A0_TAG_NOT_READY', message: 'A0 Tag is still starting.' });
+    }
+    return await a0TagController.getProfiles(body.instanceKey);
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }
@@ -5168,7 +5397,8 @@ ipcMain.handle('docker-manager:getInventory', async () => {
     const inventory = await dockerManager.getDockerInventory();
     return {
       ...inventory,
-      hostAccess: publicHostAccessSettings(inventory?.hostAccess)
+      hostAccess: publicHostAccessSettings(inventory?.hostAccess),
+      a0Tag: publicA0TagState(inventory?.a0Tag)
     };
   } catch (error) {
     return dockerManager.toErrorResponse(error);
@@ -5471,6 +5701,38 @@ app.whenReady().then(async () => {
     console.log(`[a0app] ${request.url} -> ${fileUrl}`);
     return net.fetch(fileUrl);
   });
+  const a0TagOverlay = new A0TagOverlay({
+    BrowserWindow,
+    screen,
+    clipboard,
+    Notification,
+    getMicrophoneStatus: () => a0TagController?.getComposerMicrophoneStatus?.(),
+    startMicrophone: () => a0TagController?.startComposerMicrophone?.(),
+    cancelMicrophone: () => a0TagController?.cancelComposerMicrophone?.(),
+    selectAttachments: (kind, parentWindow) => selectA0TagAttachments(kind, parentWindow)
+  });
+  gnomeA0TagShortcut = new GnomeA0TagShortcut();
+  gnomeA0TagShortcut.cleanup();
+  a0TagController = new A0TagController({
+    getConfig: () => dockerManager.getA0TagSettings(),
+    resolveLease: (instanceKey) => resolveA0TagLease(instanceKey),
+    request: (instanceKey, payload, options) => requestA0TagGateway(instanceKey, payload, options),
+    resolveLaunch: (instanceKey) => resolveA0TagLaunch(instanceKey),
+    microphoneStatus: (instanceKey) => a0TagMicrophoneStatus(instanceKey),
+    transcribeMicrophone: (instanceKey) => transcribeA0TagMicrophone(instanceKey),
+    cancelMicrophone: (instanceKey) => cancelA0TagInstanceMicrophone(instanceKey),
+    globalShortcut,
+    registerFallback: () => gnomeA0TagShortcut.register(),
+    unregisterFallback: () => gnomeA0TagShortcut.unregister(),
+    overlay: a0TagOverlay,
+    onState: publishA0TagRuntime
+  });
+  if (process.platform === 'linux') {
+    process.on('SIGUSR2', () => { void a0TagController?.invoke?.(); });
+  }
+  await a0TagController.sync().catch((error) => {
+    console.warn('[a0-tag] unable to initialize', error?.message || error);
+  });
   await cleanupStaleLauncherUpdaterArtifacts();
   configureLauncherAutoUpdate();
   void ensureA0CliInstalled().catch((error) => {
@@ -5498,6 +5760,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
+  a0TagController?.dispose?.();
   if (hostGatewayQuitPending) return;
   hostGatewaySupervisor.stopAll('app_quit');
   if (!hostGatewaySupervisor.pendingStopCount()) return;

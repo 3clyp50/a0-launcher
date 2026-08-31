@@ -325,6 +325,14 @@ This scope owns:
   per-section success and dirty state when port validation fails, and finish
   from the returned state without unrelated Docker, release, or registry
   discovery.
+- Settings also owns the default-off A0 Tag section: one exact saved Instance,
+  one live profile key, the fixed shortcut display, and bounded lease status.
+  It inherits the selected Instance gateway permissions rather than rendering a
+  second permission matrix. Copy should explain that valid inline tags replace
+  safely while the same shortcut opens the shell-owned command palette in apps
+  without a safe editable range. Save it with every other Settings panel
+  through the same combined intent, including edits made while its panel is
+  inactive.
 - `Open UI` opens local and remote instances in a launcher tab by default.
   Reopening the same target focuses the existing tab. Detach moves the existing
   page view below the same Launcher header in a standalone secure Electron

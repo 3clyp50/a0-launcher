@@ -1208,6 +1208,7 @@ function emptyDerivedState(runtime = null) {
         Embedding: { provider: 'huggingface', model: '', apiKey: '' }
       }
     },
+    a0Tag: { ...stateStore.DEFAULT_A0_TAG_SETTINGS },
     hostAccess: null,
     uiUrl: null,
     lastSyncedAt: null,
@@ -1358,11 +1359,12 @@ async function collectRuntimeDiagnostics(docker, env = null) {
 
 async function buildUnavailableState(runtime) {
   await ensureRuntimeIdentityCacheLoaded();
-  const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, hostAccess, remoteInstances] = await Promise.all([
+  const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, a0Tag, hostAccess, remoteInstances] = await Promise.all([
     stateStore.readRetentionPolicy().catch(() => ({ keepCount: 1 })),
     stateStore.readPortPreferences().catch(() => ({ ui: 8880, ssh: 55022 })),
     stateStore.readStoragePreferences().catch(() => ({ ...stateStore.DEFAULT_STORAGE_PREFERENCES })),
     stateStore.readInstanceDefaults().catch(() => null),
+    stateStore.readA0TagSettings().catch(() => ({ ...stateStore.DEFAULT_A0_TAG_SETTINGS })),
     stateStore.readHostAccessSettings().catch(() => null),
     stateStore.readRemoteInstances().catch(() => [])
   ]);
@@ -1373,6 +1375,7 @@ async function buildUnavailableState(runtime) {
     portPreferences,
     storagePreferences,
     instanceDefaults: instanceDefaults || empty.instanceDefaults,
+    a0Tag,
     hostAccess,
     remoteInstances: enrichRemoteInstancesWithHealth(remoteInstances)
   };
@@ -2244,12 +2247,13 @@ async function buildDerivedState(options = {}) {
     }
   }
 
-  const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, hostAccess, remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceIcons, localInstanceCredentials, installabilityCache, releasesResult, localImages, rawContainers, freeBytes, remoteTags] =
+  const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, a0Tag, hostAccess, remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceIcons, localInstanceCredentials, installabilityCache, releasesResult, localImages, rawContainers, freeBytes, remoteTags] =
     await Promise.all([
       stateStore.readRetentionPolicy(),
       stateStore.readPortPreferences(),
       stateStore.readStoragePreferences(),
       stateStore.readInstanceDefaults(),
+      stateStore.readA0TagSettings(),
       stateStore.readHostAccessSettings(),
       stateStore.readRemoteInstances(),
       stateStore.readRemoteInstanceCredentialsMetadata(),
@@ -2654,6 +2658,7 @@ async function buildDerivedState(options = {}) {
     portPreferences,
     storagePreferences,
     instanceDefaults,
+    a0Tag,
     hostAccess,
     uiUrl,
     lastSyncedAt,
@@ -4245,6 +4250,10 @@ async function getHostAccessSettings() {
   return await stateStore.readHostAccessSettings();
 }
 
+async function getA0TagSettings() {
+  return await stateStore.readA0TagSettings();
+}
+
 async function setHostAccessSettings(settings) {
   const hostAccess = await stateStore.writeHostAccessSettings(settings);
   publishCachedState({ hostAccess });
@@ -4258,6 +4267,7 @@ async function setSettings(settings) {
     portPreferences: saved.portPreferences,
     storagePreferences: saved.storagePreferences,
     instanceDefaults: saved.instanceDefaults,
+    a0Tag: saved.a0Tag,
     hostAccess: saved.hostAccess
   });
   return saved;
@@ -6235,14 +6245,15 @@ async function cancelOperation(opId) {
 async function getDockerInventory() {
   const imageRepo = getBackendImageRepo();
   await ensureRuntimeIdentityCacheLoaded();
-  const [remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceIcons, localInstanceCredentials, hostAccess] = await Promise.all([
+  const [remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceIcons, localInstanceCredentials, hostAccess, a0Tag] = await Promise.all([
     stateStore.readRemoteInstances(),
     stateStore.readRemoteInstanceCredentialsMetadata(),
     stateStore.readLocalInstanceNames(),
     stateStore.readLocalInstanceColors(),
     stateStore.readLocalInstanceIcons(),
     stateStore.readLocalInstanceCredentialsMetadata(),
-    stateStore.readHostAccessSettings()
+    stateStore.readHostAccessSettings(),
+    stateStore.readA0TagSettings()
   ]);
   const docker = await getManagedDocker(imageRepo);
   const env = await docker.getEnvironment();
@@ -6294,6 +6305,7 @@ async function getDockerInventory() {
     volumes,
     remoteInstances: enrichRemoteInstancesWithHealth(applyRemoteInstanceCredentials(remoteInstances, remoteInstanceCredentials)),
     hostAccess,
+    a0Tag,
     backgroundOperations: backgroundOperationsSnapshot()
   };
 }
@@ -6432,6 +6444,7 @@ module.exports = {
   setStoragePreferences,
   setInstanceDefaults,
   getHostAccessSettings,
+  getA0TagSettings,
   setHostAccessSettings,
   setSettings,
   setInstanceHostAccess,

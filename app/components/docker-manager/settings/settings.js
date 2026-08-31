@@ -20,10 +20,11 @@ import {
 } from "../host-access-dialog.js";
 
 const SETTINGS_TAB_KEY = "dm-settings-active-tab";
-const SETTINGS_TABS = ["ports", "workspace", "defaults"];
+const SETTINGS_TABS = ["ports", "workspace", "defaults", "a0-tag"];
 const HOST_ACCESS_SCOPE_KEYS = ["files", "file_write", "code_execution", "browser", "computer_use"];
 let settingsSaveInProgress = false;
 let syncHostAccessDefaults = null;
+let a0TagProfilesKey = "";
 
 function byId(id) { return document.getElementById(id); }
 
@@ -106,6 +107,109 @@ function currentStoragePreferences(state) {
     hostPathMode: prefs.hostPathMode === "exact" ? "exact" : "per_instance",
     volumePrefix: compactText(prefs.volumePrefix, "a0-launcher")
   };
+}
+
+function currentA0Tag(state) {
+  const tag = state?.a0Tag && typeof state.a0Tag === "object" ? state.a0Tag : {};
+  const config = tag.config && typeof tag.config === "object" ? tag.config : tag;
+  return {
+    enabled: config.enabled === true,
+    instanceKey: String(config.instanceKey || ""),
+    defaultProfile: String(config.defaultProfile || "")
+  };
+}
+
+function a0TagInstances(state = {}) {
+  const items = [];
+  for (const instance of Array.isArray(state?.containers) ? state.containers : []) {
+    const id = String(instance?.containerId || "");
+    if (!id) continue;
+    items.push({
+      key: `local:${id}`,
+      label: String(instance?.instanceName || instance?.containerName || "Local Instance")
+    });
+  }
+  for (const instance of Array.isArray(state?.remoteInstances) ? state.remoteInstances : []) {
+    const id = String(instance?.id || "");
+    if (!id) continue;
+    items.push({ key: `remote:${id}`, label: String(instance?.name || "Remote Instance") });
+  }
+  return items;
+}
+
+function replaceSelectOptions(select, placeholder, items, selectedValue, showTagKey = false) {
+  if (!select || typeof document.createElement !== "function") return;
+  select.replaceChildren?.();
+  const add = (value, label) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.appendChild?.(option);
+  };
+  add("", placeholder);
+  for (const item of items) {
+    const key = String(item.key || "");
+    const label = String(item.label || key);
+    add(key, showTagKey && key && label !== key ? `${label} · @a0.${key}` : label);
+  }
+  if (selectedValue && !items.some((item) => item.key === selectedValue)) {
+    add(selectedValue, `${selectedValue} (unavailable)`);
+  }
+  select.value = selectedValue || "";
+}
+
+function populateA0TagFields(state = {}) {
+  const config = currentA0Tag(state);
+  const tag = state?.a0Tag && typeof state.a0Tag === "object" ? state.a0Tag : {};
+  const enabled = byId("a0TagEnabled");
+  const instance = byId("a0TagInstance");
+  const profile = byId("a0TagProfile");
+  const status = byId("a0TagStatus");
+  if (enabled && !enabled.dataset.dirty) enabled.checked = config.enabled;
+  if (instance && !instance.dataset.dirty) {
+    replaceSelectOptions(instance, "Choose an Instance", a0TagInstances(state), config.instanceKey);
+  }
+  if (profile && !profile.dataset.dirty) {
+    const profiles = Array.isArray(tag.profiles) ? tag.profiles : [];
+    replaceSelectOptions(
+      profile,
+      config.instanceKey ? "Open the selected Instance to load profiles" : "Choose an Instance first",
+      profiles,
+      config.defaultProfile,
+      true
+    );
+  }
+  if (status) status.textContent = String(tag.message || (config.enabled ? "Waiting for the selected Instance" : "Disabled"));
+}
+
+function readA0TagSettings() {
+  return {
+    version: 1,
+    enabled: byId("a0TagEnabled")?.checked === true,
+    instanceKey: byId("a0TagInstance")?.value || "",
+    defaultProfile: byId("a0TagProfile")?.value || ""
+  };
+}
+
+async function loadA0TagProfiles() {
+  const key = byId("a0TagInstance")?.value || "";
+  if (!key || key === a0TagProfilesKey) return;
+  a0TagProfilesKey = key;
+  const result = await window.dockerManagerActions?.getA0TagProfiles?.(key);
+  if (!result) {
+    a0TagProfilesKey = "";
+    return;
+  }
+  if ((byId("a0TagInstance")?.value || "") !== key) return;
+  const profile = byId("a0TagProfile");
+  const selected = profile?.value || result.defaultProfile || "";
+  replaceSelectOptions(
+    profile,
+    "Choose a profile",
+    Array.isArray(result.profiles) ? result.profiles : [],
+    selected,
+    true
+  );
 }
 
 function syncStoragePreferenceFields() {
@@ -256,6 +360,7 @@ async function saveAllSettings() {
   const hostFields = hostAccessInputs();
   const instanceDefaults = readInstanceDefaultsFromForm(document, "settings");
   const hostAccessDefaults = readHostAccessDefaults();
+  const a0Tag = readA0TagSettings();
   const envResult = buildInstanceEnvText(instanceDefaults);
 
   settingsSaveInProgress = true;
@@ -267,6 +372,7 @@ async function saveAllSettings() {
     let storageOk = false;
     let hostAccessOk = false;
     let defaultsOk = false;
+    let a0TagOk = false;
 
     if (envResult.ok && typeof actions.saveSettings === "function") {
       const saved = await actions.saveSettings({
@@ -276,12 +382,14 @@ async function saveAllSettings() {
         hostAccess: {
           onboardingComplete: true,
           defaults: hostAccessDefaults
-        }
+        },
+        a0Tag
       });
       portsOk = saved?.portPreferences === true;
       storageOk = saved?.storagePreferences === true;
       hostAccessOk = saved?.hostAccess === true;
       defaultsOk = saved?.instanceDefaults === true;
+      a0TagOk = saved?.a0Tag === true;
     } else {
       portsOk = (await actions.setPortPreferences?.(portPreferences, { quiet: true })) === true;
       storageOk = Boolean(await actions.setStoragePreferences?.(storagePreferences, { quiet: true }));
@@ -300,8 +408,13 @@ async function saveAllSettings() {
     if (storageOk) storageFields.forEach((input) => { delete input.dataset.dirty; });
     if (hostAccessOk) hostFields.forEach((input) => { delete input.dataset.dirty; });
     if (defaultsOk) clearInstanceDefaultDirty(document, "settings");
+    if (a0TagOk) {
+      for (const input of [byId("a0TagEnabled"), byId("a0TagInstance"), byId("a0TagProfile")]) {
+        if (input) delete input.dataset.dirty;
+      }
+    }
 
-    if (portsOk && storageOk && hostAccessOk && defaultsOk) {
+    if (portsOk && storageOk && hostAccessOk && defaultsOk && a0TagOk) {
       window.toastFrontendSuccess?.("Settings saved.", "Agent Zero");
     } else {
       window.toastFrontendWarning?.("Some settings could not be saved.", "Agent Zero");
@@ -339,7 +452,9 @@ function populateFromState(state) {
   if (saveSettingsBtn) saveSettingsBtn.disabled = settingsSaveInProgress || state?.progress?.status === "running";
   syncStoragePreferenceFields();
   populateHostAccessFields(state);
+  populateA0TagFields(state);
   applyInstanceDefaultsToForm(document, "settings", instanceDefaults, { respectDirty: true });
+  if (currentA0Tag(state).instanceKey && state?.a0Tag?.status === "ready") void loadA0TagProfiles();
 }
 
 function bindActions() {
@@ -350,6 +465,9 @@ function bindActions() {
   const uiInput = byId("uiPortInput");
   const sshInput = byId("sshPortInput");
   const storageFields = storageInputs();
+  const a0TagEnabled = byId("a0TagEnabled");
+  const a0TagInstance = byId("a0TagInstance");
+  const a0TagProfile = byId("a0TagProfile");
 
   if (uiInput && !uiInput.dataset.bound) {
     uiInput.dataset.bound = "1";
@@ -360,6 +478,22 @@ function bindActions() {
     sshInput.addEventListener("input", () => { sshInput.dataset.dirty = "1"; });
   }
   bindInstanceDefaultDirtyTracking(document, "settings");
+
+  for (const input of [a0TagEnabled, a0TagInstance, a0TagProfile]) {
+    if (!input || input.dataset.bound) continue;
+    input.dataset.bound = "1";
+    input.addEventListener("change", () => {
+      input.dataset.dirty = "1";
+      if (input === a0TagInstance) {
+        a0TagProfilesKey = "";
+        if (a0TagProfile) {
+          a0TagProfile.dataset.dirty = "1";
+          a0TagProfile.value = "";
+        }
+      }
+      if (input !== a0TagProfile) void loadA0TagProfiles();
+    });
+  }
 
   storageFields.forEach((input) => {
     if (input.dataset.bound) return;

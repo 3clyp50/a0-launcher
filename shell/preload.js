@@ -178,6 +178,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     const storage = value.storagePreferences && typeof value.storagePreferences === 'object' ? value.storagePreferences : {};
     const defaults = value.instanceDefaults && typeof value.instanceDefaults === 'object' ? value.instanceDefaults : {};
     const hostAccess = value.hostAccess && typeof value.hostAccess === 'object' ? value.hostAccess : {};
+    const a0Tag = value.a0Tag && typeof value.a0Tag === 'object' ? value.a0Tag : {};
     return ipcRenderer.invoke('docker-manager:setSettings', {
       portPreferences: { ui: ports.ui, ssh: ports.ssh },
       storagePreferences: {
@@ -192,9 +193,18 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
       hostAccess: {
         onboardingComplete: hostAccess.onboardingComplete === true,
         defaults: hostAccess.defaults && typeof hostAccess.defaults === 'object' ? hostAccess.defaults : {}
+      },
+      a0Tag: {
+        version: 1,
+        enabled: a0Tag.enabled === true,
+        instanceKey: typeof a0Tag.instanceKey === 'string' ? a0Tag.instanceKey : '',
+        defaultProfile: typeof a0Tag.defaultProfile === 'string' ? a0Tag.defaultProfile : ''
       }
     });
   },
+  getA0TagProfiles: (instanceKey) => ipcRenderer.invoke('docker-manager:getA0TagProfiles', {
+    instanceKey: typeof instanceKey === 'string' ? instanceKey : ''
+  }),
   setInstanceHostAccess: (target, config) => {
     const value = target && typeof target === 'object' ? target : {};
     const settings = config && typeof config === 'object' ? config : {};

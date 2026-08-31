@@ -3,7 +3,7 @@
     <div class="sv-card-head sv-card-head-row">
       <div>
         <h2 class="section-title sv-section-heading">Settings</h2>
-        <div class="sv-subtitle">Launcher defaults for new Instances</div>
+        <div class="sv-subtitle">Launcher preferences and defaults</div>
       </div>
     </div>
 
@@ -19,6 +19,10 @@
       <button id="settingsTabDefaults" class="dm-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settingsPanelDefaults" data-settings-tab="defaults">
         <span class="material-symbols-outlined" aria-hidden="true">tune</span>
         <span>Instance defaults</span>
+      </button>
+      <button id="settingsTabA0Tag" class="dm-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settingsPanelA0Tag" data-settings-tab="a0-tag">
+        <span class="material-symbols-outlined" aria-hidden="true">alternate_email</span>
+        <span>A0 Tag</span>
       </button>
     </div>
 
@@ -114,6 +118,58 @@
             </div>
           </div>
         </details>
+      </section>
+
+      <section id="settingsPanelA0Tag" class="dm-settings-tab-panel" role="tabpanel" aria-labelledby="settingsTabA0Tag" data-settings-panel="a0-tag" hidden>
+        <div class="dm-settings-panel-head">
+          <div>
+            <h3 class="dm-settings-title">A0 Tag</h3>
+            <div class="sv-subtitle">Summon Agent Zero from any app or anywhere on your computer</div>
+          </div>
+        </div>
+        <label class="dm-host-access-switch-line" for="a0TagEnabled">
+          <span>
+            <strong>Enable A0 Tag</strong>
+            <small>Use @a0 or @a0.profile for inline responses, or press the shortcut anywhere to open the command palette. The selected Instance must stay open in Launcher.</small>
+          </span>
+          <span class="dm-host-access-switch">
+            <input id="a0TagEnabled" type="checkbox">
+            <span class="dm-host-access-toggler" aria-hidden="true"></span>
+          </span>
+        </label>
+        <div class="sv-settings-grid">
+          <div class="sv-settings-row">
+            <label class="sv-settings-label" for="a0TagInstance">Agent Zero Instance</label>
+            <div class="sv-settings-field">
+              <select id="a0TagInstance" class="sv-select">
+                <option value="">Choose an Instance</option>
+              </select>
+              <span class="sv-settings-hint">A0 Tag uses this exact Instance and its existing Host access permissions. It never falls back to another one.</span>
+            </div>
+          </div>
+          <div class="sv-settings-row">
+            <label class="sv-settings-label" for="a0TagProfile">Default profile</label>
+            <div class="sv-settings-field">
+              <select id="a0TagProfile" class="sv-select">
+                <option value="">Open the selected Instance to load profiles</option>
+              </select>
+              <span class="sv-settings-hint">@a0 uses this profile. @a0.profile or the command palette can select another profile for one invocation.</span>
+            </div>
+          </div>
+          <div class="sv-settings-row">
+            <div class="sv-settings-label">Shortcut</div>
+            <div class="sv-settings-field">
+              <kbd class="dm-a0-tag-shortcut">Ctrl/⌘ + Shift + Enter</kbd>
+              <span class="sv-settings-hint">Fixed for the first release. It uses a safe inline tag when available and opens the composer otherwise; A0 Tag never watches what you type.</span>
+            </div>
+          </div>
+          <div class="sv-settings-row">
+            <div class="sv-settings-label">Status</div>
+            <div class="sv-settings-field">
+              <span id="a0TagStatus" class="dm-a0-tag-status" role="status" aria-live="polite">Disabled</span>
+            </div>
+          </div>
+        </div>
       </section>
     </div>
 

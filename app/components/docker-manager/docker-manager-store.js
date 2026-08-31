@@ -24,6 +24,7 @@ export const dockerManagerStore = createStore("dockerManager", {
   storagePreferences: null,
   instanceDefaults: null,
   hostAccess: null,
+  a0Tag: null,
   cli: { installed: false, installing: false, command: "" },
   retentionPolicy: null,
   instanceTabs: { tabs: [], activeTabId: "" },

@@ -276,7 +276,12 @@ class HostGatewaySupervisor {
           `Host gateway command timed out after ${Math.ceil(timeoutMs / 1000)} seconds.`
         ));
       }, timeoutMs);
-      record.pendingRequests.set(requestId, { resolve, reject, timer });
+      record.pendingRequests.set(requestId, {
+        resolve,
+        reject,
+        timer,
+        statusOnError: options.statusOnError !== false
+      });
       if (this.send(record.tabId, command)) return;
       clearTimeout(timer);
       record.pendingRequests.delete(requestId);
@@ -445,7 +450,9 @@ class HostGatewaySupervisor {
       return;
     }
     if (event.type === 'result' && event.ok === false) {
+      const statusOnError = record.pendingRequests.get(String(event.request_id || ''))?.statusOnError !== false;
       this._settleRequest(record, event);
+      if (!statusOnError) return;
       record.status = {
         ...record.status,
         state: 'needs_action',

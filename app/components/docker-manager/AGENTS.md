@@ -388,8 +388,12 @@ This scope owns:
   reason in the visible modal body; do not substitute generic tab-lease copy in
   a modal that is already opened from the owning Instance tab. A missing host
   Browser dependency must become a concise `Set up browser` repair action; do
-  not hide that action merely because no Chromium-family profile is currently
-  detected, and do not send Launcher users to an A0 CLI slash command. Hide
+  not hide that action merely because no supported host browser is currently
+  detected, and do not send Launcher users to an A0 CLI slash command. Safari
+  setup must name Show features for web developers in Safari's Advanced
+  settings, then Allow remote automation in Developer settings;
+  Chromium-family setup keeps its browser-specific remote-debugging guidance.
+  Hide
   Browser support diagnostics and repair actions while the current modal choice
   does not allow `Use my Browser`; retained runtime metadata must not imply that
   Browser is required. Render a saved capability choice independently from

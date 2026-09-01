@@ -230,7 +230,7 @@ test('one tab owns exactly one invisible gateway child and no credential argumen
     }
   });
 
-  supervisor.start('tab-1', launch());
+  supervisor.start('tab-1', launch({ browserSelection: 'safari:default' }));
   supervisor.start('tab-1', launch());
 
   assert.equal(spawned.length, 1);
@@ -238,6 +238,10 @@ test('one tab owns exactly one invisible gateway child and no credential argumen
   assert.equal(spawned[0].options.stdio.join(','), 'pipe,pipe,pipe');
   assert.equal(spawned[0].args.includes('secret'), false);
   assert.equal(spawned[0].args.includes('jan'), false);
+  assert.deepEqual(
+    spawned[0].args.slice(spawned[0].args.indexOf('--browser-selection')),
+    ['--browser-selection', 'safari:default']
+  );
   assert.equal(spawned[0].options.env.A0_PASSWORD, 'secret');
 });
 

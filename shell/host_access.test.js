@@ -89,6 +89,7 @@ test('legacy local CDP selections migrate to automatic detection', () => {
     ''
   );
   assert.equal(normalizeBrowserSelection('chrome-cdp'), 'chrome-cdp');
+  assert.equal(normalizeBrowserSelection('safari:default'), 'safari:default');
   assert.equal(
     normalizeBrowserSelection('ws://browser.example:9222/devtools/browser/custom'),
     'ws://browser.example:9222/devtools/browser/custom'

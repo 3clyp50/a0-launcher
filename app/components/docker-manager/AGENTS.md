@@ -395,8 +395,11 @@ This scope owns:
   Browser is required. Render a saved capability choice independently from
   runtime readiness as `Not allowed`, `Allowed · Setup needed`, `Allowed ·
   Checking`, or `Allowed · Ready`; runtime metadata must never turn an allowed
-  switch off. When Computer Use is newly enabled on macOS, open the staged
-  setup surface after the gateway connects.
+  switch off. Computer Use checking copy must follow the advertised backend;
+  macOS permission wording is valid only for a macOS backend, while other
+  backends use neutral Computer Use copy unless they provide something more
+  specific. When Computer Use is newly enabled on macOS, open the staged setup
+  surface after the gateway connects.
   Later launches preflight silently, with one explicit retry or restart action
   when required. Name the pending macOS service on that action (`Open
   Accessibility Settings`, `Allow Screen Recording`, or `Check Computer Use`)

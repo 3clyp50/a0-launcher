@@ -9,15 +9,18 @@
 
 1. Read this file from top to bottom.
 2. Check the current entries in **Implementation Status** and **Evidence Log**.
-3. Re-run `git status --short` in both repositories before editing.
+3. Re-run `git status --short` in Connector, Launcher, and Core before editing.
 4. Resume the first unchecked item under **Immediate Work Queue**.
 5. Preserve the central invariant: the open selected Instance tab's outbound
    Launcher gateway is the only authority for host tools.
 6. Keep this ledger synchronized before ending a work period.
-7. Current follow-up: the accepted Ubuntu tranche is committed and pushed. The
-   macOS tranche is active on the host recorded below. Resume from the first
-   unchecked item in the macOS acceptance list; do not reuse the installed
-   global `a0` for development proof and do not disturb Launcher-managed Colima.
+7. Current status: Ubuntu, macOS, and the local Windows 10 x64 implementation
+   are accepted. Windows source changes remain uncommitted for user inspection;
+   the two separately authorized reported-fix commits are the only new commits.
+   No task-owned Launcher/gateway/desktop process remains. Retain the ignored
+   evidence and local Windows artifacts until the user has inspected them; do
+   not reopen a platform tranche unless a later change risks its proven
+   contract.
 
 ## 0A. macOS Resume Capsule (2026-08-31, Mac Studio)
 
@@ -210,11 +213,10 @@ sha256 ae58b4081f0a8f1749d59e712478e966b78f8f256a7965ab2f4a51d42d6887f0
 - Objective: implement and fully verify macOS A0 Tag without changing the
   accepted Linux behavior, adding a dependency/protocol/daemon/permission
   matrix/fallback Instance, or modifying Core without direct evidence.
-- Next action: user inspection and push through GitHub Desktop; the user has
-  authorized local commits but not a push. The next implementation tranche is
-  Windows on a separate Windows 10 x64 machine. Live macOS Whisper
-  draft/send/cancel remains the sole hardware-limited acceptance item and
-  requires an actual audio-input device to be attached or exposed.
+- Status: accepted and locally committed. The active implementation tranche is
+  Windows 10 x64. Live macOS Whisper draft/send/cancel remains an accepted
+  hardware limitation because that host exposes no audio-input device; do not
+  reopen macOS unless a Windows change risks a proven cross-platform contract.
 - No native TCC blocker remains: the responsible `ChatGPT` application now has
   Microphone access. The concrete microphone blocker is hardware: macOS exposes
   only `Mac Studio Speakers` with two output channels and no audio-input device;
@@ -240,22 +242,249 @@ sha256 ae58b4081f0a8f1749d59e712478e966b78f8f256a7965ab2f4a51d42d6887f0
     `@a0.developer` FIM flows pass.
   - [x] Protected-field and delayed stale-target flows fail closed without
     capture/chat/insertion leakage.
-  - [ ] Command palette layout, drag, profile, microphone, attachment chooser,
-    close-before-work, and origin-focus restoration pass.
+  - [x] Command palette layout, drag, profile, microphone surface/first-use
+    notice, attachment chooser, close-before-work, and origin-focus restoration
+    pass.
   - [x] One harmless macOS Host Computer Use action is freshly verified; no
     Linux Desktop/Xpra fallback occurs.
   - [x] One disposable file and folder arrive byte-exact as safe upload refs;
     no host path enters renderer state or tagged argv.
-  - [ ] Selected Instance Whisper first-use, draft/send, cancel, and raw-audio
-    ownership pass. Hardware-blocked on this host: macOS exposes no audio-input
-    device; do not mistake the store's generic browser-permission toast for a
-    permission denial.
+  - [x] Selected Instance Whisper ownership and first-use surface pass. Live
+    draft/send/cancel audio is accepted as hardware-limited on this host because
+    macOS exposes no input device; the generic browser-permission toast was not
+    treated as proof of a permission defect.
   - [x] Disable/tab close/reopen/Host disconnect/reconnect/Computer Use revoke/
     restore update shortcut, target, palette, and gateway state without orphans.
   - [x] Packaged arm64 application identity/signing/TCC recovery plus one FIM
     and one command flow pass without publish, release, or notarization.
   - [x] Deep frdel alignment review and evidence-backed in-scope polish complete.
   - [x] Final DOX, diff, secret, process, artifact, and cleanup audits complete.
+
+## 0B. Windows Resume Capsule (2026-09-01, Windows 10 x64)
+
+### Resume authority and privacy-safe path record
+
+- This capsule is the active resume point. The complete macOS chronology above
+  and in **Evidence Log** remains accepted history.
+- Initial capture: `2026-09-01T03:48:16.7530795+02:00`; synchronized after the
+  user's Core pull at `2026-09-01T03:55:03.9328943+02:00`.
+- Tracked paths use `%USERPROFILE%` / `%LOCALAPPDATA%` so this durable ledger
+  contains no personal absolute-path literal. Exact resolved Windows paths,
+  commands, and salient outputs are preserved in ignored evidence at
+  `../agent-zero/tmp/a0-tag-windows-20260901/preflight/preflight-inventory.txt`.
+- The user-supplied Host access screenshot is preserved outside tracked source
+  at
+  `../agent-zero/tmp/a0-tag-windows-20260901/preflight/host-access-macos-wording.png`:
+  `99,479` bytes, SHA-256
+  `678c3e22092a3822ade34900079ceeb1de4335f336c4b6a89b1326ec24193142`.
+
+### Host, hardware, display, and session
+
+- Computer name: `BTT117P`; time zone: `W. Europe Standard Time`.
+- OS: Microsoft Windows 10 Pro `10.0.19045`, build `19045`, 64-bit; process
+  architecture `x64`.
+- Hardware: Hewlett-Packard `HP ProDesk 400 G2 MT (TPM DP)`; Intel Core
+  i5-4590S at 3.00 GHz, 4 cores / 4 logical processors; `11,999,297,536` bytes
+  physical memory; BIOS `L02 v02.39`.
+- GPUs: Intel HD Graphics 4600 (`20.19.15.5171`) and NVIDIA GeForce RTX 3050
+  (`32.0.15.9174`).
+- Display probe used per-monitor DPI awareness plus native monitor/DPI APIs.
+  Exactly one active primary display exists: `\\.\DISPLAY1`, Samsung
+  `SAM7558`, bounds `(0, 0) 3840 x 2160`, working area
+  `(0, 60) 3840 x 2100`, 32 bpp, 60 Hz, effective DPI `144 x 144`, 150%
+  scaling. There is no negative-origin or multi-monitor geometry on this host;
+  automated virtual-screen regressions must still preserve that accepted
+  Windows contract.
+- All relevant Launcher, gateway, and Computer Use processes run in interactive
+  session `1`. The desktop was unlocked throughout preflight.
+
+### Repositories and handoff gate
+
+| Repository | Resolved Windows path | Branch | Initial/current HEAD | Worktree state |
+| --- | --- | --- | --- | --- |
+| Connector | `%USERPROFILE%\Documents\GitHub\a0-connector` | `development` | initial `ca4f05cfab2e744e0e82962960edd4ee7bfff1c8`; current `b5e489946fbffb598dffd2b77dd02010d3f35216` | one authorized reported-fix commit ahead of `origin/development`; Windows backend/test/DOX work remains uncommitted |
+| Launcher | `%USERPROFILE%\Documents\GitHub\a0-launcher` | `development` | initial `0061b097470845b9a20e32b6a694687f413dc5d3`; current `4de2ed57e75b56190b8a6c49952ded6370728def` | one authorized reported-fix commit ahead of `upstream/development`; ledger/DOX work remains uncommitted |
+| Core | `%USERPROFILE%\Documents\GitHub\agent-zero` | `ready` | initial `dec6df661f839040748221f828f5f792257892f0`; current `4d10f601d7e4c136d2b866feca0a5db91b571b61` after the user's pull | current branch aligned with `upstream/ready`; two pre-existing untracked plugin-local paths remain untouched |
+
+- Required handoff gates passed exactly:
+
+```text
+git -C <Connector> merge-base --is-ancestor ca4f05cfab2e744e0e82962960edd4ee7bfff1c8 HEAD
+exit 0
+
+git -C <Launcher> merge-base --is-ancestor 0061b097470845b9a20e32b6a694687f413dc5d3 HEAD
+exit 0
+```
+
+- Both accepted hashes remain ancestors of the respective current HEADs. No
+  fetch was needed and no merge, reset, checkout, branch switch, push, tag, PR,
+  publish, or release action occurred. The only commits made are the two narrow
+  reported-fix commits explicitly authorized by the user and recorded below;
+  main-tranche work remains uncommitted.
+- The Core pull was user-owned. Before it, Core was 180 commits behind its
+  upstream ref and exposed pre-existing untracked/ignored user-runtime state;
+  none was read or touched. After it, only two pre-existing plugin-local paths
+  remain untracked. Core stays read-only unless live evidence proves ownership.
+
+### Toolchain, Launcher, and repo-local Connector identity
+
+- Git `2.51.0.windows.1`; system CPython `3.12.7`; Node `v24.18.0` x64; npm
+  `11.16.0`; Launcher package `1.6`; Electron `42.5.1`; Electron Forge
+  `7.10.2`.
+- Exact development CLI:
+  `%USERPROFILE%\Documents\GitHub\a0-connector\.venv\Scripts\a0.exe`;
+  `a0 --version` reports `2.11`. Its venv CPython is `3.12.7`, and
+  `agent_zero_cli` imports from this checkout's `src/` tree.
+- The installed global candidate is `%USERPROFILE%\.local\bin\a0.exe`, but the
+  selected live gateway does not use it.
+- Diagnostic discrepancy to resolve before packaging: the repo-local command
+  reports `2.11`, while `pip show a0` reports distribution metadata `1.11`.
+  Do not change version/dependency metadata merely to normalize this without
+  proving technical relevance to the Windows tranche.
+- Initial development process tree (PIDs are point-in-time evidence):
+
+```text
+Explorer 9292 -> Windows PowerShell 21744 -> node/npm 22640
+  -> cmd 23876 -> Forge node 22048 -> Forge-start node 24856
+    -> Electron main 3432
+      -> repo-local a0.exe 12428 -> venv python.exe 24640
+        -> base CPython python.exe 20656
+```
+
+- The Electron main executable is the checkout's
+  `node_modules\electron\dist\electron.exe`; its main window is `Agent Zero`.
+  The gateway command targets only `http://127.0.0.1:49235`, uses workspace
+  `%USERPROFILE%\Documents\GitHub\agent-zero`, gateway ID
+  `launcher-415291ff-ef81-46e2-aa59-992b73a5caf3`, host label `BTT117P`, master
+  mode, and the five inherited scopes `file_read,file_write,code_execution,
+  browser,computer_use`. Credentials remain environment-only and were not
+  inspected.
+
+### Selected Instance, gateway, and Agent Zero runtime
+
+- Exact selected stable Instance key:
+  `local:25e33109975d7f01d27e04c29dc62b17804a678236ae3f6eebc58412febf0203`.
+- Persisted Host access is configured and master-enabled; file read, file write,
+  code execution, Browser, and Computer Use are all enabled. The selected
+  `agent-zero` tab is open and its existing gateway is connected. Persisted
+  state has no `a0Tag` key, so A0 Tag remains default-off before implementation.
+- Docker Desktop is the user-local installation under `%LOCALAPPDATA%`.
+  Normal `PATH` has no `docker`; its exact bundled CLI reports context
+  `desktop-linux`, client `29.7.2`, server `29.7.2`.
+- Runtime container:
+
+```text
+id:      25e33109975d7f01d27e04c29dc62b17804a678236ae3f6eebc58412febf0203
+name:    a0-inst-agent-zero-mthzq26f
+image:   agent0ai/agent-zero:ready
+port:    0.0.0.0:49235 -> 80/tcp
+mount:   %USERPROFILE%\Documents\GitHub\agent-zero -> /a0/usr (read/write)
+started: 2026-09-01T01:30:25.754687478Z
+```
+
+- `http://127.0.0.1:49235/` and `/api/health` return HTTP 200. Health reports
+  branch `ready`, runtime commit
+  `6a6cecff8527b164668c7a6ab2f76b6b1ed7cfa1`, and `R v2.11`.
+- This began as the release image with only the host checkout mounted as
+  `/a0/usr`; pulling tracked Core to `4d10f601...` did not replace live Core
+  source. A live extension mismatch then proved the running image's older Core
+  could not execute the pulled checkout's plugin contract. Per the Windows
+  live-E2E contract, exactly the `43` changed tracked Core files and `2` tracked
+  deletions were synchronized into the container's `/a0`, and only container
+  `a0-inst-agent-zero-mthzq26f` was restarted. Health returned HTTP `200` and
+  development acceptance then passed. This was an ephemeral runtime sync, not
+  a Core source edit, dependency change, image build, or commit.
+
+### Visible observations, known reports, and current blocker state
+
+- The supplied screenshot proved the selected tab open, Host access Connected,
+  all five inherited scopes on, and the Windows UI incorrectly showing
+  `Checking macOS permissions...`. Caller tracing found the renderer was
+  overriding already-platform-correct setup state; Launcher commit
+  `4de2ed57e75b56190b8a6c49952ded6370728def` now renders the backend message.
+  Live Windows evidence shows `Checking Windows Computer Use...`.
+- The reported **Retry** browser burst was reproduced to the shared executable-
+  version probe launching GUI candidates with `--version`. Connector commit
+  `b5e489946fbffb598dffd2b77dd02010d3f35216` now reads Windows file-version
+  resources through installed pywin32 instead. Live Retry created no new Edge,
+  Opera, or Chrome process/window while Browser and Host access stayed Ready.
+- Computer Use `list_apps` / `list_windows` found exactly one Launcher window,
+  and its accessibility tree is readable. A Windows.Graphics.Capture attempt
+  failed safely on this Windows 10 host with
+  `SetIsBorderRequired failed: Interfaccia non supportata. (0x80004002)`; retry
+  with a fresh exact window succeeded for text-only observation. No click,
+  permission, or setting changed. This limits that inspection helper's window
+  screenshots, not A0 Tag's backend implementation; preserve other visual
+  evidence paths and record whether the limitation remains.
+- The owner trace is complete and the uncommitted Windows package now provides
+  the private `tag_context` / `tag_replace` / `tag_release` contract through its
+  existing pywinauto, UIA, pywin32, Win32 Edit, Pillow, and DWM seams. Direct
+  Notepad and HWND-less WPF smoke tests passed exact Unicode span/caret and
+  verified-window screenshot checks; a WPF newline-normalization probe failed
+  closed and restored the original value. The final Windows backend file passes
+  `43/43`; the final complete importable Connector run subsumes the focused
+  backend and shared Computer Use gates.
+  No dependency, Core source, protocol, daemon, permission, or release state
+  changed.
+- Current test state: every importable Connector test passes `834 passed,
+  3 skipped`; unfiltered collection remains environment-blocked only by absent
+  declared `agent-client-protocol` and `textual-image` packages. Launcher passes
+  all `357/357` source tests across `39` files. Syntax compilation and
+  `git diff --check` pass; `ruff`/`mypy` are not installed and were not added.
+- Development and locally packaged Windows x64 acceptance are complete. Inline
+  FIM, profile routing, Unicode/whitespace/caret preservation, protected and
+  changed-target failures, trusted active-window crops, palette geometry and
+  attachment flow, ordinary Computer Use, permission/lease lifecycle, and
+  no-browser-fanout all passed. The packaged palette's final model-written
+  summary and model-owned `stop_session` were blocked only by an external
+  OpenRouter HTTP `402` credit ceiling after the product had already classified
+  the action, restored origin focus, opened Calculator through the selected
+  lease, and inspected exact Windows UIA state. Launcher disconnect closed that
+  session; the corrected literal-input owner seam independently produced and
+  visually verified `19 + 23 = 42`. Changing the user's provider/model limits
+  merely to repeat that external turn is out of scope. The final read-only
+  maintainer-alignment and cleanup audits pass; source and retained ignored
+  evidence/artifacts are ready for user inspection and later commit direction.
+
+### Windows acceptance checklist
+
+- [x] Exact repositories, initial/current Git state, required ancestry, host,
+  display, toolchain, process tree, selected Instance, gateway, and runtime are
+  recorded without exposing secrets or tracked personal path literals.
+- [x] Windows backend advertises `a0-tag` only with the complete private
+  context/replace/release contract.
+- [x] Focused automated parsing, protection, identity, range, Unicode,
+  whitespace/caret, rollback, screenshot, release, and public-action-isolation
+  tests pass for builtin and packaged Windows helpers.
+- [x] Connector focused and complete importable suites pass; accepted Linux/macOS
+  contracts remain intact.
+- [x] Launcher focused and complete source suites pass; the Windows Host access
+  wording and Retry/browser behavior have owner-correct evidence and fixes.
+- [x] Development Launcher uses the exact repo-local CLI, one selected open
+  Instance lease, and live `a0_tag_v1`; Settings survives save/reload and reaches
+  Ready with `Ctrl+Shift+Enter`.
+- [x] Native development inline FIM passes ASCII, surrounding text, no Enter,
+  Unicode, whitespace, caret, and `@a0.developer` routing.
+- [x] Protected/password and delayed changed focus/process/HWND/element/value/
+  range/caret cases fail closed before leaks or wrong-field insertion.
+- [x] Optional screenshot attaches only for a trustworthy exact active-window
+  PID/HWND/bounds crop; failure never substitutes the desktop.
+- [x] Command palette layout, drag, profile, microphone surface, attachment
+  chooser, close-before-work, origin restoration, and Main-decided command flow
+  pass on Windows.
+- [x] One harmless ordinary Windows Computer Use action is verified from a
+  fresh frame; geometry and session metadata are correct; no Linux/macOS/Xpra
+  fallback appears.
+- [x] Disable, tab close/reopen, Host disconnect/reconnect, Computer Use revoke/
+  restore, Retry, and Launcher shutdown leave no fallback lease, helper, worker,
+  listener, or orphan; terminal reset state is verified.
+- [x] Local packaged Windows x64 build passes identity, source-content, one FIM,
+  one command-mode, lifecycle, and cleanup gates without signing/publish/release;
+  the external model-credit limitation above is retained explicitly.
+- [x] Final read-only `frdel` alignment review finds no evidence-backed in-scope
+  correction remaining.
+- [x] Final DOX, diff, test, secret/privacy, process, artifact, evidence, and
+  recoverable-cleanup audits pass.
 
 ## 1. Objective
 
@@ -454,8 +683,8 @@ replacement without creating a second target or permission modality.
 1. Ubuntu 24.04 GNOME Wayland implementation and proof on this machine.
 2. Request remote Mac Mini only after Ubuntu acceptance.
 3. Implement/verify macOS AX capture/range handling and packaged permissions.
-4. Request Windows 11 only after macOS acceptance.
-5. Implement/verify Windows UI Automation capture/range handling.
+4. Move to the local Windows 10 x64 host only after macOS acceptance.
+5. Implement/verify Windows UI Automation capture/range handling there.
 6. X11 stays outside this MVP and its existing product gate is unchanged.
 
 ## 3. Current Baseline (2026-08-30)
@@ -716,6 +945,29 @@ tag_release
 - [x] Confirm live Ubuntu/Wayland/container/CLI facts.
 - [x] Create this ledger before feature-code edits.
 
+### Windows 10 x64 tranche (2026-09-01)
+
+- [x] Create the explicit Windows implementation/test/visual/docs goal.
+- [x] Read the complete ledger, Ponytail full, Windows live-E2E, and Computer
+  Use contracts before source work.
+- [x] Discover all three local Windows checkouts, inspect branches/remotes/
+  recent history/status, and pass both required handoff ancestry gates.
+- [x] Re-baseline Core after the user's upstream pull without reading or
+  touching its remaining untracked plugin-local state.
+- [x] Record the host, display/scaling, toolchain, development Launcher,
+  repo-local CLI, exact gateway process tree, selected Instance, Docker runtime,
+  live health, supplied screenshot, and Computer Use observation.
+- [x] Correct the active resume capsule, platform status, queue, and Windows
+  acceptance inventory while preserving the complete macOS chronology.
+- [x] Read every owner DOX chain and trace the real Launcher/Connector/Windows
+  backend/setup/browser flow end to end.
+- [x] Implement the smallest complete owner-correct Windows contract and pass
+  its focused, direct-native, and relevant cross-platform test gates.
+- [x] Pass development and packaged native acceptance plus security/lifecycle
+  failure gates; retain the external packaged model-credit limitation exactly.
+- [x] Complete the required read-only `frdel` maintainer-alignment review.
+- [x] Complete final DOX/evidence/cleanup audits.
+
 ### Connector: headless tagged run
 
 - [x] Add CLI arguments with validation.
@@ -925,18 +1177,29 @@ tag_release
 ### Remote platform gates
 
 - [x] Ubuntu acceptance complete; ask user for Mac Mini.
-- [ ] Implement/verify macOS tag capture/replace and packaged permissions.
-- [ ] macOS acceptance complete; ask user for Windows 11.
-- [ ] Implement/verify Windows tag capture/replace and packaged permissions.
+- [x] Implement/verify macOS tag capture/replace and packaged permissions.
+- [x] macOS acceptance complete; move to the local Windows 10 x64 host.
+- [x] Implement/verify Windows 10 x64 tag capture/replace and packaged behavior.
 
 ## 9. Immediate Work Queue
 
-1. The user opens the selected Instance tab and feel-tests native file/folder
-   selection, voice first-use information, dragging, and Chrome/Discord
-   invocation. The selected tab lease restores `ready` and the guarded shortcut
-   exactly as before.
-2. Once that Ubuntu feel check is accepted, request the Mac Mini and resume the
-   existing macOS then Windows platform gates.
+- [x] Trace, fix, live-verify, and separately commit the two user-authorized
+  Windows Host-access/Browser Retry issues at their shared owner seams.
+- [x] Read the remaining owner DOX chains, trace the complete gateway/helper
+  flow, and record the minimum existing-seam Windows design.
+- [x] Implement the complete private Windows context/replace/release backend;
+  pass focused, direct native, relevant cross-platform, and importable full-
+  remainder Connector gates without installing dependencies.
+- [x] Finish static/security diff review and the Launcher Windows portability/
+  full-suite gate; correct only evidence-backed task-owned issues.
+- [x] Synchronize one development Launcher to the exact repo-local CLI and prove
+  native FIM, palette, Computer Use, privacy, geometry, and lifecycle behavior.
+- [x] Build the existing local Windows x64 package path and repeat the required
+  FIM/command/lifecycle gates without publish, release, or signing changes.
+- [x] Run the final read-only `frdel` alignment review and close its one
+  evidence-backed private-target lifecycle gap.
+- [x] Complete DOX, diff, secret, process, evidence, and recoverable cleanup
+  audits.
 
 ## 10. Verification Commands
 
@@ -4942,6 +5205,1349 @@ PACKAGED FIM OK
   remains modified in Launcher. Commit it alone as the final macOS handoff;
   do not push. The next tranche belongs to Windows 10 x64 on its own machine.
 
+### 2026-09-01 — Windows 10 x64 tranche preflight and handoff gate
+
+- Created the requested active goal and sequenced the ancestry-gated Windows
+  implementation, automated tests, development/package proof, final `frdel`
+  review, and cleanup work. CodeRabbit is explicitly excluded.
+- Read the complete 5,018-line ledger before its first Windows edit, plus the
+  complete Ponytail full, Windows live-E2E, Computer Use, screenshot guidance,
+  and Windows confirmation contracts. The Windows live-E2E skill's Mac
+  coordinator paths and fixed port were replaced with facts discovered locally.
+- Resolved the three exact Windows checkouts, read their root DOX contracts,
+  and inspected status, branches, remotes, and 12 recent commits. Connector and
+  Launcher began clean on `development`; Core began on `ready` with pre-existing
+  local runtime/user state. No such content was opened.
+- Required ancestry passed: Connector `ca4f05cf...` and Launcher `0061b097...`
+  both resolve as commits, exactly equal their checkout HEADs, and return exit
+  `0` from `git merge-base --is-ancestor <hash> HEAD`. No fetch was useful and
+  no Git state was mutated.
+- During preflight the user noticed Core was behind and pulled from upstream.
+  Re-baselining found current Core HEAD `4d10f601...`, aligned with
+  `upstream/ready`; only two pre-existing untracked plugin-local paths remain.
+  The release container stayed at runtime commit `6a6cecff...`, HTTP 200, so
+  the pull did not alter live Core code or justify a Core edit/restart.
+- Native inventory proved Windows 10 Pro build `19045`, x64, one 3840 x 2160
+  primary display at 150% scaling, interactive session 1, the exact local
+  Launcher/Connector toolchain, and one selected outbound gateway using the
+  repo-local CLI with all five inherited scopes. Docker Desktop `desktop-linux`
+  owns one `agent0ai/agent-zero:ready` container at port `49235`.
+- Preserved the user's screenshot outside tracked source. It proves Connected
+  Host access while the status incorrectly says `Checking macOS permissions...`.
+  The separate user report that Retry opens Edge, Opera, and Chrome together is
+  recorded for caller tracing rather than presumed root cause.
+- Computer Use found exactly one Launcher window. Its Windows accessibility
+  tree is readable; Windows.Graphics.Capture failed safely with unsupported
+  `SetIsBorderRequired` on this Windows 10 host, and a fresh exact-window retry
+  succeeded for text-only observation. No UI input, permission, or setting was
+  changed.
+- Exact raw paths/commands/salient outputs and the screenshot hash live in the
+  ignored preflight evidence directory named in **0B**. This first tracked
+  Windows edit changes only the ledger; product source, dependencies, runtime,
+  Core, permissions, versions, and release state remain untouched.
+- The user subsequently authorized one narrow optional commit before the long
+  Windows backend tranche: if both reported Launcher issues are fixed and
+  verified, commit only those fixes and their tests together. Do not include
+  this ledger, backend work, unrelated changes, or a push in that exception.
+- Completed end-to-end owner tracing for both reports before editing. The
+  Windows wording is renderer-owned: `computerUseSetupState()` already receives
+  the gateway's `windows` backend identity, but two generic checking fallbacks
+  in `host-access-dialog.js` unconditionally say `Checking macOS permissions…`.
+  The shell's identical string is inside the already-correct macOS-only setup
+  gate and is not the Windows source.
+- Retry itself only tears down and recreates the selected tab's existing
+  `a0 gateway` lease; it never sends `prepare_browser`. The multi-browser side
+  effect is Connector-owned startup metadata: every gateway status enumerates
+  browser profiles, `_profile_support_reason()` asks
+  `browser_major_version()` for every detected family, and that helper executes
+  each GUI browser with `--version`. On Windows those GUI executables may open
+  normal browser windows instead of behaving like console programs. Native,
+  non-launching file metadata reports Chrome `152.0.7977.65`, Edge
+  `152.0.4191.53`, and Opera `134.0.5954.66` on this host. The minimum owner fix
+  is to read the already-installed pywin32 file-version resource on Windows and
+  preserve the existing subprocess path elsewhere; no dependency or Launcher
+  Retry semantic change is justified.
+- Next action: add one focused renderer regression for backend-correct checking
+  copy and one focused Connector regression proving Windows version discovery
+  never executes the browser, implement those two owner fixes, run their focused
+  and relevant suites, visually verify the live modal and process behavior, then
+  stage and commit only the fixes/tests if every check passes.
+- Implemented the two minimum owner changes with no new dependency or retry
+  behavior: the renderer derives checking copy from the advertised Computer Use
+  backend, and Connector uses `win32api.GetFileVersionInfo()` instead of
+  executing GUI browsers on Windows. Focused checks pass: Launcher Host access
+  component `20/20`; Connector Windows no-launch regression `1/1` selected from
+  54 collected tests. Node emitted only the pre-existing typeless-package ESM
+  performance warning. No runtime process, permission, or setting changed for
+  these automated checks.
+- Next action: compare exact browser process identities before/after native
+  version lookup, then run the complete relevant Launcher and Connector browser/
+  gateway suites before live Retry and visual proof.
+- Native Windows proof passed against the installed candidates: exact browser
+  PID sets were identical before and after the new lookup, with no new PID;
+  returned majors were Chrome `152`, Edge `152`, and Opera `134`. This exercises
+  the real pywin32 resource path and does not invoke any browser executable.
+- Connector's complete Browser plus gateway suites pass `66/66` in `6.92 s`.
+  Launcher's repository-wide `node --test` ran `357` tests: `354` passed and
+  three unrelated Windows-host assumptions failed—Italian locale date text in
+  `official-versions.test.mjs`, POSIX chooser paths in `a0_tag.test.js`, and a
+  POSIX Compose path expectation in `docker_cli.test.mjs`. The changed Host
+  access suite remains `20/20`; none of the three failures touches either
+  reported fix. Preserve them for the Windows test-portability pass rather than
+  widening the optional report-fix commit.
+- Next action: reload the development renderer, verify backend-correct copy and
+  one-lease Retry with exact browser PID/process evidence, then decide whether
+  the narrow report-fix changes meet the user's isolated commit condition.
+- Restarted development Electron directly through the existing Forge binary so
+  the edited renderer and repo-local Connector source were loaded. Computer Use
+  continued to provide exact-window accessibility text, but this Windows 10
+  build still rejects its WGC geometry path. Chromium's UIA `InvokePattern`
+  opened the Instance tab and then deadlocked the first restarted Electron
+  process; Windows marked it Not Responding. Terminated only that exact
+  task-owned Electron tree, confirmed no gateway remained, restarted cleanly,
+  and did not reuse InvokePattern. Subsequent interaction used fresh,
+  DPI-correct exact-HWND screenshots and win32 foreground/mouse input. This is a
+  test-harness/session observation, not a product source failure.
+- Development visual wording acceptance passed. Clicking **Check Computer Use**
+  on the exact Host access modal produced `Checking Computer Use…`, with no
+  macOS wording, in ignored screenshot
+  `../agent-zero/tmp/a0-tag-windows-20260901/reported-issues/host-access-windows-checking.png`
+  (SHA-256 `979c1f5875d5aa541c69246899670201ff92257f97239981b2ca938971a860ea`).
+  The operation returned to Connected without changing saved scopes.
+- Development Retry acceptance passed through a real recoverable lease failure.
+  Before Retry, browser roots were exactly Chrome PID `16700`, Edge PID `17016`,
+  and Opera PID `22596`; visible browser windows were exactly Chrome
+  `16700:7214024` and Opera `22596:9307424`. After Retry, both sets were byte-for-
+  byte identical: no new root and no new visible browser window. Launcher
+  restored one repo-local gateway; the settled current root is PID `9440` with
+  the same gateway identity, selected Instance, workspace, and five scopes.
+  Screenshot
+  `../agent-zero/tmp/a0-tag-windows-20260901/reported-issues/host-access-after-retry.png`
+  (SHA-256 `592a0ef1450b43e78285386c3f19287d11b710dcd978270d3350c9148f31da9d`)
+  proves Connected after recovery while the original Retry control remains in
+  the open dialog. No browser, permission, setting, fallback lease, or Core
+  runtime was created or changed by Retry.
+- The two reported fixes now satisfy their focused, relevant-suite, native
+  process, lifecycle, and visual checks. Next action: perform the DOX/diff/status
+  gate, stage only the four fix/test files across their owning repositories, and
+  create the user's narrowly authorized isolated commit(s); keep this ledger and
+  every later Windows backend change unstaged.
+- DOX pass completed: the nearest Launcher component and Connector source
+  contracts now state backend-correct setup copy and non-launching Windows
+  browser metadata discovery. `git diff --check` passes in both repositories;
+  only expected CRLF conversion notices were emitted. Re-ran the finalized
+  Connector regression after import/cache-cleanup polish: `1/1` passed. The DOX
+  files and this ledger remain explicitly excluded from the narrow commit gate.
+- Used the user's narrow commit authorization exactly once per owning Git
+  repository. Launcher commit
+  `4de2ed57e75b56190b8a6c49952ded6370728def` is
+  `Fix Windows Computer Use setup wording` and contains only
+  `host-access-dialog.js` plus its test. Connector commit
+  `b5e489946fbffb598dffd2b77dd02010d3f35216` is
+  `Avoid launching browsers during Windows discovery` and contains only
+  `host_browser_common.py` plus its test. No ledger, DOX, backend, dependency,
+  unrelated file, push, tag, PR, or release was included. Remaining tracked
+  state is intentionally just Launcher `TODO.md` and its component `AGENTS.md`,
+  plus Connector `src/agent_zero_cli/AGENTS.md`, before Windows backend work.
+- The development Launcher remains running through Forge session `80721`; its
+  selected Instance is open and the current repo-local gateway lease is
+  Connected. Next action: resume the main tranche by reading both Windows helper
+  DOX chains completely, tracing builtin/packaged helper parity and accepted
+  Wayland/macOS owner contracts, then implement the smallest complete Windows
+  private A0 Tag contract without touching Core.
+- Re-read the complete Connector package, Windows, macOS, and Wayland backend
+  DOX chains before Windows implementation. The established owner boundary is
+  explicit: `a0-computer-use-windows` must advertise `a0-tag` only after its
+  helper implements the complete private capture/replace/release contract;
+  `ComputerUseManager` already keeps those actions out of the public remote
+  action surface, and the gateway already derives `a0_tag_v1` solely from the
+  selected backend feature metadata. No Agent Zero Core defect or edit is
+  indicated. Next action: trace the accepted native tag sessions and the
+  existing Windows UIA/session/capture seams end to end, record the minimal
+  owner-correct design, then edit only the Windows package and its tests unless
+  that trace proves a shared-contract change is unavoidable.
+- Native seam probe, attempt 1: launched one disposable Notepad process, wrote
+  synthetic non-private tag text through UIA, and tried to inspect the global
+  focused element's TextPattern. `IUIA().GetFocusedElement()` returned a COM
+  element without a usable TextPattern in that focus state, so the probe failed
+  before any range read or replacement and the exact task-owned Notepad process
+  tree was force-closed with no file saved. This demonstrates that the backend
+  must resolve and verify the focused UIA wrapper through the foreground-window
+  tree (and treat a missing pattern as unavailable), rather than trusting one
+  unchecked global-focus call. Next action: inspect the known edit wrapper and
+  its advertised UIA patterns, then test bounded range operations only after
+  foreground HWND/process/focus equality is proved.
+- Native seam probe, accepted path: a fresh disposable Windows 10 Notepad Edit
+  control advertised ValuePattern but no TextPattern, while exposing an exact
+  child HWND, matching process, foreground top-level HWND, keyboard focus, and
+  stable UIA runtime ID. Existing Win32 Edit messages then returned the exact
+  UTF-16 caret (`EM_GETSEL`), bounded logical line (`EM_LINEFROMCHAR`,
+  `EM_LINEINDEX`, `EM_LINELENGTH`, `EM_GETLINE`), and performed one exact
+  `EM_SETSEL` / `EM_REPLACESEL` transaction. Synthetic text containing emoji,
+  accents, CJK, CRLF, indentation, trailing space/tab, prefix, and suffix became
+  the byte-for-byte expected Unicode result; untouched content remained intact
+  and the resulting caret offset was exact. The task-owned Notepad process was
+  closed without saving. This is the minimum native replacement seam; a second
+  disposable WPF probe will determine whether HWND-less modern fields can use
+  TextPattern selection plus the already-installed pywinauto Unicode input path
+  without weakening exact verification or rollback.
+- Modern-field seam probe, accepted path: a disposable STA WPF `TextBox` exposed
+  the complementary UIA shape—top-level foreground HWND and PID matched, the
+  focused field had handle `0` but a stable runtime ID, `IsPassword=false`, and
+  both TextPattern and ValuePattern. Bounded TextPattern movement stopped at the
+  document boundary, a backward exact `FindText` resolved the Unicode tag plus
+  untouched trailing space/tab with its end exactly equal to the caret, and a
+  range-only selection followed by pywinauto's native Unicode input replaced
+  only the tag. ValuePattern verification proved the exact expected full value;
+  a collapsed TextPattern range then restored the caret after untouched trailing
+  whitespace. Emoji, accents, CJK, CRLF, indentation, prefix, and suffix all
+  survived exactly. Every disposable WPF process tree was terminated afterward;
+  two earlier WPF harness attempts exposed no product change (one title wait and
+  one UI-thread-blocked tree), and their processes were also cleaned. The
+  minimal design is therefore two evidence-backed native branches inside the
+  existing Windows runtime: HWND Edit messages when available, otherwise
+  TextPattern exact selection plus existing Unicode input only when bounded
+  ValuePattern verification makes rollback possible; unsupported providers
+  remain capture-only/fail-closed.
+- Implemented the first owner-only Windows backend slice in the existing
+  `a0-computer-use-windows` runtime and feature metadata: private tag dispatch,
+  exact foreground HWND/PID/UIA runtime-element/focus binding, password rejection
+  before text/tree/screenshot capture, bounded context parsing, native Edit and
+  UIA TextPattern replacement paths, exact full-value/range/caret revalidation,
+  Unicode-safe insertion, best-effort rollback, target TTL/release/teardown, and
+  optional DWM-bounds active-window crop with no desktop fallback. Unsupported,
+  read-only, oversized, or unverifiable providers remain fail-closed. No shared
+  Connector manager, Launcher controller, dependency, metadata, release, or Core
+  file changed. Syntax compilation passes and the pre-existing Windows backend
+  suite remains green `23/23` in `1.36 s`. Next action: add focused contract and
+  adversarial tests for every new security/lifecycle branch, then refine only
+  failures those tests or the real host expose before live capability use.
+- Shared-contract regression gate after feature advertisement passes: Connector
+  `test_computer_use_contract.py` plus `test_computer_use.py` are green `62/62`
+  in `1.23 s`; `git diff --check` reports no whitespace error (only expected
+  Windows LF-to-CRLF notices). This confirms the existing private manager and
+  public-action isolation still accept the Windows feature metadata without a
+  cross-platform or Core edit. Next action remains focused Windows tag tests.
+- Added focused Windows backend coverage for both native Edit and HWND-less UIA
+  TextPattern controls, Unicode/profile parsing, exact prefix/suffix/trailing
+  whitespace/caret preservation, multiline replacement, verified-window PNG,
+  protected-field read/capture ordering, process/HWND/runtime-element/value/
+  caret revalidation, native and UIA normalization rollback, read-only behavior,
+  target release/expiry/session teardown, unverified-bounds screenshot refusal,
+  and private/public action isolation. The focused Windows package suite is now
+  green `36/36` in `1.14 s`. Next action: add the remaining malformed-query,
+  wrong-token, stdio and real-host native seams, then run the complete package
+  and connector contract suites before enabling A0 Tag in Launcher.
+- Real repo-local package smoke passed through a fresh unsaved Notepad process:
+  the runtime started an interactive `launcher-tag` session, bound the exact
+  foreground top-level HWND/PID and focused child Edit HWND/runtime ID, parsed
+  synthetic `@a0.dev write précis 🌟`, advertised direct replacement, returned
+  a non-empty bounded UIA tree, and attached only a `23,589`-byte verified-window
+  PNG (SHA-256 `6bd286a6252a4c3d448bfa9bc331246ff44b9314368716de3ceb2ffba4c1a47c`).
+  Replacement with `Réponse 終 ✨` produced the exact expected CRLF/emoji/CJK/
+  indentation/trailing-space-tab/prefix/suffix value and caret; the runtime and
+  exact task-owned Notepad process tree were closed without saving. Next action:
+  run the same real runtime against an HWND-less WPF TextBox, including its
+  TextPattern caret reconstruction and Unicode input path.
+- Real WPF runtime smoke, attempt 1, failed closed before capture or mutation:
+  exact focus/foreground identity and bounded text/value capture succeeded, but
+  the first production `_uia_range_for_span` check found that the two individually
+  verified Unicode caret boundaries did not compose into a range whose
+  TextPattern `GetText()` equaled the requested tag. The runtime raised
+  `A0_TAG_TEXT_UNAVAILABLE`; no text or screenshot changed, and the exact
+  disposable WPF process tree was terminated. Unit fakes did not model this
+  provider boundary behavior, so capability use remains disabled. Next action:
+  instrument the real start/end TextPattern ranges, correct the smallest native
+  endpoint operation, and add a regression that reproduces the provider result
+  before repeating live smoke.
+- Root cause and correction: WPF's provider expands a degenerate range to the
+  enclosing character after `TextRange.Move`, even though the requested prefix
+  boundary itself is correct. Collapse the moved range back to its start before
+  composing endpoints. The fake TextPattern now reproduces this provider shape,
+  and all focused Windows tests still pass `36/36` (`1.51 s`). No parser,
+  permission, protocol, dependency, or accepted-platform code changed.
+- Real WPF runtime smoke then passed end to end on a fresh handle-`0` TextBox:
+  exact top-level HWND/PID plus UIA runtime ID/focus binding, `@a0.architect`
+  parsing, direct-replacement support, exact Unicode input and ValuePattern
+  verification, untouched CRLF/emoji/CJK/space-tab/prefix/suffix, and exact
+  pre/post-caret ranges all succeeded. The only screenshot was a verified active-
+  window crop (`12,016` bytes; SHA-256
+  `0bb4f1da148054f935e7b925b73e21091aa80b07eaf291587ce5dcac9da2314e`).
+  The runtime and exact disposable PowerShell/WPF tree were closed. Both native
+  Windows target families are now proven directly; next action is remaining
+  malformed/stdio/security checks and complete relevant suites before live
+  Launcher capability advertisement.
+- Recorded the synthetic direct-runtime commands/results and cleanup state in
+  ignored evidence
+  `../agent-zero/tmp/a0-tag-windows-20260901/backend/direct-runtime-smoke.txt`;
+  it contains no user content or secret. The PNGs remained in-memory contract
+  artifacts and are identified by exact byte count/hash rather than being
+  persisted as raw screen content.
+- Multiline WPF probe exposed one remaining provider/input edge and failed safely:
+  replacing a tag with `First ✨\nSecond` did not verify as the exact requested
+  value through the current per-UTF-16 `KEYEVENTF_UNICODE` path. The backend
+  raised `A0_TAG_REPLACE_FAILED`, ValuePattern rollback restored the complete
+  original tag/value exactly, and the disposable WPF tree was terminated. A
+  multiline replacement is within the existing 16,384-character contract, so
+  this is not being waived. Next action: inspect the pre-rollback provider value
+  and use the narrowest existing UIA/native input operation that preserves exact
+  line endings; retain rollback if the editor normalizes them.
+- The control-character probe showed WPF ignored injected `U+000A` rather than
+  changing unrelated text; exact verification detected the missing newline and
+  ValuePattern rollback restored the original value/caret. This is the required
+  fail-closed normalization behavior, so no full-value primary write, clipboard,
+  dependency, or alternate automation stack was added. Single-line exact-span
+  behavior remains accepted; app/provider normalization of multiline input will
+  surface as a safe replacement failure rather than silent corruption.
+- Added malformed/oversized query, early-caret, wrong-token, and stdio private-
+  action coverage. The first run exposed only a test placement mistake: three
+  teardown assertions had been appended inside the parameterized rejection test
+  and re-invoked the intentionally invalid tag. Moved those unchanged assertions
+  back to the lifecycle test; no production change. The focused Windows suite is
+  green `40/40` in `1.26 s`.
+- DOX pass updated the Connector root platform contract, Windows package owner
+  contract, and test contract for Windows private-tag behavior, protected-field
+  ordering, both native target families, exact rollback/caret rules, and the
+  no-desktop-screenshot invariant. The complete relevant cross-platform backend,
+  manager, gateway, and contract selection passes `211/211` in `5.12 s`, covering
+  Windows plus accepted Wayland/macOS/X11 metadata and behavior. No proven Linux
+  or macOS contract changed. Next action: run the full Connector suite and static
+  diff/import hygiene, then restart only the selected Launcher gateway so its
+  repo-local helper advertises the newly complete Windows capability.
+- Repository-wide Connector attempt `\.venv\Scripts\python.exe -m pytest tests
+  -q` stopped during collection before running tests because this existing venv
+  has no importable `acp` module (`tests/test_acp.py: import acp`), despite the
+  project declaring `agent-client-protocol`. This is an environment/dependency
+  installation gap, not a test failure or Windows code result; no dependency or
+  metadata was changed because project DOX requires approval before installing.
+  Next action: inspect the installed distribution state, run the full remaining
+  suite excluding only `test_acp.py`, and continue live work; retain this exact
+  full-suite blocker for acceptance unless an already-installed repo-local
+  interpreter resolves it or the user authorizes environment repair.
+- The auditable no-install remainder run
+  `.venv\Scripts\python.exe -m pytest tests --ignore=tests/test_acp.py -q`
+  completed in `57.78 s`: `837 passed, 1 skipped, 21 failed`. All `21`
+  failures are outside the task-owned Windows backend: `17` import the absent
+  optional `textual_image` distribution, `2` directly import Textual's
+  Linux-only `termios` driver on Windows, `1` compares a synthetic Colima Unix
+  socket through Windows path semantics, and `1` has a stale expected Core
+  browser-plugin settings dictionary that omits the newly pulled
+  `keyboard_layout` and `keyboard_variant` defaults. The newly added Windows
+  suite and the `211`-test relevant cross-platform gate remain green. No
+  dependency was installed and no unrelated source was changed. Next action:
+  classify the four non-package portability/stale-expectation failures against
+  their owning DOX and fix test expectations only where the test is intended to
+  be host-portable; retain the absent optional distributions as an exact full-
+  suite environment limitation unless an existing project install path provides
+  them.
+- Failure ownership trace confirmed three test-fixture corrections, with no
+  product-code change: the Colima profile test assumed `HOME` controls
+  `Path.home()` on Windows and should stub `Path.home()` directly; the two
+  Textual decoder tests exercise the Linux driver and should not import it on
+  non-Linux hosts; and the isolated pulled-Core browser fixture must expect the
+  current normalized `keyboard_layout` / `keyboard_variant` defaults. The other
+  `17` failures and the collection blocker are solely the same absent declared
+  distributions (`textual-image` and `agent-client-protocol`) in this incomplete
+  venv. Next action: apply the three minimal test-only corrections, run their
+  focused checks, then rerun every currently importable Connector test.
+- Applied only those test/DOX corrections. Focused verification
+  `.venv\Scripts\python.exe -m pytest tests\test_instance_discovery.py
+  tests\test_plugin_backend.py tests\test_textual_compat.py -q` passes
+  `72 passed, 2 skipped` in `2.49 s`; the two skips are now explicitly the
+  Linux-only Textual driver checks. No production source, Core file, dependency,
+  or accepted-platform behavior changed. Next action: run the importable
+  remainder with the two absent-distribution files isolated, then complete
+  static/diff review of the Windows implementation.
+- The complete importable Connector remainder now passes:
+  `.venv\Scripts\python.exe -m pytest tests --ignore=tests/test_acp.py
+  --ignore=tests/test_devtools.py --ignore=tests/test_image_render.py -q`
+  returned `830 passed, 3 skipped` in `56.00 s`. The three excluded files are
+  isolated solely because this venv lacks their declared
+  `agent-client-protocol` / `textual-image` imports; the earlier unfiltered
+  attempt recorded every one of those environment failures. Next action:
+  inspect the complete task-owned diff for unnecessary code and security edge
+  gaps, run static/focused gates after any correction, then synchronize only the
+  selected live gateway.
+- Static hygiene after the portability fixes passes: `py_compile` accepted the
+  Windows runtime/shared modules and all four changed test modules;
+  `git diff --check` reports no whitespace error (only Windows line-ending
+  notices). This venv has neither `ruff` nor `mypy`; no tool/dependency was
+  installed. The source read confirmed protected-field detection precedes field
+  text, UIA-tree, and screenshot reads; exact PID/HWND/runtime-element/focus,
+  full value/range/caret checks precede mutation; both mutation paths verify the
+  exact expected value and final caret, with bounded best-effort rollback on
+  normalization. Next action: finish the remaining mutation/lifecycle review
+  and Launcher suite before advertising the live capability.
+- Fresh Launcher discovery `node --test` reproduced exactly the prior Windows
+  baseline: `354 passed, 3 failed` across `357` tests in `12.84 s`. The failures
+  are test-only host assumptions: an exact English date despite intentional
+  locale formatting, POSIX literals despite A0 Tag's intentional `path.resolve`,
+  and a POSIX joined Compose filename despite the adapter's intentional native
+  `path.join`. Owner/caller inspection found no product defect. Next action:
+  make those three assertions derive their locale/native paths with the same
+  standard Node APIs, then rerun the focused files and repository-wide suite.
+- Replaced only the three platform-literal test expectations with Node's native
+  `Date.toLocaleDateString`, `path.resolve`, and `path.join` results; production
+  code is unchanged. The focused official-version/A0 Tag/Docker adapter run
+  passes `36/36` in `0.56 s` (plus the pre-existing typeless-ESM warning). Next
+  action: rerun repository-wide Launcher discovery and static checks.
+- Launcher repository-wide discovery is now green on Windows: `node --test`
+  returned `357 passed, 0 failed, 0 skipped` in `12.52 s`. The only output
+  outside test results is the existing typeless-package ESM performance warning;
+  no package metadata was changed merely to remove it. Next action: finish the
+  native Edit mutation-race audit, rerun the Windows/relevant Connector gates if
+  it yields a correction, then begin development live synchronization.
+- Development process re-inventory found Forge still attached, Electron main
+  PID `17896`, and exactly one repo-local gateway root PID `9440` with venv/base-
+  Python children `19424` / `13204`. A first visual probe used DPI-virtualized
+  `GetWindowRect` coordinates and therefore included neighboring desktop
+  content instead of an exact Launcher crop. It was rejected immediately,
+  never accepted as evidence, and the exact PNG was deleted. Windows visual
+  evidence will use only DWM physical extended-frame bounds, matching the new
+  backend's fail-closed screenshot seam.
+- The corrected backend-owned capture focused exact Launcher HWND `7210194` /
+  PID `17896`, obtained DWM physical bounds `(1582,461)-(3482,1651)`, and
+  produced an exact `1900 x 1190` PNG (`62,226` bytes; SHA-256
+  `7c5d46d1b4d92de56d66ae771dfe849b334314627fce96c4bd4beec647ce38eb`)
+  at ignored evidence `development/launcher-dwm-before-live.png`. Visual review
+  shows only the Launcher frame and its Connected Host access modal; no desktop
+  or neighboring application content is present. Next action: invoke that
+  modal's named Retry control with verified bounds so only the selected gateway
+  reloads the repo-local backend, then compare gateway/browser process sets and
+  capability metadata.
+- With the exact Launcher window foreground and its DWM bounds unchanged, native
+  input clicked only the visible **Retry** button at physical point
+  `(2077,1271)`. Old repo-local gateway PID `9440` exited and exactly one new
+  root PID `25528` appeared under the same Electron PID `17896`; the pre-existing
+  Chrome, Edge, and Opera roots (`16700`, `17016`, `22596`) all remained the same.
+  A post-reload exact-window PNG is `63,063` bytes, SHA-256
+  `935cc7117588c5811fbaed60ef1d495009f8f2294e174774e258588c047a14ae`,
+  at `development/host-access-after-backend-reload.png`; visual review shows
+  Connected, all five scopes on, and no error or permission prompt. Next action:
+  open Launcher Settings, enable/select/save A0 Tag, and verify that this one
+  freshly loaded gateway exposes `a0_tag_v1` and Ready status.
+- Visual Settings workflow used only verified Launcher coordinates: opened the
+  A0 Tag sub-tab, toggled it on, selected the sole exact `agent-zero` Instance,
+  observed the live default `Agent 0 · @a0.agent0` profile, and clicked the one
+  **Save settings** action. Status changed from `Disabled` to
+  `Ready. Tag a field or use the shortcut anywhere.`; because controller
+  readiness requires the selected open lease, Computer Use, and advertised
+  capability, this is live proof that new gateway PID `25528` loaded the
+  repo-local Windows backend and advertises `a0_tag_v1`. Exact visual evidence
+  `development/a0-tag-settings-saved.png` is `153,376` bytes, SHA-256
+  `5f6a148c57567d4aa849a608923e26ea33aeb068635d6c4551bfdc53535f7578`.
+  Next action: reload the renderer to prove persistence, then run synthetic
+  native Notepad inline FIM and inaccessible-surface command-palette flows.
+- Clicked Launcher **Refresh** and waited for renderer/state restoration. The
+  exact same A0 Tag sub-tab returned with the toggle on, `agent-zero` selected,
+  `Agent 0 · @a0.agent0` selected, and status still Ready. Ignored exact-window
+  evidence is `development/launcher-after-refresh.png`. This passes the
+  development save/reload persistence gate without changing the gateway PID or
+  opening another Instance lease. Next action: native Notepad inline FIM.
+- Notepad FIM fixture setup had two fail-closed harness-only attempts before the
+  accepted pre-state: pywinauto's convenience setter expanded already-CRLF text
+  after allocating the shorter buffer and raised before mutation; then focusing
+  the child Edit HWND directly made that child the reported foreground HWND, so
+  DWM returned no top-level bounds and the backend screenshot seam rejected it.
+  No A0 Tag invocation occurred in either attempt. The accepted setup writes
+  only synthetic text with native `WM_SETTEXT`, foregrounds exact top-level
+  Notepad HWND `3146794` / PID `24152`, focuses child Edit HWND `4850878` by a
+  visible click, and restores the exact UTF-16 caret `108`. The pre-value hash is
+  `06b9c01aeed4f65562b1e412be26fe1187e4bd20532732a7ffff612b0a18fdf8`;
+  exact DWM bounds `(1695,780)-(3607,1856)` produced a `1912 x 1076`, `29,628`-
+  byte PNG with SHA-256
+  `47af5b89e67f948e85e20ea04fbbf3a8326e5143281c07f978b47f68aaf2ff2a`
+  at `development/fim-notepad-before.png`. Visual review confirms prefix,
+  suffix, Unicode request, trailing whitespace/caret, and no submission. Next
+  action: press the registered physical Windows shortcut and audit exact field,
+  chat, child-process, and screenshot behavior.
+- First real development FIM invocation delivered `Ctrl+Shift+Enter` to exact
+  foreground Notepad and did not insert a newline. After `28 s`, the field was
+  still byte-for-byte original (same SHA-256), caret remained `(108,108)`, and
+  no tagged-headless child remained. Launcher owned one visible result window
+  and the origin Notepad stayed foreground. Exact DWM overlay capture
+  `development/fim-first-result-overlay.png` is `588 x 342`, `39,618` bytes,
+  SHA-256
+  `d9cb5e6f3be1b84ef35965c07b06211c9f4668be5c4f1bae78f795344516ff4a`;
+  visual review reports `A0 Tag could not finish` with
+  `'charmap' codec can't encode character '\u2713' in position 286`. This is an
+  in-scope Windows Unicode pipe failure found only through the real Launcher/
+  gateway path; fail-closed behavior is correct, but Unicode FIM is not
+  accepted. No Core edit is indicated. Next action: trace all Launcher-to-CLI,
+  Connector-to-helper, and JSONL stdin/stdout encodings; reproduce at the
+  smallest local boundary and fix the single owner seam.
+- The encoding trace reproduced the live boundary without Launcher state:
+  both an interactive repo-local CPython probe and the same interpreter spawned
+  by Node with all three standard streams piped reported
+  `('cp1252', 'cp1252', 'cp1252')`. Launcher correctly treats both child pipes
+  as UTF-8, but Python's Windows defaults therefore decode incoming gateway/tag
+  JSONL and encode outgoing JSONL as the active ANSI code page. Escaping only
+  the failing response would leave incoming Unicode prompts/replacements
+  vulnerable. `pyproject.toml` routes the sole `a0` console script through
+  `agent_zero_cli.__main__:main`; its `gateway` and `headless` branches are the
+  common machine-protocol seam, while the interactive Textual path is separate.
+  The minimum owner-correct correction is therefore Windows-only UTF-8
+  reconfiguration of stdin/stdout/stderr before those two branches, with one
+  cp1252-backed exact-Unicode regression. This changes no Launcher, Core,
+  dependency, protocol shape, or accepted Linux/macOS execution path. Next:
+  implement that seam, run focused/shared gates, restart only the selected
+  gateway, dismiss the existing error overlay, and retry the preserved exact
+  Notepad fixture.
+- Implemented the owner correction in Connector only: on Windows,
+  `agent_zero_cli.__main__.main()` now reconfigures stdin/stdout/stderr to UTF-8
+  immediately before dispatching `gateway` or `headless`. It deliberately does
+  not touch the interactive TUI, ACP, Launcher, Core, protocol payloads, or
+  non-Windows startup. A cp1252-backed in-memory regression proves exact
+  `WINDOWS_✓_café_世界` JSON can be decoded and re-encoded after the seam is
+  applied, and an entrypoint route assertion proves tagged-headless receives
+  it. Focused entrypoint/gateway/headless verification passed `41 passed in
+  2.35s`; `git diff --check` has no errors (only Git's existing LF-to-CRLF
+  checkout notices). Next: run the broader shared gate, restart the single
+  selected gateway, and retry the preserved live Notepad invocation.
+- Post-fix shared verification passed: the same complete importable Connector
+  command now reports `831 passed, 3 skipped in 59.63s` (the prior `830` plus
+  the new UTF-8 regression). To load the edit without killing processes behind
+  Launcher's ownership, the visible Host access **Disconnect** action was used:
+  the entire old gateway/helper chain exited, the A0 Tag status changed to
+  `Waiting for the selected Instance Host access connection.`, and exact DWM
+  evidence is `development/host-access-disconnected-utf8.png`. The visible
+  **Reconnect** action then spawned exactly one new repo-local gateway chain,
+  rooted at `a0.exe` PID `12120` under Electron PID `17896`; its command retains
+  the exact selected Instance, gateway ID, workspace, and five scopes. Status
+  returned to Ready, evidence is
+  `development/host-access-after-utf8-reconnect.png`, and the same pre-existing
+  browser roots (`chrome` `16700`, Edge `17016`, Opera `22596`) remained alive
+  with no new roots. The stale error overlay was dismissed through its visible
+  button and focus returned to Notepad. Next: revalidate the preserved field,
+  caret, HWND/PID and top-level DWM identity, then repeat the shortcut.
+- The preserved fixture revalidated exactly before retry: top-level Notepad HWND
+  `3146794` and Edit HWND `4850878` still belong to PID `24152`; DWM returned
+  the same physical `(1695,780)-(3607,1856)` bounds; field SHA-256 remained
+  `06b9c01aeed4f65562b1e412be26fe1187e4bd20532732a7ffff612b0a18fdf8`;
+  and the UTF-16 caret remained `(108,108)`. After native
+  `Ctrl+Shift+Enter`, the fresh gateway accepted the Unicode context, uploaded
+  one uniquely named `/a0/usr/uploads/a0-tag-...png` exact-window attachment,
+  and launched exactly one repo-local `a0 headless --launcher-tag` chain with
+  `--agent-profile agent0`. This proves both corrected UTF-8 pipe directions.
+  That child later exited, but the live Agent Zero run returned a new,
+  downstream error: `AGENT_ERROR: module 'helpers.tool_policy' has no attribute
+  'filter_tool_prompts'`. Exact overlay evidence is
+  `development/fim-second-result-overlay.png`. Notepad remained foreground and
+  byte-for-byte original with caret `(108,108)`, and no tagged child survived;
+  fail-closed behavior passed again. This is not evidence to edit Core yet:
+  compare the checked-out Core symbol/history, exact running image code and
+  runtime traceback first, remembering that this release container mounts only
+  the checkout as `/a0/usr` rather than as Core source.
+- Runtime comparison proved the mismatch exactly. Container logs locate the
+  plural call at `/a0/usr/extensions/python/system_prompt/_11_tools_prompt.py`
+  line `50`, supplied live by the bind-mounted clean Core `ready` checkout;
+  `/a0/helpers/tool_policy.py` from image commit `6a6cecff...` exposes only the
+  older singular `filter_tool_prompt`. Core commit `1432bde8` changed those two
+  sides together and is an ancestor of current clean `ready` HEAD `4d10f601...`.
+  The official registry's current `agent0ai/agent-zero:ready` index digest is
+  exactly the already-local `sha256:db461778...`, so an image pull cannot
+  correct it. There are `45` tracked path changes from the image commit to HEAD,
+  including two deletions; no task-owned Core source edit is needed or allowed.
+  Per the Windows live-E2E skill's runtime synchronization rule, the safe next
+  action is to archive only those tracked HEAD deltas, extract them over `/a0`,
+  remove only the two verified deleted `/a0/agents/...communication.md` files,
+  restart/health-check this existing container, and let the existing Launcher
+  lease reconnect. This ephemeral runtime sync is recoverable by container
+  recreation and does not copy the Core worktree's unrelated untracked plugin
+  state or any secret.
+- Runtime synchronization used one ignored `git archive` containing exactly the
+  `43` added/modified tracked files (`73` tar entries including parent
+  directories, exact set comparison `43/43`, no missing/extra files), then
+  removed the two previously verified tracked deletions only under `/a0/agents`.
+  Extraction exposed both `helpers.tool_policy.filter_tool_prompts` and its
+  caller; the transfer archive was removed from the container. The existing
+  container restarted once at `2026-09-01T03:41:22Z`. Because this ready
+  checkout is ahead of the image dependency layer, initialization took about
+  two minutes and briefly placed `run_ui` in disk wait, but every supervisor
+  service remained running and then both `/` and `/api/health` returned HTTP
+  `200`; logs say `Preload completed`, `Application startup complete`, and
+  `Agent Zero is running`. The prolonged restart correctly exhausted the old
+  gateway's bounded recovery, leaving no gateway/helper process. Its visible
+  **Retry** then spawned exactly one new repo-local gateway rooted at PID `7736`
+  under Electron `17896`, returned Host access and A0 Tag to Connected/Ready,
+  and again left browser roots `16700`, `17016`, and `22596` unchanged. Exact
+  DWM evidence is `development/host-access-after-runtime-retry.png`. The Core
+  worktree's tracked files remain untouched; the runtime bind has created new
+  untracked `chats/` and `uploads/` directories since preflight, which must be
+  treated as disposable/private runtime state and cleaned carefully only after
+  acceptance. Next: retry the still-preserved Notepad fixture against the
+  aligned runtime.
+- Aligned-runtime development FIM passed. The third native shortcut again kept
+  foreground top-level Notepad HWND `3146794`/PID `24152`, captured/uploaded one
+  exact DWM-window PNG, launched one repo-local tagged-headless chain with
+  profile `agent0`, and inserted no Enter. After the model completed, all
+  tagged-headless processes exited and the native Edit value was exactly
+  `PREFIX 🙂\r\n\tWINDOWS_FIM_20260901_✓_café_世界  \r\nSUFFIX 🔒`
+  (SHA-256 `2bbda5c3e17f39ae6ebac004dcc1ad02edd39aab9d36d0b615f97c4683b30fa7`,
+  `53` code points/`55` UTF-16 units). The marker is absent; prefix, tab, suffix,
+  CRLFs and two trailing spaces are exact; caret `(44,44)` is immediately after
+  the replacement and before those untouched spaces. Exact DWM success evidence
+  `development/fim-notepad-unicode-success.png` is `1912 x 1076`, `26,112`
+  bytes, SHA-256
+  `945d43b4ea650b833a3e5db502000df01c317fb73b24eed84e400d16e5d6e408`;
+  visual review confirms the same title/process, surrounding lines, Unicode and
+  caret. This closes the live UTF-8 root cause and default-profile native FIM
+  gate. Next: reset the same synthetic field for explicit `@a0.developer`, then
+  verify palette/action, privacy failures, ordinary Computer Use, and lifecycle.
+- Explicit profile development FIM passed. Native setup wrote only synthetic
+  `@a0.developer` text and armed caret `(116,116)`. The resulting repo-local
+  tagged-headless command visibly used `--agent-profile developer` and one
+  unique exact-window attachment. After completion no tagged child survived;
+  the native value is exactly
+  `PROFILE_PREFIX\r\nWINDOWS_DEVELOPER_20260901  \r\nPROFILE_SUFFIX`
+  (SHA-256 `40783e41c877e43f7c0fb007f9c90d1bb897b308f0f5fdcaa211406b427ba3d2`),
+  marker absent, untouched CRLF/prefix/suffix/two spaces exact, caret `(42,42)`
+  immediately before those spaces, and origin Notepad remains foreground.
+  Exact DWM evidence `development/fim-developer-success.png` is `1912 x 1076`,
+  `25,070` bytes, SHA-256
+  `770e3e4d4c08775073c0244fc7447fcffbfa1291f5c04b70f02d158e4596a2e4`;
+  visual review confirms the exact result and caret. Next: command-palette
+  layout/interaction and close-before-work/origin restoration.
+- Development command-palette acceptance passed from the same foreground
+  Notepad field after its marker was gone. The shortcut opened one focusable
+  Electron palette HWND `4264950`/PID `17896`; exact DWM physical bounds were
+  `(1403,399)-(2443,654)` (`1040 x 255`, consistent with the 690 x 170 logical
+  design at 150% scaling). `development/palette-initial.png` is `31,564` bytes,
+  SHA-256
+  `e72eae6756ef5275110fbd01a0cd4073a2e67f3bb1127ace8d40967219b1133b`.
+  Visual review finds no clipping/overlap: title, Agent 0 selector, close,
+  attachment, textarea, microphone, submit, and key hint are legible. The
+  microphone surface was visually accepted but deliberately not activated:
+  recording real audio was not required or implicitly authorized.
+- One harness-only drag attempt passed pywinauto's unsupported `duration`
+  keyword after mouse-down; the button was immediately and explicitly released,
+  bounds stayed unchanged, and no control fired. A stepwise native drag through
+  the header then moved the DWM bounds by exactly `(180,90)` to
+  `(1583,489)-(2623,744)` while preserving dimensions and focus. Evidence
+  `development/palette-dragged.png` is `30,968` bytes, SHA-256
+  `b2a9d71bc0fe329f61c4f7f312c5bcc4ae61d2499ea2fc776b6ca61005c3f8da`.
+- The live profile selector changed visibly to **Developer**. Opening the plus
+  control expanded the same bottom-anchored window to exact DWM bounds
+  `(1583,339)-(2624,744)` and displayed unclipped **Attach file**/**Attach
+  folder** choices; `development/palette-attachment-menu.png` is `40,325`
+  bytes, SHA-256
+  `ac04a6b96a83f32a9f1420cc869b62194776c02e682d800937a97ca029a09ee4`.
+  **Attach file** opened native dialog `Attach files to Agent Zero` HWND
+  `9769882` with exact DWM bounds `(1593,489)-(2773,1379)` and accessible
+  filename/Attach/Cancel controls. Evidence
+  `development/palette-attach-file-dialog.png` is `134,941` bytes, SHA-256
+  `f4882978a283ae2b8a0cfb5e17da1693d73cdec80c1903a7556dcb9ff57a0a81`.
+  Only ignored synthetic `palette-attachment.txt` was selected; the returned
+  palette showed that basename with a remove control, never its host path.
+- Submitted a Developer palette request asking for exact action completion
+  `WINDOWS_PALETTE_ATTACHMENT_OK_20260901` and no application operation.
+  `development/palette-ready-to-submit.png` (`44,169` bytes, SHA-256
+  `0ccbd3db9d81a6ea0ea85bd773c7d58b30222507eefcc146f69770f8514f7657`)
+  confirms query tail, Developer profile, attachment summary, microphone and
+  enabled submit. At `50 ms`, `200 ms`, and `1 s` after Enter the palette HWND
+  was already destroyed and exact origin Notepad was foreground, proving
+  close-before-work/origin restoration. The child later used only
+  `--agent-profile developer` and unique Agent Zero reference
+  `/a0/usr/uploads/palette-attachment-...txt`; source and uploaded file are both
+  `53` bytes with identical SHA-256
+  `41b55ba2117957ec5faf50f49f9d7b1f2c9d055f91a0046bba0c4f6976cd72bc`.
+  No host path or bytes entered the palette renderer/child arguments. The child
+  exited and exact result overlay said `A0 Tag completed` with the requested
+  token; `development/palette-command-result.png` is `588 x 342`, `34,694`
+  bytes, SHA-256
+  `c2aa33c746cb54f1c2e88248860fa981a23144ce352b7ac87a21631b43673a57`.
+  Dismiss restored Notepad, whose previous SHA and caret `(42,42)` remained
+  exact. Next: protected/password and changed-target live failures, ordinary
+  Computer Use smoke, remaining lease/tab/disable lifecycle, then package.
+- Live protected-field rejection passed with a disposable WinForms TextBox
+  containing only a synthetic token. The process was launched with its console
+  hidden; because that startup state also hid the form, the exact form HWND was
+  explicitly shown for this interactive probe. UIA metadata reported one Edit
+  `ProtectedSyntheticInput` with `CurrentIsPassword=true` before invocation;
+  no value was read through UIA. The shortcut returned
+  `A0 Tag is unavailable in protected fields.` without opening the palette,
+  launching tagged headless, or creating any upload (the newest upload remains
+  the earlier palette attachment). Origin form stayed foreground. Exact masked
+  pre-state `development/protected-field-before.png` is `1118 x 319`, `9,697`
+  bytes, SHA-256
+  `b651814a022914cc425eaebccfb5dba71d0f972e9adef4d565cf67ebab503435`;
+  result evidence `development/protected-field-rejected.png` is `588 x 342`,
+  `31,248` bytes, SHA-256
+  `702c253936bde5d46d70a01737789a8142363da354e78371fb3d782d12eb8f81`.
+  The post-state remained masked/unchanged visually; its `9,681`-byte exact
+  window capture is `development/protected-field-after.png`. The result was
+  dismissed and exact probe HWND/process exited gracefully; no disposable
+  process remains. This is live evidence that protection precedes context and
+  screenshot work.
+- The first delayed-revalidation harness invocation completed after its setup
+  output was truncated from the coordinator, before the intended mutation was
+  applied. Read-only recovery found exact native Notepad value
+  `CHANGE_PREFIX\r\nSHOULD_NOT_APPLY_VALUE_CHANGE  \r\nCHANGE_SUFFIX`, SHA-256
+  `3659ed4ab71e8cf5aaea22c35ad54abfea5ca2597f637051045e5edbf393aff1`,
+  caret `(44,44)`, no tag marker, no surviving tagged child, and Notepad still
+  foreground. This is another successful exact replace but does **not** count
+  as stale-target evidence. Rerun by arming the marker, observing the new
+  repo-local tagged child (which proves capture has completed), then changing
+  only the suffix while preserving HWND, element, focus and caret before apply.
+- Live changed-value revalidation then passed fail-closed. The rerun armed
+  `CHANGE_PREFIX\r\n@a0 ... SHOULD_NOT_APPLY_VALUE_CHANGE  \r\nCHANGE_SUFFIX`
+  (SHA-256
+  `7774b710c88c3005f4fb213e286fcecd8f1e8f0f04a19960ca766674b778de1f`,
+  caret `(108,108)` before the two untouched spaces), invoked the shortcut, and
+  observed a distinct repo-local tagged-headless process after private capture.
+  While Agent Zero worked, the harness changed only the suffix to
+  `CHANGE_SUFFIX_MUTATED`, restored the same `(108,108)` caret, and retained the
+  exact top-level HWND, Edit HWND and foreground. Mutated value SHA-256 was and
+  remains
+  `c28367dae7dc38592d2e0b632b39f790ed71dc102814871ed9db94e4431faae6`.
+  Apply refused with exact visible result **A0 Tag could not finish** / **The
+  original Windows text range or caret changed while Agent Zero was working.**
+  The marker, mutation, whitespace and caret all remained exact; no tagged
+  child survived. `development/revalidate-value-before.png` is `39,660` bytes,
+  SHA-256
+  `8fc095534d3bf6868a1495e6e2ef8bdea0cd4a61a247e6d8eab8532b07f3d423`;
+  `development/revalidate-value-mutated.png` is `40,351` bytes, SHA-256
+  `63b2fe4123ff9ec27b1801599608cdd23ba5e8971f6a6538739d61ae01464a42`;
+  both are exact `1912 x 1076` DWM crops and visually show only the suffix
+  difference with the caret unchanged. Result evidence
+  `development/revalidate-value-result.png` is `588 x 342`, `38,925` bytes,
+  SHA-256
+  `708e2f0fc9370edb3cd8fe2d4b3479921ec6bc196ad2f81b23ee2d8c8013e29a`.
+  Notepad remained foreground while the non-activating result was visible. One
+  first dismissal click from a DPI-unaware test helper missed the overlay and
+  focused an unrelated visible window; it changed no A0 control or document.
+  A per-monitor-aware click dismissed the overlay, after which the harness
+  explicitly restored Notepad and reconfirmed the same value hash/caret. This
+  closes live exact value/range/caret revalidation in addition to the automated
+  focus/process/HWND/element/value/range/caret matrix.
+- The first ordinary Computer Use smoke was submitted through the selected
+  Instance's live Web UI, asking Main to use only ordinary Computer Use to open
+  Calculator and visibly evaluate `731 + 269`. A pre-submit visual checkpoint
+  caught pywinauto treating parentheses and `+` as key syntax; that malformed
+  draft was never submitted and was replaced with an equivalent plain-word
+  prompt. Corrected evidence `development/computer-use-prompt-corrected.png` is
+  `166,827` bytes, SHA-256
+  `6ababc5cd07f9108e408a51989617a715bf11bf48c3ceeae0528da634b0f2bc9`.
+  The task shell did not inherit Docker Desktop's CLI directory, so a plain
+  `docker` diagnostic failed read-only; the installed user-local `docker.exe`
+  was resolved from the running Docker Desktop process and used explicitly.
+- The smoke's first ordinary tool call proved a fresh host frame and the correct
+  backend: session `30dfb1400b604571b4d623886f4126be`, `3840 x 2160`,
+  `backend=windows/windows`, contract `v1`, normalized global virtual-screen
+  coordinates, `dxcam-screen-capture`, UIA/native-window/input capabilities,
+  and advertised `a0-tag`. There was no Linux, Xpra or container-desktop
+  fallback. The subsequent model-selected `key` action used code `WIN` and the
+  live Windows backend returned `COMPUTER_USE_ERROR: Unknown code: WIN`; no
+  Calculator process/window opened. Visual evidence
+  `development/computer-use-running.png` is `136,238` bytes, SHA-256
+  `3cee5507db86363c23eda539bb2745177279ab8bec963a0316249f9c22afdf09`.
+  This is direct evidence of an ordinary Windows backend key-normalization
+  defect owned by `a0-computer-use-windows`, not Core. Next: trace the existing
+  key action and aliases, add the minimum compatible native alias plus a focused
+  regression check, restart only the repo-local gateway lease, and rerun this
+  exact Web UI smoke.
+- Root cause confirmed in the shared Windows key formatter: portable `super`
+  was translated to pywinauto's nonexistent `{WIN}`, while incoming `WIN` was
+  merely uppercased to the same invalid token. The installed pywinauto key table
+  supports `LWIN`/`RWIN`. The minimum owner fix maps existing portable
+  `cmd`, `command`, `meta`, `super`, `win`, and `windows` names to `LWIN` in
+  `_normalize_key_token`; no protocol, Core, dependency, or abstraction changed.
+  One focused regression loops over those aliases and requires exact sequence
+  `{LWIN}`. Exact check:
+  `.venv\Scripts\python.exe -m pytest tests/test_windows_computer_use_backend.py::test_windows_key_aliases_use_pywinauto_left_windows_key -q`
+  -> `1 passed in 0.78s`. Next: settle/stop the failed Web UI run, run the full
+  Windows backend suite, restart the selected tab's repo-local gateway so it
+  imports the fix, then repeat the same ordinary Computer Use smoke.
+- The same failed live run then tried portable `CTRL+ESC`; the backend exposed
+  the same formatter defect as `COMPUTER_USE_ERROR: Unknown code: CTRL` because
+  pywinauto requires `VK_CONTROL` in explicit down/up sequences. The same owner
+  table now maps `ctrl`/`control` to `VK_CONTROL`, `alt` to `VK_MENU`, and
+  `shift` to `VK_SHIFT`. The existing regression check also requires exact
+  `CTRL+ESC` and `ALT+SHIFT+TAB` down/body/reverse-up sequences. Focused result:
+  `1 passed in 0.57s`; full Windows backend result: `41 passed in 1.23s`.
+  The failed synthetic Web UI run was explicitly stopped through its visible
+  **Stop agent** control after it continued structural recovery without opening
+  Calculator; the control then disappeared, proving the run stopped. No
+  Calculator process existed and no user data was touched. Next: restart the
+  selected tab's repo-local gateway lease to import these key aliases and rerun
+  the exact smoke.
+- Gateway rotation terminated the exact old repo-local chain cleanly (`a0.exe`
+  PID `7736`, venv Python PID `22884`, system Python PID `24504` all exited),
+  and no replacement gateway or browser process appeared. However, after the
+  visible **Disconnect** action the development Launcher main window stayed
+  Windows `Responding=false` for several minutes, rendered only its top chrome
+  and an otherwise blank body, and timed out read-only UIA queries. The Forge
+  terminal emitted no exception. Exact evidence
+  `development/gateway-disconnect-hang.png` is `21,093` bytes, SHA-256
+  `f6e2c522336538b5c844265c7c131eea5fc601258ea9f10138c2b58dbbac3f23`.
+  Treat this as an unresolved lifecycle observation, not yet an implementation
+  conclusion: the disconnect followed a manually stopped Computer Use run with
+  a still-open host session and UIA activity. Next: recover only the exact hung
+  development Launcher process tree, restart Forge with the same repo-local CLI
+  override, reconnect one gateway, rerun the ordinary smoke, then repeat a clean
+  disconnect/reconnect to determine reproducibility before considering code.
+- Recovery used Ctrl+C on only the owning Forge session; it exited with its
+  exact Electron/Forge process tree and no force termination. The Agent Zero
+  container remained healthy. A fresh local-content Forge session (`49776`)
+  started with explicit repo-local `.venv\Scripts\a0.exe`, and one native mouse
+  click (not Chromium UIA InvokePattern) reopened the same `agent-zero` Instance
+  tab. Launcher is responsive on Electron main PID `14700`; exactly one new
+  gateway chain is `23516 -> 24124 -> 19844`, with the same gateway identity,
+  port `49235`, workspace and five scopes. Browser roots stayed byte-for-byte
+  Chrome `16700`, Edge `17016`, Opera `22596`; no retry fan-out occurred.
+  `development/launcher-clean-restart.png` (SHA-256
+  `5331e95a4c29ba2609c3cfe9c989ba59297a9b22f3d4d02f54d91fd4699f1771`)
+  records the responsive single running Instance before open;
+  `development/gateway-reconnected-clean.png` is `160,727` bytes, SHA-256
+  `54a6283f9ad2f0063335b911674970e474133996100f5fef932c2c2fda8c39fa`,
+  and visually proves the selected open tab plus connected host icon. Next:
+  rerun the exact ordinary Computer Use smoke through this fresh lease.
+- The fresh-lease ordinary Computer Use rerun proved the shared Windows key
+  formatter fix live. A new host session
+  `edf156d1202c4be8a62c04b9885eb2e4` reported the same exact Windows backend,
+  `3840 x 2160` geometry and Windows UIA/capture features. `WIN`, `WIN+S`, and
+  `CTRL+A` all completed without the former pywinauto `Unknown code` errors.
+  The English Start-menu query `Calculator` found no localized result; the
+  model safely replaced it with `Calcolatrice`, and Enter opened the real
+  Windows Calculator (`CalculatorApp.exe` PID `18484`) in
+  `ApplicationFrameHost` PID `13344`, HWND `16122324`, exact UIA/DWM frame
+  `(171,142 1083x1013)`. This closes live single-key and modifier-chord
+  compatibility and confirms ordinary Computer Use remains inherited from the
+  selected Instance's existing gateway lease.
+- The first arithmetic attempt then used normalized full-screen pixel clicks.
+  Fresh screenshots let the model catch that its attempted digit `9` coordinate
+  selected multiplication, clear, and retry, but it repeated the same visual
+  column error. This is model coordinate selection, not geometry drift: an
+  independent read-only UIA inventory placed the Calculator digit controls at
+  their exact displayed physical rectangles, while every gateway capture and
+  native window frame stayed stable. The run was explicitly stopped before a
+  claim of success and left Calculator open. No backend change is justified by
+  this failed pixel attempt.
+- The same Web UI chat was continued with an explicit ordinary Computer Use
+  request for the advertised Windows structural path. `list_windows` found
+  `uia-hwnd:16122324`; default-depth `get_window_state` returned 35 elements and
+  the exact display `Lo schermo è 0`, but grouped the keypad below depth four.
+  The model then departed from the skill's preferred indexed action and tried a
+  desktop-wide semantic `uia_action` for title `7`. Because partial title
+  matching found the taskbar clock before the deeper exact Calculator button,
+  it invoked the clock; process/handle filters aimed at the UWP frame then found
+  no target. The fresh screenshot proved Calculator stayed at zero. The run was
+  explicitly stopped, and a narrower continuation was submitted requiring
+  `get_window_state(window_id='uia-hwnd:16122324', pid=13344, max_depth=6,
+  max_nodes=200)` followed only by cached `element_action` calls with the same
+  window ID and background dispatch. Evidence
+  `development/computer-use-uia-depth-prompt.png` is `228,836` bytes, SHA-256
+  `84ee265ce567f4b1c881a40bf96376983a44f9b631a328148628128a293b2ad6`.
+  This follows the existing backend/skill seam and avoids a speculative second
+  targeting abstraction. Pending: exact indexed arithmetic result, fresh
+  screenshot/state proof of `1000`, and explicit `stop_session`.
+- The scoped continuation completed the ordinary Computer Use acceptance. A
+  depth-six, 200-node state returned 73 Calculator elements and exact cached
+  indexes for `Cancella`, `Sette`, `Tre`, `Uno`, `Più`, `Due`, `Sei`, `Nove`,
+  and `Uguale`. All nine were invoked sequentially with
+  `window_id=uia-hwnd:16122324`, `dispatch=background`; every receipt reported
+  `actual_dispatch=background`, so the Launcher/Web UI remained foreground and
+  no coordinate action or focus theft was used. An intermediate fresh state
+  proved `Lo schermo è 731`. The final fresh state proved expression
+  `731 + 269=` and localized display `Lo schermo è 1.000`; fresh capture ID
+  `1101e7b8b7b1416a827a50da5f66a7b5` visibly showed the same result. Main then
+  called `stop_session`, received **Computer-use session stopped**, and reported
+  the visible result in the Web UI. Exact DWM Calculator evidence
+  `development/computer-use-calculator-1000.png` is `1083 x 1013`, `59,507`
+  bytes, SHA-256
+  `376a26ea155b8f42b70bab6dbffeace6f27b230cb44c462aacc7197d9a02873c`;
+  `development/computer-use-webui-success.png` is `1920 x 1200`, `175,950`
+  bytes, SHA-256
+  `e32c5a497c16180af61e312d50be3d51bf58770a2f639a60f1cfb49c6eae6189`.
+  Direct read-only UIA inspection independently returned the same expression and
+  display at physical rectangles `(209,280)-(761,308)` and
+  `(182,308)-(788,454)`. This accepts the inherited ordinary Computer Use smoke
+  and the key-alias owner fix on the development Launcher.
+- Stopping/nudging the earlier model turn emitted one Core-side
+  `BaseLLMHTTPHandler.acompletion_stream_function was never awaited` warning,
+  and after the successful final reply LiteLLM logged one cancelled pending
+  `LoggingWorker` task. Neither affected the gateway, stopped Computer Use
+  session, final response, UIA result, or container health. No Core edit is
+  justified; retain the exact log observation for maintainer visibility.
+- A clean gateway lifecycle retry after the Computer Use session had explicitly
+  stopped did **not** reproduce the earlier blank-window hang. From the visible
+  Host access modal, **Disconnect** ended the exact repo-local chain
+  `23516 -> 24124 -> 19844` before the first one-second poll; Electron PID
+  `14700` remained `Responding=true` on every poll for 15 seconds, the open
+  Instance Web UI remained rendered, and no replacement gateway appeared.
+  Browser roots remained exactly Chrome `16700`, Edge `17016`, and Opera
+  `22596`. **Reconnect** immediately created one and only one repo-local chain
+  `23336 -> 9472 -> 2820` with the same gateway ID, host, workspace and five
+  scopes; Electron stayed responsive for all 20 seconds of polling and the tab's
+  host indicator returned green. The same three browser roots remained, proving
+  no retry fan-out. Evidence `development/gateway-clean-disconnected.png` is
+  `188,643` bytes, SHA-256
+  `2b855e02f797f5b19f280069dd64a0375bda590fefd390c02b4e09db97c8d223`;
+  `development/gateway-clean-reconnected.png` is `193,243` bytes, SHA-256
+  `0e891adb10b559c1529f45c34c0dfb37d606b9157416e2d277a98fbb3aa25730`.
+  Classify the earlier hang as a non-reproduced interaction with the manually
+  stopped/in-flight model run, not an evidence-backed Launcher defect. No source
+  change is warranted.
+- The development Settings gates were exercised live. Turning **Enable A0 Tag**
+  off and saving changed Status to **Disabled**. The Windows global shortcut
+  then left exactly one visible Launcher-owned window, created zero
+  `headless --launcher-tag` children, and kept Electron responsive. Evidence
+  `development/a0-tag-disabled-hotkey-noop.png` is `196,328` bytes, SHA-256
+  `ba9bde05490cc47569bad582a2f48df5f1e404b34fb2db276074fdaa648e8444`.
+  Re-enabling and saving restored **Ready. Tag a field or use the shortcut
+  anywhere.** Evidence `development/a0-tag-reenabled-lifecycle.png` is
+  `198,137` bytes, SHA-256
+  `8e955d2b1d18c35fa53e6214d014867ac61073dc62a7ac36ed1fb4576c3db3f7`.
+  This accepts the explicit-enable lifecycle gate without a passive watcher.
+- Closing the explicitly selected `agent-zero` tab ended the exact gateway
+  chain `23336 -> 9472 -> 2820` before the first one-second poll while Electron
+  remained responsive for all ten seconds. Settings immediately displayed
+  **Open the selected Agent Zero Instance in a Launcher tab or detached
+  window.** The shortcut again created zero overlay/tagged child. Evidence
+  `development/a0-tag-open-tab-required.png` is `195,531` bytes, SHA-256
+  `1b438d5619275074f3356bc2c5b3b518684ec1200ca60a9b59e94a415d08822a`.
+  Reopening only that Instance created one repo-local lease (one short startup
+  chain rotated once, then settled as `20068 -> 25352 -> 24144`) and restored
+  the selected green host indicator. Evidence
+  `development/instance-reopened-lifecycle.png` is `238,452` bytes, SHA-256
+  `17889ca06a1ce0bdc4437ed03354cfaee49c7535b7b6cbfc9d57c44ac0d4582c`.
+  This accepts exact selected/open-tab ownership and no fallback Instance.
+- Revoking only the selected Instance's **Computer Use** permission and saving
+  rotated the lease to `20700 -> 18368 -> 22868` with exact scopes
+  `file_read,file_write,code_execution,browser` and no `computer_use`. The
+  shortcut created no overlay or tagged child, and Settings displayed **Allow
+  Computer Use for the selected Instance to capture and use A0 Tag.** Evidence
+  `development/computer-use-permission-revoked.png` is `239,354` bytes,
+  SHA-256
+  `2a42beec9130852902337c054e6de783796f5853215a96abd7d0fdbf1ed1326f`;
+  `development/a0-tag-computer-use-required.png` is `204,863` bytes, SHA-256
+  `4350293c445a96184e1e2a40979f03b6cdea5b4bdbba8bbc1acf0a7222caf110`.
+  Restoring the same permission rotated to exactly one lease
+  `10724 -> 24048 -> 22504`, restored the five scopes including
+  `computer_use`, and returned Settings to **Ready**. Evidence
+  `development/computer-use-permission-restored.png` is `204,383` bytes,
+  SHA-256
+  `a818fcf715d7dc48a87edc735ae5d7d61444450f15044563c1968d0e521ab98a`.
+  This accepts inherited Computer Use authorization and revocation fail-close.
+- Cleanup closed only the task-opened Calculator after its final evidence. Its
+  UWP frame disappeared; the unrelated `H-SMILE-FRAME` remained untouched. One
+  attempted Launcher-tab click occurred while that unrelated window had
+  temporarily obscured Launcher and landed in blank subscription-pane space;
+  it produced no visible state or navigation change. The harness immediately
+  restored only HWND `5114832` with native foreground activation and thereafter
+  revalidated the Launcher before every click. No unrelated process was closed
+  or changed.
+- Packaged-Windows preflight found no pre-existing `dist/desktop/windows`
+  output and `60,242,235,392` free bytes on `C:`. The first exact dry run
+  `npm run desktop:dist:win -- --dry-run --arch x64` stopped before packaging
+  because the checkout's declared packaging-only dependencies were not
+  installed: `Missing package: electron-builder`. The root build-info helper
+  completed first and retained the existing repository identity. This is an
+  environment prerequisite, not a product failure. Next: use the documented
+  lock-preserving `npm ci --prefix packaging`, confirm it changes only ignored
+  generated dependencies, repeat the dry run, then build the existing Windows
+  x64 NSIS/unpacked targets without metadata, signing or version changes.
+- `npm ci --prefix packaging` installed the 283 exact lockfile packages in 14
+  seconds and left all tracked packaging metadata/build-info unchanged. npm
+  reported four upstream deprecation notices, one high-severity audit finding,
+  and one unapproved `electron-winstaller@5.4.0` install script; no audit fix,
+  dependency update, script approval or metadata change was attempted because
+  none is authorized or needed unless the existing build proves otherwise. The
+  repeated dry run passed and resolved Windows/host `win32`, build version
+  `1.6.0`, output `dist/desktop/windows`, target `nsis`, architecture `x64`.
+  Because the packaging-local Electron install has no `dist`, the existing
+  builder will resolve Electron at build time as designed. Next: run this exact
+  local build and preserve its artifacts/hashes and logs.
+- The exact native build `npm run desktop:dist:win -- --arch x64` completed in
+  about 116 seconds with electron-builder `26.15.7` on Windows build `19045`,
+  Electron `42.5.1`, Windows `x64`, and the existing NSIS target. It downloaded
+  the target Electron/NSIS runtimes because the packaging-local Electron dist
+  was absent, then produced an unpacked app plus installer/update artifacts.
+  Existing warnings were: project directory equals app directory,
+  `electron-squirrel-startup` is unnecessary for NSIS, dependency rebuild is
+  disabled by configuration, ASAR is disabled by configuration, and duplicate
+  dependency references were observed. No warning justified an in-scope release
+  configuration change. Exact artifacts:
+  - `dist/desktop/windows/a0-launcher-1.6.0.exe`: `120,530,896` bytes,
+    SHA-256
+    `503093b78923c194aeed7925e7605e697e1e0db61a7b91fdba887191d50579b6`,
+    product/file version `1.6.0`, intentionally local `NotSigned` build;
+  - `dist/desktop/windows/a0-launcher-1.6.0.exe.blockmap`: `128,069`
+    bytes, SHA-256
+    `1e351fe335571a89cb982b3dc30902ab634261db6bb0d85a2ee9bcaa0f3d01d3`;
+  - `dist/desktop/windows/win-unpacked/Agent Zero Launcher.exe`:
+    `232,360,960` bytes, SHA-256
+    `37477286e472bc00b412c792528cf18ef5e1ef015363e12fb106fa88c588ea35`,
+    product version `1.6.0.0`, file version `1.6.0`, `NotSigned`.
+  Build generation added no tracked source, metadata or lockfile change. Next:
+  stop only the development Forge/Launcher tree gracefully, launch this exact
+  unpacked executable with the repo-local CLI override, then repeat packaged FIM,
+  palette, permission/lease, visual and cleanup checks.
+- The development Forge tree exited cleanly before packaged acceptance. Launched
+  the exact unpacked `Agent Zero Launcher.exe` with only the existing
+  `A0_LAUNCHER_LOCAL_REPO` and `A0_CLI_PATH` overrides pointing at the local
+  `%USERPROFILE%\Documents\GitHub\a0-launcher` source and repo-local Connector
+  executable. Packaged main PID `19016` reports Electron `42.5.1`, is responsive,
+  and owns exact HWND `789112`; its initial Instances page rendered coherently at
+  the machine's `150%` scale with the sole running `agent-zero` card. Evidence
+  `packaged/launcher-startup.png` is `178,676` bytes, SHA-256
+  `39a0af3b59aeb2697fe05ab6a187ce71384956f0816e55ad9a76cf5e877d57e`.
+- Opened only that `agent-zero` card through the packaged renderer. It produced
+  one selected open Instance tab and exactly one gateway process tree
+  `19016 -> 24336 -> 25208 -> 21160`: packaged Launcher -> repo-local
+  `.venv\Scripts\a0.exe gateway` -> venv Python -> base Python. The exact
+  command targets `http://127.0.0.1:49235`, workspace
+  `%USERPROFILE%\Documents\GitHub\agent-zero`, gateway ID
+  `launcher-415291ff-ef81-46e2-aa59-992b73a5caf3`, host `BTT117P`, master mode,
+  and only `file_read,file_write,code_execution,browser,computer_use`. The
+  Agent Zero home, selected tab, green live status, navigation and chat history
+  were all legible without clipping at `1920x1200` logical window pixels.
+  Evidence `packaged/instance-open.png` is `229,368` bytes, SHA-256
+  `ea624b10942c4b4c40c68ea4b34c6fb20241491ac3e23d735f63e44948c416a7`.
+  Next: verify packaged Settings reports A0 Tag ready, then run one exact FIM
+  replacement and one command-palette request through this same lease.
+- Packaged Settings -> A0 Tag then reported checkbox toggle state `1`, exact
+  selected Instance `agent-zero`, default `Agent 0 · @a0.agent0`, fixed
+  `Ctrl/Command + Shift + Enter` shortcut, and **Ready. Tag a field or use the
+  shortcut anywhere.** The complete panel remained legible at 150% scaling and
+  explicitly stated that the selected Instance must stay open and no fallback
+  Instance is used. Evidence `packaged/a0-tag-ready.png` is `196,479` bytes,
+  SHA-256
+  `de6404579b6900e4cfc54e8dc840e2461f2cc8200dc7682d8d28de205960ba21`.
+  Next: run packaged FIM in a bounded synthetic Notepad field through this exact
+  selected-tab lease.
+- Packaged FIM setup reused only the task-owned unsaved Notepad PID `24152`,
+  top-level HWND `3146794`, and child Edit HWND `4850878`. The first validation
+  probe set the synthetic value but stopped before capture because pywin32 does
+  not accept ctypes pointer arguments for `EM_GETSEL`; no shortcut or product
+  path ran. Repeating with the native packed `EM_GETSEL` return re-established
+  the complete pre-state exactly. The value is
+  `PACKAGED_PREFIX 🙂\r\n\t@a0 Return the exact replacement text WINDOWS_PACKAGED_FIM_20260901_✓_café_世界 and nothing else  \r\nPACKAGED_SUFFIX 🔒`,
+  SHA-256 `e930d1478bc29e17b921800260ac7087ddd47e19721107e62f2f7da2bfa54cb1`,
+  `135` code points / `137` UTF-16 units, with the caret exactly `(115,115)`
+  immediately before the two untouched spaces. Exact foreground HWND is the
+  top-level Notepad and DWM bounds are `(1695,780)-(3607,1856)`. The trusted
+  active-window crop `packaged/fim-before.png` is `1912 x 1076`, `32,382`
+  bytes, SHA-256
+  `bcd91ec85ce555eac163b86318f37ef240c364c38f844791e61dc003cd9252a0`;
+  visual review confirms title/process, complete Unicode tag, surrounding text,
+  whitespace and caret. Next: send the registered physical shortcut once,
+  wait for completion, and revalidate value/range/process/evidence exactly.
+- Packaged FIM passed through the registered native shortcut. Exact foreground
+  Notepad HWND `3146794` received one `Ctrl+Shift+Enter`; the key chord inserted
+  no newline. The existing packaged lease started private helper chain
+  `21160 -> 17592 -> 13988` and exactly one tagged headless chain
+  `19016 -> 3476 -> 25192 -> 4768`, using repo-local `a0`,
+  `--launcher-tag --agent-profile agent0`, and one uniquely named verified
+  active-window upload reference. The model's first response contained the
+  correct marker/text but omitted Core's outer JSON tool envelope, so Core's
+  existing formatter rejected it and requested one retry; the second response
+  used the required response tool and completed normally. This transient model
+  formatting retry is not a Windows/backend defect. One log command initially
+  used a stale Docker Desktop path and failed before reading logs; rerunning the
+  same read-only command with the discovered exact executable succeeded.
+- After completion, no tagged-headless process or secondary A0 Tag window
+  survived, only the one gateway lease remained, and Notepad stayed foreground.
+  Its native Edit value is exactly
+  `PACKAGED_PREFIX 🙂\r\n\tWINDOWS_PACKAGED_FIM_20260901_✓_café_世界  \r\nPACKAGED_SUFFIX 🔒`,
+  SHA-256 `0744c81524ce2310e8f8d657ec83ad5cd9a643e775f5cb49567242e45c079f57`,
+  `80` code points / `82` UTF-16 units. The marker is absent; prefix, tab,
+  suffix, CRLF and two spaces are exact; caret `(60,60)` is immediately after
+  the Unicode replacement and before the untouched spaces. Exact trusted DWM
+  evidence `packaged/fim-success.png` is `1912 x 1076`, `29,233` bytes,
+  SHA-256
+  `f20816e56cda998f43e81c5e21af6f73685e5691d45b4e80ba99ad10737b6f41`;
+  visual review confirms the exact text and caret without clipping. Packaged
+  inline FIM is accepted. Next: invoke the same shortcut from this now tag-free
+  field, validate the packaged command palette's physical geometry and one
+  completed action-mode request.
+- Packaged command-palette entry passed. Invoking the same native shortcut from
+  the exact now tag-free Notepad field opened one focusable palette HWND
+  `3213802` owned by packaged PID `19016`; Notepad was the sole origin and no
+  tagged child started before submission. Exact DWM bounds are
+  `(1403,399)-(2443,654)`, a `1040 x 255` physical surface matching the
+  existing approximately `693 x 170` logical design at 150% scale. UIA exposed
+  the title, profile combo, close, more-actions, request edit, microphone,
+  submit and key-hint controls. `packaged/palette-initial.png` is `29,247`
+  bytes, SHA-256
+  `42cf27efb9063b9051dbe20b051b7ade227cb06b62d6774ee783def3ab6008c2`.
+  Visual review finds no clipping, overlap or missing control; the blue border
+  and one small lower background strip are normal transparent-window framing.
+  Next: submit one deterministic non-text action request, prove the palette
+  closes before work and origin focus restores, then verify the resulting
+  ordinary Computer Use action through the inherited lease.
+- Command request entry exposed two harmless harness-only timing details before
+  submission. UIA `SetValue` returned an immediate empty read although Electron
+  applied the value asynchronously; typing at that moment interleaved a second
+  copy. No request was submitted. Native `Ctrl+A` in the same focused palette
+  edit then replaced it with the exact 158-character synthetic request:
+  `Use Computer Use to open Windows Calculator, calculate 19 + 23, verify the visible result is 42, then stop the Computer Use session. Do not edit this Notepad.`
+  A fresh UIA ValuePattern read matches it byte-for-byte. Exact armed evidence
+  `packaged/palette-armed.png` is `40,994` bytes, SHA-256
+  `b7516b5bbcd1c7ff951b9fb5533b2c8d40fb23b292a703e3b273e72a47373b07`;
+  the bounded edit correctly scrolls to the request tail while every action
+  remains visible. No child/action ran during either correction. Next: submit
+  once with Enter and inspect close-before-work, origin restoration, tool use,
+  visible result and session teardown.
+- Packaged palette submission started exactly one repo-local no-attachment
+  tagged headless chain `19016 -> 20412 -> 15304 -> 24360` with profile
+  `agent0`. At `0.7 s` the palette was still completing its asynchronous close;
+  by the next observation it had been destroyed, replaced by the small
+  non-activating working surface, and exact origin Notepad HWND `3146794` was
+  foreground again. The Main model correctly classified the request as an app
+  action, started ordinary Computer Use session
+  `a90fed47d98a4fab91b038c515e7512e`, loaded the advertised Windows UIA skill,
+  listed windows, opened the Run dialog with the portable Windows-key route,
+  launched Calculator, inspected its exact window/UIA tree and focused it.
+- The resulting real action exposed an owner-local ordinary input defect. The
+  model sent exact `computer_use_remote type` text `19+23=` to Calculator HWND
+  `6228472`, but fresh native UIA reported expression `193=` and result `0`.
+  The missing `+2` is the characteristic pywinauto `send_keys` interpretation
+  of `+` as a Shift modifier, not model or Calculator behavior. Source tracing
+  confirms `_WindowsDesktopAutomation.type_text()` passes arbitrary text
+  directly to `keyboard.send_keys`, while this same driver already owns the
+  literal UTF-16 `type_unicode_text()` seam used by verified A0 Tag replacement.
+  The minimum root correction is to reuse that existing literal-text seam for
+  ordinary `type`, reserving `send_keys` only for the optional explicit Enter,
+  plus one exact metacharacter/Unicode regression. No dependency, Launcher,
+  protocol or Core change is indicated. The live agent remains confined to the
+  task-opened Calculator and may recover structurally; do not terminate it
+  before observing its safe recovery/teardown.
+- Implemented the minimum owner correction in the existing Windows driver:
+  ordinary `type_text()` now delegates arbitrary text to its already-proven
+  literal UTF-16 `type_unicode_text()` path and uses pywinauto key-sequence
+  syntax only for an explicit submit Enter. No new helper, abstraction,
+  dependency or protocol field was added. A focused regression feeds exact
+  `19+23={}🙂`, proves every UTF-16 code unit is delivered literally (including
+  the surrogate pair), and proves submit remains one explicit `{ENTER}`. The
+  closest Windows package/test DOX now records that division between literal
+  type input and explicit key chords. Focused regression plus Windows-key alias
+  test passed `2 passed in 0.62s`; the Windows backend + shared Computer Use
+  contract gate passed `45 passed in 0.98s`; `py_compile` and `git diff --check`
+  passed (only normal LF-to-CRLF checkout notices). Next: let the currently
+  old-code live action recover and stop safely, reconnect the packaged lease to
+  load this source edit, then repeat an exact literal `19+23=` live input check
+  before final packaged acceptance.
+- The old-code action recognized the wrong `193` result from its fresh capture,
+  cleared Calculator and safely rebuilt `19` with visible keypad clicks, but the
+  next Main-model turn failed twice with an external OpenRouter HTTP `402`: the
+  account could not afford the requested `65,536` maximum tokens (reported
+  affordable limit `48,275`). The tagged client exited; Launcher showed a
+  bounded, scrollable **A0 Tag could not finish** overlay with one Dismiss
+  action. Evidence `packaged/palette-action-credit-error.png` is `588 x 342`,
+  `55,530` bytes, SHA-256
+  `7233305b620f5ab5bedf3f3228c1b248ccf7c3c1e3c5fdb888feb4dc5dd087b0`.
+  The external error body contains an account identifier, so this ignored
+  screenshot remains disposable and no raw identifier is copied into tracked
+  text. Fresh native reads prove Calculator is the only foreground app changed
+  (display `19`) and Notepad remains exact at value SHA-256
+  `0744c81524ce2310e8f8d657ec83ad5cd9a643e775f5cb49567242e45c079f57`,
+  caret `(60,60)`. Because the model could not call `stop_session`, the private
+  helper still exists; next use the Launcher's own Host access disconnect to
+  tear down that helper/session and gateway, then reconnect to load the fix.
+- Dismissed only the bounded error overlay; Calculator remained foreground.
+  Opened the exact packaged selected tab's Host access modal and invoked its
+  visible **Disconnect** action. The complete gateway/helper tree
+  `24336 -> 25208 -> 21160 -> 19088 -> 14528` was gone at the first three-second
+  process check, which tears down the otherwise orphaned Computer Use session.
+  Existing browser roots Chrome `16700`, Edge `17016`, and Opera `22596`
+  remained the same: no retry/setup fanout occurred.
+- A new packaged lifecycle observation remains under diagnosis: after that
+  teardown, exact Launcher PID `19016` stayed `Responding=False` for more than
+  `20 s` despite all gateway/helper processes being gone and its accumulated
+  CPU remaining stable. The post-click UIA state query also exceeded its
+  ten-second harness bound. Do not force-kill or accept this state yet; inspect
+  the existing Host access teardown path and process/event-loop state, compare
+  the earlier development disconnect that remained responsive, and wait for
+  any bounded owner timeout before deciding whether code or only the unusual
+  external-model-failure/session state owns the hang.
+- The packaged window did not recover after more than five minutes. Native
+  enumeration showed one visible/enabled main HWND and no hidden modal; all
+  gateway/helper/tagged processes remained absent. Exact DWM capture
+  `packaged/disconnect-hang.png` is `1900 x 1190`, `23,925` bytes, SHA-256
+  `747f50704c1e0765ddd636b413b07175b29e5e85990a953793c3c41e0bfc5fe6`.
+  Visual review shows Windows' **Agent Zero (Not Responding)** title and a
+  completely blank selected Instance content surface. Source tracing confirms
+  `HostGatewaySupervisor.disconnect()` only marks suppression, publishes state,
+  writes one shutdown JSON line and schedules a non-blocking 500 ms terminate;
+  no owner path intentionally blocks Electron. The acceptance click was
+  followed after three seconds by a cross-process UIA descendant query that
+  itself hung; because Chromium accessibility queries during renderer teardown
+  can be the harness trigger and the earlier development native-mouse
+  disconnect stayed responsive, do not patch product code from this single
+  contaminated observation. Next: close the exact task-owned hung packaged
+  process (WM_CLOSE first, terminate only if it cannot respond), relaunch the
+  same artifact, and reproduce disconnect/reconnect using only native click plus
+  Win32/process polling—no UIA query during transition.
+- `PostMessage(WM_CLOSE)` returned false and the unresponsive window remained
+  after five seconds. Revalidated PID `19016`'s exact executable as this
+  task-built unpacked artifact, then force-terminated only that task-owned
+  Electron tree; every known child exited and the already-disconnected gateway
+  remained absent. Relaunched the exact same executable with the same
+  repo-local source/CLI environment. Fresh packaged main PID `23428`, HWND
+  `2493136`, started at `2026-09-01T07:48:23+02:00` and was responsive after
+  eight seconds. This is process cleanup/reproduction setup, not acceptance of
+  the contaminated hang. Next: open the sole Instance, confirm the updated
+  repo-local lease, then run native-only disconnect/reconnect observation.
+- Clean packaged lifecycle reproduction passed. Native mouse opened the sole
+  Instance and created exact updated-source gateway PID `24252` under packaged
+  PID `23428`, with the same repo-local executable, selected Instance, gateway
+  ID, host, workspace and five scopes. A visual Host access modal showed
+  Connected and the five granted permissions. Native Disconnect then removed
+  PID `24252` before the first one-second poll while packaged Launcher remained
+  alive and `Responding=True` at every sample for `15 s`. Existing Chrome
+  `16700`, Edge `17016`, and Opera `22596` roots remained unchanged. Evidence
+  `packaged/disconnect-native-clean.png` is `185,138` bytes, SHA-256
+  `86900ea56dae2ed9973360a93d225a18660f65417e7dae9674af427421c6b74b`;
+  visual review shows the selected tab's disconnected icon and otherwise live
+  Instance page.
+- Reopened the same modal using only native mouse; it showed exact
+  **Disconnected**, host `BTT117P`, the unchanged inherited permissions and one
+  **Reconnect** action. `packaged/reconnect-modal.png` is `57,376` bytes,
+  SHA-256
+  `21e8882aeb54669af6e3f43399eee3f2368dad0a1b7c359426ce9b69e2df70d1`.
+  Native Reconnect created exactly one new repo-local five-scope gateway PID
+  `19172` by second `1`; Launcher remained `Responding=True` at all `20`
+  one-second samples and all three browser roots remained unchanged. Evidence
+  `packaged/reconnect-native-clean.png` is `184,932` bytes, SHA-256
+  `91c2f6f6fe82ba053058624ed97773497c4a91f25c5b4f309d9fe5cf82caf5b1`;
+  visual review shows the green selected-tab lease. This clean comparison
+  classifies the earlier freeze as a test-harness Chromium UIA teardown race;
+  there is no reproducible product defect and no Launcher patch is warranted.
+  Packaged lease lifecycle and no-browser-fanout acceptance pass. Next: invoke
+  the freshly loaded helper to prove literal `19+23=` reaches Calculator and
+  returns `42`, then stop that private session.
+- Fresh-source owner-seam live verification passed without another model turn or
+  any second gateway. With exact task-opened Calculator HWND `6228472`
+  foreground, the edited `_WindowsDesktopAutomation` cleared the display via
+  its existing explicit `key` route, then sent literal `19+23=` through the
+  corrected ordinary `type_text` route. Fresh native UIA reads are exact:
+  expression `19 + 23=` and display `42`. Trusted DWM evidence
+  `packaged/literal-type-fix-calculator-42.png` is `1063 x 1003`, `40,405`
+  bytes, SHA-256
+  `39627b7ee7fbcb9066922a67ec676c76dac44fde7e99ea580a494ab9160481b9`;
+  visual review independently shows Calculator Scientific mode, expression
+  `19 + 23 =`, large result `42`, and the prior failed `193` only as older
+  history. This closes the literal-input root defect. The prior packaged palette
+  run already proved Main action classification, selected-lease Computer Use,
+  Windows-key launch, exact HWND/UIA focus, visible verification and fail-closed
+  external-model error handling; only the final model-authored completion and
+  its own `stop_session` were blocked by the account's OpenRouter credit ceiling.
+  Launcher disconnect already tore down that private session. Next: decide
+  whether an alternate already-configured profile can complete one short
+  packaged palette action without changing user model settings; otherwise
+  record this exact external limitation and continue full verification.
+- Repeating the packaged model call through a different profile/provider would
+  change user-owned model configuration solely to work around an external
+  account credit ceiling, so it was not done. Product acceptance instead uses
+  the combined evidence already obtained: the packaged palette performed Main
+  action classification, closed before work, restored the origin, reused the
+  sole selected lease, started exact Windows Computer Use, opened/focused and
+  inspected Calculator, rendered a bounded external failure, and tore the
+  session down on disconnect; the corrected freshly loaded ordinary `type`
+  seam then produced exact visible `19 + 23 = 42`. Development ordinary
+  Computer Use independently completed and stopped a fresh Calculator `731 +
+  269 = 1.000` session. The remaining missing model-authored summary is an
+  external account limitation, not an unverified Windows product boundary.
+- Connector verification after the literal-input correction initially returned:
+  `\.venv\Scripts\python.exe -m pytest tests\test_windows_computer_use_backend.py
+  -q` returned `42 passed in 1.05s`; the focused literal-input and Windows-key
+  regression returned `2 passed in 0.62s`; the Windows backend plus shared
+  Computer Use gate returned `45 passed in 0.98s`; and the complete importable
+  remainder command
+  `\.venv\Scripts\python.exe -m pytest tests --ignore=tests/test_acp.py
+  --ignore=tests/test_devtools.py --ignore=tests/test_image_render.py -q`
+  returned `833 passed, 3 skipped in 54.33s`. The later maintainer-review
+  lifecycle regression and final rerun supersede these counts below. The
+  exclusions are environment collection gaps for absent declared
+  `agent-client-protocol` and
+  `textual-image`, not failures in loaded tests; no dependency was installed.
+- A first root `npm test` verification attempt failed harmlessly because this
+  repository intentionally defines no root `test` script. The correct
+  repository-wide source discovery command enumerated `39` `*.test.js` /
+  `*.test.mjs` files outside `dist` and ran `node --test` on them: `357 passed,
+  0 failed, 0 skipped` in `12074.0422 ms`. Ignored log
+  `../agent-zero/tmp/a0-tag-windows-20260901/launcher-source-tests.log` is
+  `36,871` bytes, SHA-256
+  `da589979436d33503b790aeaf275b7c65d25cbcfb8cf0fb2131d433d24589532`.
+  Eight changed Python files compile with `py_compile`; Connector, Launcher and
+  Core `git diff --check` each return `0` (only normal LF-to-CRLF notices), and
+  the added diffs contain no implementation comment mentioning Ponytail.
+- Final pre-review status found no tracked Core change. In addition to the two
+  plugin-local paths present immediately after the user's pull, the live Agent
+  Zero sessions generated untracked runtime paths `.time_travel/`, `chats/`,
+  `plugins/_model_config/presets.yaml`,
+  `plugins/_office/stale-cleanup-v3.done`, `scheduler/`, and `uploads/` under the
+  mounted checkout. Their contents were not inspected or broadly deleted:
+  those locations can contain user runtime state, and deleting a whole shared
+  location would exceed task-owned cleanup authority.
+- The required read-only maintainer-alignment pass found one current-contract
+  lifecycle gap before final signoff: Windows assigned `_tag_target` before the
+  exact-window screenshot's final focus validation. If that validation raised,
+  no opaque token reached Launcher, so the otherwise unreachable private target
+  survived until a later context or helper teardown. Stepping out of the review,
+  the owner correction moved the existing assignment one line later—after
+  screenshot validation—and added one focused failed-context disposal test plus
+  the closest package/test DOX clauses. No abstraction or cross-platform code
+  changed. The final Windows backend file now passes `43 passed in 1.26s`; the
+  exact Windows-key, literal-type, and machine-stdio trio passes `3 passed in
+  0.95s`; and the final complete importable Connector run passes `834 passed,
+  3 skipped in 54.46s`. The read-only alignment review then resumed against this corrected
+  diff.
+- Final `frdel` verdict: **aligned; no remaining evidence-backed polish**.
+  Same-subsystem history is sparse: Connector's only Jan Tomášek commit is
+  initial license/gitignore commit `aa2c06d`, and Launcher's 20 Jan-authored
+  commits predate the current gateway/tag subsystem. Confidence in a direct
+  subsystem-style claim is therefore low. Stronger repeated local Core history
+  gives medium-confidence maintainer patterns: `e0dae52b` replaces copying with
+  capability detection and rejects unsupported use; `ec4de765` validates
+  identity before fetching state; `c2005f4f` routes cleanup through the owning
+  stop seam; `3d4f391c` makes UTF-8 explicit at the I/O boundary; `f69147ae`
+  keeps dependency-sensitive imports inside their owner functions; and
+  `e138e33c` updates nearest DOX ownership with structural work. The corrected
+  Windows diff follows those patterns: capability advertisement is complete-
+  contract-only, every mutation revalidates exact target state, target cleanup
+  is centralized and failed context never publishes state, machine stdio is
+  explicitly UTF-8 only on Windows gateway/headless paths, Windows automation
+  imports stay platform-local, and closest DOX/tests changed with behavior.
+  Current working code, focused/full tests and security boundaries supplied the
+  decisive evidence; no historical preference justified a rewrite.
+- Final cleanup used exact native identities only. Task-opened Calculator HWND
+  `6228472` (`Calcolatrice`) accepted `WM_CLOSE`; its window and
+  `CalculatorApp` process disappeared. Synthetic unsaved Notepad PID `24152`,
+  HWND `3146794` accepted `WM_CLOSE`; its localized confirmation dialog was
+  inspected and only exact UIA button `CommandButton_7`, **Non salvare**, was
+  invoked. The process exited and no file was saved. Packaged main PID `23428`,
+  HWND `2493136` accepted `WM_CLOSE`; packaged Launcher and repo-local gateway
+  PID `19172` were both gone at the first bounded poll. A final executable-path
+  inventory found `0` processes under the task-built package or Connector venv.
+  Pre-existing Chrome `16700`, Edge `17016`, and Opera `22596` roots remain
+  unchanged. Container `a0-inst-agent-zero-mthzq26f` intentionally remains
+  `running true`, and `http://127.0.0.1:49235/api/health` returns `200`.
+- Ignored evidence and the requested local artifacts remain available for user
+  inspection. Final hashes are unchanged: installer `120,530,896` bytes,
+  SHA-256
+  `503093b78923c194aeed7925e7605e697e1e0db61a7b91fdba887191d50579b6`;
+  blockmap `128,069` bytes,
+  `1e351fe335571a89cb982b3dc30902ab634261db6bb0d85a2ee9bcaa0f3d01d3`;
+  unpacked executable `232,360,960` bytes,
+  `37477286e472bc00b412c792528cf18ef5e1ef015363e12fb106fa88c588ea35`.
+  Both executable identities remain `NotSigned`, as expected for this local
+  non-release build. The task-created, ignored `packaging/node_modules` cache
+  was resolved to the exact in-repository path and verified against
+  `.gitignore`; two native PowerShell recursive-removal attempts were blocked by
+  the local execution safety policy before deletion. It remains inert and
+  reproducible from the lockfile; no bypass was attempted.
+- Final repository/privacy audit: Connector has exactly `12` modified tracked
+  files and is one authorized commit ahead; Launcher has exactly `5` modified
+  tracked files and is one authorized commit ahead; Core has `0` tracked
+  changes and remains aligned with `upstream/ready`. `git diff --check` passes in
+  all three repositories, eight changed Python files compile, and scans of all
+  added lines find `0` personal-path literals, `0` secret-like values, and `0`
+  raw account identifiers. The Core runtime paths listed above were preserved
+  without content inspection. CodeRabbit was not run. The working trees are
+  ready for user inspection and later commit authorization.
+
 ## 12. Known Risks and Mitigations
 
 - **Wayland shortcut ownership differs between development and AppImage.**
@@ -4993,9 +6599,10 @@ PACKAGED FIM OK
   forms and verify raw tag is not submitted.
 - **Tab/scope state can change mid-run.**
   Re-check lease/config before every final apply and release on all exits.
-- **Remote platform code cannot be honestly accepted on Linux.**
-  Keep shared contracts cross-platform, then use the user's Mac and Windows
-  machines at the explicit gates.
+- **Platform code must be accepted on its native host.**
+  Ubuntu and macOS are accepted; complete Windows 10 x64 on the current local
+  host without reopening either accepted tranche unless a Windows change risks
+  a proven shared contract.
 
 ## 13. Deliberate Non-Goals
 

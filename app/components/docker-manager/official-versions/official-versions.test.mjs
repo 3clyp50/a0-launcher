@@ -177,11 +177,12 @@ test('channel version cards display update dates from channel metadata or matche
 });
 
 test('channel version card meta keeps only date and size', () => {
+  const updatedAt = '2026-06-25T12:44:56.141Z';
   const entries = [
     {
       tag: 'ready',
       title: 'ready',
-      updatedAt: '2026-06-25T12:44:56.141Z',
+      updatedAt,
       sizeBytes: 12348030976,
       matchHint: 'Differs from published ready',
       digestHint: 'Published: 648b9703656b / Local: dea8d7301edd'
@@ -189,7 +190,7 @@ test('channel version card meta keeps only date and size', () => {
   ];
 
   assert.deepEqual(metaPartsForEntry(entries[0], entries), [
-    'Updated Jun 25, 2026',
+    `Updated ${new Date(updatedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`,
     '11.5 GB'
   ]);
 });

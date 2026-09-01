@@ -594,6 +594,7 @@ test('overlay renders the owned microphone result and cancels an in-flight sessi
 
 test('overlay expands the original-style menu and keeps selected host paths out of renderer state', async () => {
   const scripts = [];
+  const selectedPaths = [path.resolve('/tmp/brief.txt'), path.resolve('/tmp/references')];
   let bounds = { x: 100, y: 120, width: 690, height: 170 };
   const windowRef = {
     isDestroyed: () => false,
@@ -607,7 +608,7 @@ test('overlay expands the original-style menu and keeps selected host paths out 
   const overlay = new A0TagOverlay({
     fixedComposerCanvas: false,
     screen: { getDisplayMatching: () => ({ workArea: { y: 0 } }) },
-    selectAttachments: async () => ['/tmp/brief.txt', '/tmp/references']
+    selectAttachments: async () => selectedPaths
   });
   overlay.window = windowRef;
 
@@ -615,10 +616,7 @@ test('overlay expands the original-style menu and keeps selected host paths out 
   assert.deepEqual(bounds, { x: 100, y: 20, width: 690, height: 270 });
   await overlay._selectComposerAttachments(windowRef, 'file');
   assert.deepEqual(bounds, { x: 100, y: 120, width: 690, height: 170 });
-  assert.deepEqual(overlay.composerAttachments.map((item) => item.path), [
-    '/tmp/brief.txt',
-    '/tmp/references'
-  ]);
+  assert.deepEqual(overlay.composerAttachments.map((item) => item.path), selectedPaths);
   assert.match(scripts.at(-1), /renderA0TagAttachments/);
   assert.doesNotMatch(scripts.at(-1), /\/tmp\/brief/);
 
@@ -631,7 +629,7 @@ test('overlay expands the original-style menu and keeps selected host paths out 
     action: 'submit',
     query: 'Read these',
     profile: 'agent0',
-    attachmentPaths: ['/tmp/brief.txt', '/tmp/references']
+    attachmentPaths: selectedPaths
   });
 });
 

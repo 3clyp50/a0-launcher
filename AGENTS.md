@@ -101,6 +101,11 @@ Architecture contracts:
   installer step. Official compatible CLI packages include the Python
   Playwright client used for host Browser launch without bundling Chromium;
   `Set up browser` repairs older or damaged CLI environments in place.
+- On macOS, Browser Host access may also select Safari through the connector's
+  system `safaridriver` support. Launcher setup must direct the user to Safari >
+  Settings > Advanced > Show features for web developers, then Developer >
+  Allow remote automation, and must not toggle that browser security setting
+  silently.
 - A0 CLI v2.5 is the first connector release with the Launcher gateway
   contract. Continue capability-gating gateway candidates rather than replacing
   that contract check with a version comparison; an unreleased sibling

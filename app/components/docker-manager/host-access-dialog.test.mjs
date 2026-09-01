@@ -331,6 +331,11 @@ test('Browser setup explains how to enable remote debugging when no endpoint is 
     available_browsers: [{ cdp_endpoint: 'ws://localhost:9333/devtools/browser/test' }]
   }), '');
   assert.match(browserSetupHint({ available_browsers: [] }), /Install Chrome, Chromium, Edge, Brave, Opera, or Vivaldi/);
+  assert.match(browserSetupHint({
+    browser_family: 'safari',
+    browser_id: 'safari:default',
+    available_browsers: [{ family: 'safari', id: 'safari:default' }]
+  }), /Safari > Settings > Advanced.*Show features for web developers.*Developer.*Allow remote automation/);
 });
 
 test('Browser setup keeps an actionable fallback after the gateway command fails', () => {

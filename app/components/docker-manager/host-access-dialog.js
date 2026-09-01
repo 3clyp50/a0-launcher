@@ -297,7 +297,7 @@ function browserSupportDetail(allowed, browser = {}) {
 }
 
 function browserRelatedMessage(value) {
-  return /\b(browser|chromium|chrome|playwright|edge|brave|opera|vivaldi)\b/i.test(String(value || ""));
+  return /\b(browser|chromium|chrome|playwright|webdriver|safari|edge|brave|opera|vivaldi)\b/i.test(String(value || ""));
 }
 
 function hostAccessActionMessage(config = {}, runtime = {}) {
@@ -358,6 +358,11 @@ function browserOptions(browser = {}, selected = "") {
 
 function browserSetupHint(browser = {}) {
   const available = Array.isArray(browser?.available_browsers) ? browser.available_browsers : [];
+  const selected = browser?.browser_family || browser?.browser_id
+    || (available.length === 1 ? available[0]?.family || available[0]?.browser_family || available[0]?.id || available[0]?.browser_id : "");
+  if (/^safari(?::|$)/i.test(String(selected || ""))) {
+    return "In Safari > Settings > Advanced, turn on ‘Show features for web developers’. Then open Developer, turn on ‘Allow remote automation’, and click Set up browser again.";
+  }
   const hasDebuggingEndpoint = Boolean(String(browser?.cdp_endpoint || "").trim())
     || available.some((candidate) => Boolean(String(candidate?.cdp_endpoint || "").trim()));
   if (!hasDebuggingEndpoint && available.length === 0) {

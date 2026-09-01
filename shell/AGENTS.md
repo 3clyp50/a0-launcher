@@ -207,6 +207,10 @@ This scope owns:
   the visible card. Other platforms may retain the bottom-anchored resize path.
 - The palette microphone must reuse the exact leased Instance page's bundled
   `_whisper_stt` store through the existing narrow local navigation surface.
+  On macOS, the shell must request native microphone consent for the actual
+  packaged Launcher or Electron development identity before that Instance page
+  starts recording; denied consent remains macOS-owned and requires the normal
+  System Settings plus application-restart recovery.
   Keep raw microphone audio, device selection, silence detection, model loading,
   transcription requests, and Agent Zero toast calls inside that authenticated
   Instance web contents. Launcher may receive only a bounded final transcript,

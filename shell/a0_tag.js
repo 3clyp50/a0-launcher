@@ -406,6 +406,7 @@ class GnomeA0TagShortcut {
   constructor(options = {}) {
     this.spawnSync = options.spawnSync || childProcess.spawnSync;
     this.pid = Number.isInteger(Number(options.pid)) ? Number(options.pid) : process.pid;
+    this.platform = options.platform || process.platform;
     this.env = options.env || process.env;
     this.processStartTime = /^\d+$/.test(String(options.processStartTime || ''))
       ? String(options.processStartTime)
@@ -415,7 +416,7 @@ class GnomeA0TagShortcut {
 
   get supported() {
     const desktop = String(this.env.XDG_CURRENT_DESKTOP || this.env.DESKTOP_SESSION || '').toLowerCase();
-    return process.platform === 'linux' && this.env.XDG_SESSION_TYPE === 'wayland' && desktop.includes('gnome');
+    return this.platform === 'linux' && this.env.XDG_SESSION_TYPE === 'wayland' && desktop.includes('gnome');
   }
 
   register() {

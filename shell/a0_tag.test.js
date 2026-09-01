@@ -498,6 +498,7 @@ test('GNOME Wayland fallback preserves other shortcuts and removes only its own 
   const calls = [];
   const shortcut = new GnomeA0TagShortcut({
     pid: 4242,
+    platform: 'linux',
     processStartTime: '8675309',
     env: { XDG_SESSION_TYPE: 'wayland', XDG_CURRENT_DESKTOP: 'ubuntu:GNOME' },
     spawnSync(_command, args) {

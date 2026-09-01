@@ -3,8 +3,10 @@ const test = require('node:test');
 
 const {
   ensureMacAccessibilityPermission,
+  ensureMacMicrophonePermission,
   localizeMacPermissionStatus,
-  macAccessibilityPermissionMessage
+  macAccessibilityPermissionMessage,
+  macMicrophonePermissionMessage
 } = require('./macos_permissions');
 
 test('macOS Accessibility preflight prompts once and polls without prompting', async () => {
@@ -60,4 +62,53 @@ test('dev permission copy names the Electron build macOS actually authorizes', (
     macAccessibilityPermissionMessage({ isPackaged: true }),
     'Allow Agent Zero Launcher in macOS Accessibility settings.'
   );
+  assert.equal(
+    macMicrophonePermissionMessage({ isPackaged: false }),
+    'Allow Electron (this Launcher dev build) in macOS Microphone settings, then restart Launcher.'
+  );
+});
+
+test('macOS microphone preflight prompts only from the undetermined state', async () => {
+  const calls = [];
+  const permission = {
+    getMediaAccessStatus(mediaType) {
+      calls.push(['status', mediaType]);
+      return 'not-determined';
+    },
+    async askForMediaAccess(mediaType) {
+      calls.push(['ask', mediaType]);
+      return true;
+    }
+  };
+
+  assert.deepEqual(
+    await ensureMacMicrophonePermission(permission, { prompt: true }),
+    { granted: true, prompted: true }
+  );
+  assert.deepEqual(calls, [
+    ['status', 'microphone'],
+    ['ask', 'microphone']
+  ]);
+});
+
+test('macOS microphone preflight preserves granted and denied decisions', async () => {
+  let asked = 0;
+  const granted = {
+    getMediaAccessStatus: () => 'granted',
+    askForMediaAccess: async () => { asked += 1; return false; }
+  };
+  const denied = {
+    getMediaAccessStatus: () => 'denied',
+    askForMediaAccess: async () => { asked += 1; return true; }
+  };
+
+  assert.deepEqual(
+    await ensureMacMicrophonePermission(granted, { prompt: true }),
+    { granted: true, prompted: false }
+  );
+  assert.deepEqual(
+    await ensureMacMicrophonePermission(denied, { prompt: true }),
+    { granted: false, prompted: false }
+  );
+  assert.equal(asked, 0);
 });

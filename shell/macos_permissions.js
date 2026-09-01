@@ -10,6 +10,12 @@ function macScreenRecordingPermissionMessage({ isPackaged = true } = {}) {
     : 'Allow Electron (this Launcher dev build) in macOS Screen Recording settings.';
 }
 
+function macMicrophonePermissionMessage({ isPackaged = true } = {}) {
+  return isPackaged
+    ? 'Allow Agent Zero Launcher in macOS Microphone settings, then restart Launcher.'
+    : 'Allow Electron (this Launcher dev build) in macOS Microphone settings, then restart Launcher.';
+}
+
 function localizeMacPermissionStatus(status = {}, { isPackaged = true } = {}) {
   const setup = status?.gateway?.status?.computer_use?.setup;
   const state = String(setup?.state || '').trim().toLowerCase();
@@ -64,9 +70,30 @@ async function ensureMacAccessibilityPermission(systemPreferences, {
   return { granted: false, prompted: true };
 }
 
+async function ensureMacMicrophonePermission(systemPreferences, { prompt = false } = {}) {
+  const status = () => {
+    try {
+      return String(systemPreferences?.getMediaAccessStatus?.('microphone') || 'unknown');
+    } catch {
+      return 'unknown';
+    }
+  };
+  const initial = status();
+  if (initial === 'granted') return { granted: true, prompted: false };
+  if (!prompt || initial !== 'not-determined') return { granted: false, prompted: false };
+  try {
+    const granted = await systemPreferences?.askForMediaAccess?.('microphone');
+    return { granted: granted === true || status() === 'granted', prompted: true };
+  } catch {
+    return { granted: false, prompted: true };
+  }
+}
+
 module.exports = {
   ensureMacAccessibilityPermission,
+  ensureMacMicrophonePermission,
   localizeMacPermissionStatus,
   macAccessibilityPermissionMessage,
+  macMicrophonePermissionMessage,
   macScreenRecordingPermissionMessage
 };

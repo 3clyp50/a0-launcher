@@ -29,7 +29,10 @@ test('developer projects expose only bounded root files and bind saves to the ow
 
   await saveDeveloperProjectFile(11, project.token, 'compose.yaml', 'services:\n  app:\n    image: busybox\n');
   await saveDeveloperProjectFile(11, project.token, '.dockerignore', '.git\n');
-  assert.equal((await developerProjectTarget(11, project.token, '.dockerignore')).projectRoot, root);
+  assert.equal(
+    (await developerProjectTarget(11, project.token, '.dockerignore')).projectRoot,
+    await fs.realpath(root)
+  );
   assert.match(await fs.readFile(path.join(root, 'compose.yaml'), 'utf8'), /busybox/);
 
   await assert.rejects(

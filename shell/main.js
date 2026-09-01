@@ -52,8 +52,10 @@ const {
 } = require('./host_gateway');
 const {
   ensureMacAccessibilityPermission,
+  ensureMacMicrophonePermission,
   localizeMacPermissionStatus,
-  macAccessibilityPermissionMessage
+  macAccessibilityPermissionMessage,
+  macMicrophonePermissionMessage
 } = require('./macos_permissions');
 const {
   A0_CLI_RELEASE_API_URL,
@@ -1677,6 +1679,14 @@ async function transcribeA0TagMicrophone(instanceKey) {
     const error = new Error(initial.message);
     error.code = initial.code;
     throw error;
+  }
+  if (process.platform === 'darwin') {
+    const permission = await ensureMacMicrophonePermission(systemPreferences, { prompt: true });
+    if (!permission.granted) {
+      const error = new Error(macMicrophonePermissionMessage({ isPackaged: app.isPackaged }));
+      error.code = 'A0_TAG_MICROPHONE_PERMISSION_REQUIRED';
+      throw error;
+    }
   }
   const result = await runA0TagMicrophone(initial.tab.view.webContents);
   const current = resolveA0TagLease(instanceKey);

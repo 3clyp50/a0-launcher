@@ -246,6 +246,7 @@ function computerUseSetupState(config = {}, runtime = {}) {
   const macosBackend = String(computer?.backend_family || computer?.backend_id || "").toLowerCase() === "macos";
   const setupState = normalizeCapabilityStatus(computer?.setup?.state);
   const updateRequired = allowed && macosBackend && !setupSupported;
+  const checkingMessage = macosBackend ? "Checking macOS permissions…" : "Checking Computer Use…";
   const actionLabel = setupState === "accessibility required"
     ? "Open Accessibility Settings"
     : setupState === "screen recording required"
@@ -261,6 +262,7 @@ function computerUseSetupState(config = {}, runtime = {}) {
       : capabilityReadinessLabel(allowed, computer, { computerUse: true, setupSupported }),
     canSetup: allowed && setupSupported && setupState !== "ready" && setupState !== "checking",
     actionLabel,
+    checkingMessage,
     prompt: ["accessibility required", "screen recording required"].includes(setupState),
     restartRequired: allowed && setupState === "restart required",
     message: updateRequired
@@ -332,7 +334,7 @@ function hostAccessActionMessage(config = {}, runtime = {}) {
   }
   if (computerSetup.allowed && computerSetup.setupState !== "ready") {
     add(computerSetup.message);
-    if (computerSetup.setupState === "checking") add("Checking macOS permissions…");
+    if (computerSetup.setupState === "checking") add(computerSetup.checkingMessage);
     if (!messages.length && state === "needs_action") add("Finish Computer Use setup below.");
   }
   if (!messages.length && state === "needs_action" && !ignoredDisabledBrowserMessage) {
@@ -569,7 +571,7 @@ function openHostAccessDialog(tab, state = window.__dmLastState || {}) {
     const notice = dialog.querySelector("[data-host-action-notice]");
     if (readiness) readiness.textContent = "Allowed · Checking";
     if (notice) {
-      notice.textContent = "Checking macOS permissions…";
+      notice.textContent = computerSetup.checkingMessage;
       notice.hidden = false;
     }
     const result = await window.dockerManagerActions?.hostGatewayCommand?.(

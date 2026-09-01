@@ -227,7 +227,13 @@ test('Computer Use readiness stays separate from the saved permission choice', (
   const checking = computerUseSetupState(config, {
     gateway: {
       features: ['computer_use_setup_v1'],
-      status: { computer_use: { setup: { state: 'checking' } } }
+      status: { computer_use: { backend_family: 'windows', setup: { state: 'checking' } } }
+    }
+  });
+  const checkingMacos = computerUseSetupState(config, {
+    gateway: {
+      features: ['computer_use_setup_v1'],
+      status: { computer_use: { backend_family: 'macos', setup: { state: 'checking' } } }
     }
   });
 
@@ -238,6 +244,8 @@ test('Computer Use readiness stays separate from the saved permission choice', (
   assert.equal(setupNeeded.prompt, true);
   assert.equal(checking.label, 'Allowed · Checking');
   assert.equal(checking.canSetup, false);
+  assert.equal(checking.checkingMessage, 'Checking Computer Use…');
+  assert.equal(checkingMacos.checkingMessage, 'Checking macOS permissions…');
   assert.equal(ready.label, 'Allowed · Ready');
   assert.equal(ready.canSetup, false);
   assert.equal(ready.prompt, false);
@@ -278,6 +286,16 @@ test('Needs action shows the actual capability reason', () => {
     }
   }), 'Allow Agent Zero Launcher in macOS Accessibility settings.');
   assert.equal(hostAccessActionMessage(config, { state: 'needs_action' }), 'Finish Computer Use setup below.');
+  assert.equal(hostAccessActionMessage(config, {
+    state: 'connected',
+    gateway: {
+      features: ['computer_use_setup_v1'],
+      status: {
+        browser: { status: 'ready' },
+        computer_use: { backend_family: 'windows', setup: { state: 'checking' } }
+      }
+    }
+  }), 'Checking Computer Use…');
 });
 
 test('Missing host Playwright becomes a Launcher repair action', () => {
@@ -387,6 +405,7 @@ test('Host access UI uses five friendly permissions and visible action reasons',
   assert.doesNotMatch(source, /Personal browser/);
   assert.match(source, /candidate\?\.browser_id \|\| candidate\?\.id/);
   assert.match(source, /candidate\?\.browser_label \|\| candidate\?\.label/);
+  assert.match(source, /notice\.textContent = computerSetup\.checkingMessage/);
 });
 
 test('Host access settings temporarily hide the active Instance view without selecting Launcher home', async () => {

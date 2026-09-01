@@ -15,8 +15,9 @@
    Launcher gateway is the only authority for host tools.
 6. Keep this ledger synchronized before ending a work period.
 7. Current status: Ubuntu, macOS, and the local Windows 10 x64 implementation
-   are accepted. Windows source changes remain uncommitted for user inspection;
-   the two separately authorized reported-fix commits are the only new commits.
+   are accepted. Windows source changes are committed locally and remain
+   unpushed; the exact authorized series is recorded at the end of the Windows
+   evidence log.
    No task-owned Launcher/gateway/desktop process remains. Retain the ignored
    evidence and local Windows artifacts until the user has inspected them; do
    not reopen a platform tranche unless a later change risks its proven
@@ -302,8 +303,8 @@ sha256 ae58b4081f0a8f1749d59e712478e966b78f8f256a7965ab2f4a51d42d6887f0
 
 | Repository | Resolved Windows path | Branch | Initial/current HEAD | Worktree state |
 | --- | --- | --- | --- | --- |
-| Connector | `%USERPROFILE%\Documents\GitHub\a0-connector` | `development` | initial `ca4f05cfab2e744e0e82962960edd4ee7bfff1c8`; current `b5e489946fbffb598dffd2b77dd02010d3f35216` | one authorized reported-fix commit ahead of `origin/development`; Windows backend/test/DOX work remains uncommitted |
-| Launcher | `%USERPROFILE%\Documents\GitHub\a0-launcher` | `development` | initial `0061b097470845b9a20e32b6a694687f413dc5d3`; current `4de2ed57e75b56190b8a6c49952ded6370728def` | one authorized reported-fix commit ahead of `upstream/development`; ledger/DOX work remains uncommitted |
+| Connector | `%USERPROFILE%\Documents\GitHub\a0-connector` | `development` | initial `ca4f05cfab2e744e0e82962960edd4ee7bfff1c8`; current `cc404de1685ee4c36328a799b0485454f949cdc4` | clean; four authorized commits ahead of `origin/development` |
+| Launcher | `%USERPROFILE%\Documents\GitHub\a0-launcher` | `development` | initial `0061b097470845b9a20e32b6a694687f413dc5d3`; product/evidence head `24827a04f7b967f50622b4b3f9c8f4b3417251f0` followed only by the final ledger-record commit containing this row | clean after the ledger-record commit; four authorized commits ahead of `upstream/development` |
 | Core | `%USERPROFILE%\Documents\GitHub\agent-zero` | `ready` | initial `dec6df661f839040748221f828f5f792257892f0`; current `4d10f601d7e4c136d2b866feca0a5db91b571b61` after the user's pull | current branch aligned with `upstream/ready`; two pre-existing untracked plugin-local paths remain untouched |
 
 - Required handoff gates passed exactly:
@@ -318,9 +319,9 @@ exit 0
 
 - Both accepted hashes remain ancestors of the respective current HEADs. No
   fetch was needed and no merge, reset, checkout, branch switch, push, tag, PR,
-  publish, or release action occurred. The only commits made are the two narrow
-  reported-fix commits explicitly authorized by the user and recorded below;
-  main-tranche work remains uncommitted.
+  publish, or release action occurred. The user first authorized the two narrow
+  reported-fix commits, then explicitly authorized the final logical commit
+  series recorded below. No history was rewritten.
 - The Core pull was user-owned. Before it, Core was 180 commits behind its
   upstream ref and exposed pre-existing untracked/ignored user-runtime state;
   none was read or touched. After it, only two pre-existing plugin-local paths
@@ -416,7 +417,7 @@ started: 2026-09-01T01:30:25.754687478Z
   permission, or setting changed. This limits that inspection helper's window
   screenshots, not A0 Tag's backend implementation; preserve other visual
   evidence paths and record whether the limitation remains.
-- The owner trace is complete and the uncommitted Windows package now provides
+- The owner trace is complete and the committed Windows package now provides
   the private `tag_context` / `tag_replace` / `tag_release` contract through its
   existing pywinauto, UIA, pywin32, Win32 Edit, Pillow, and DWM seams. Direct
   Notepad and HWND-less WPF smoke tests passed exact Unicode span/caret and
@@ -444,7 +445,8 @@ started: 2026-09-01T01:30:25.754687478Z
   visually verified `19 + 23 = 42`. Changing the user's provider/model limits
   merely to repeat that external turn is out of scope. The final read-only
   maintainer-alignment and cleanup audits pass; source and retained ignored
-  evidence/artifacts are ready for user inspection and later commit direction.
+  evidence/artifacts are ready for user inspection and later push/release
+  direction.
 
 ### Windows acceptance checklist
 
@@ -6546,7 +6548,23 @@ PACKAGED FIM OK
   added lines find `0` personal-path literals, `0` secret-like values, and `0`
   raw account identifiers. The Core runtime paths listed above were preserved
   without content inspection. CodeRabbit was not run. The working trees are
-  ready for user inspection and later commit authorization.
+  clean and ready for user inspection and later push authorization.
+- After final acceptance, the user explicitly authorized the proposed local
+  commits. Preserving the two existing reported-fix commits and without amend,
+  rebase, push, or history rewrite, Connector received:
+  `fc573d50ccd7eaea67770e990ef6ad1a35586b91 Add Windows A0 Tag backend`,
+  `91c2808504b8de38f525e25fb761ff8fd14c2144 Harden Windows machine protocol boundaries`,
+  and
+  `cc404de1685ee4c36328a799b0485454f949cdc4 Make Connector tests portable on Windows`.
+  Launcher received
+  `e9805d8bbaaa45d4521b030fc31090b0a8c1ee2d Make Launcher tests platform-neutral`
+  and
+  `24827a04f7b967f50622b4b3f9c8f4b3417251f0 Document Windows Host access and A0 Tag acceptance`.
+  This final bookkeeping update is committed separately as
+  `Record Windows tranche commits`; by definition a commit cannot embed its own
+  hash, so `git rev-parse HEAD` is the exact hash recovery command. Connector is
+  clean/ahead `4`; Launcher is clean/ahead `4`; Core remains tracked-clean and
+  aligned with `upstream/ready`.
 
 ## 12. Known Risks and Mitigations
 

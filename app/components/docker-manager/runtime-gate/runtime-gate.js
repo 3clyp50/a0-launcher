@@ -6,43 +6,42 @@ const RUNTIME_GATE_ID = "runtimeSetupDialog";
 
 const RUNTIME_STEPS = Object.freeze({
   linux: Object.freeze([
-    ["check_runtime", "Checking Docker Engine"],
-    ["authorization", "Requesting system authorization"],
-    ["install_engine", "Installing Docker Engine"],
-    ["start_engine", "Starting Docker Engine"],
-    ["check_access", "Checking Docker access"],
-    ["ready", "Runtime ready"]
+    ["check_runtime", "Checking this computer"],
+    ["authorization", "Waiting for system approval"],
+    ["install_engine", "Installing required files"],
+    ["start_engine", "Starting Agent Zero"],
+    ["check_access", "Checking system access"],
+    ["ready", "Agent Zero is ready"]
   ]),
   windows_wsl: Object.freeze([
-    ["check_runtime", "Checking Windows runtime"],
-    ["windows_approval", "Requesting Windows approval"],
-    ["enable_wsl", "Enabling WSL features"],
-    ["follow_up", "Waiting for restart or follow-up"],
-    ["install_ubuntu", "Installing Ubuntu"],
-    ["prepare_ubuntu", "Preparing Ubuntu"],
-    ["install_engine", "Installing Docker Engine in WSL"],
-    ["start_wsl_engine", "Starting Docker Engine in WSL"],
-    ["start_bridge", "Starting local Docker bridge"],
-    ["ready", "Runtime ready"]
+    ["check_runtime", "Checking this computer"],
+    ["windows_approval", "Waiting for Windows approval"],
+    ["enable_wsl", "Preparing Windows"],
+    ["follow_up", "Waiting for Windows restart"],
+    ["download_runtime", "Downloading required files"],
+    ["install_runtime", "Installing required files"],
+    ["start_wsl_engine", "Starting Agent Zero"],
+    ["start_bridge", "Connecting Agent Zero"],
+    ["ready", "Agent Zero is ready"]
   ]),
   docker_desktop: Object.freeze([
     ["desktop_stopped", "Docker Desktop is installed but not running"],
     ["start_desktop", "Starting Docker Desktop"],
     ["wait_desktop", "Waiting for Docker Desktop"],
-    ["ready", "Runtime ready"]
+    ["ready", "Agent Zero is ready"]
   ]),
   macos_colima: Object.freeze([
-    ["find_components", "Finding runtime components"],
-    ["download_components", "Downloading runtime components"],
-    ["install_components", "Installing runtime components"],
-    ["start_runtime", "Starting Agent Zero runtime"],
-    ["start_engine", "Starting Docker Engine"],
-    ["ready", "Runtime ready"]
+    ["find_components", "Checking required components"],
+    ["download_components", "Downloading required files"],
+    ["install_components", "Installing required files"],
+    ["start_runtime", "Starting Agent Zero"],
+    ["start_engine", "Connecting Agent Zero"],
+    ["ready", "Agent Zero is ready"]
   ]),
   generic: Object.freeze([
-    ["check_runtime", "Checking runtime"],
-    ["setup_runtime", "Runtime Setup"],
-    ["ready", "Runtime ready"]
+    ["check_runtime", "Checking this computer"],
+    ["setup_runtime", "Preparing this computer"],
+    ["ready", "Agent Zero is ready"]
   ])
 });
 
@@ -89,7 +88,7 @@ function phaseForRuntime(runtime = null) {
   if (isDockerDesktopStopped(runtime)) return "desktop_stopped";
   if (runtime?.state === "needs_relogin" || runtime?.state === "needs_group_membership") return "check_access";
   if (runtime?.state === "manual_install" || runtime?.state === "unsupported") return "check_runtime";
-  if (runtime?.mode === "wsl_distribution") return "install_ubuntu";
+  if (runtime?.mode === "wsl_distribution") return "install_runtime";
   if (runtime?.mode === "wsl_bridge_dependency") return "start_bridge";
   if (runtime?.state === "engine_stopped") return runtimeKind(runtime) === "windows_wsl" ? "start_wsl_engine" : "start_engine";
   return "check_runtime";
@@ -129,21 +128,22 @@ function decorateSteps(kind, phase, status = "idle") {
 function headlineForRuntime(runtime, progress = null) {
   const headline = asText(progress?.headline);
   if (headline) return headline;
-  if (isDockerDesktopStopped(runtime)) return "Docker Desktop is not running";
-  if (runtime?.state === "manual_install" || runtime?.state === "unsupported") return "Manual Runtime Setup Needed";
-  if (runtime?.state === "needs_relogin") return "Finish Docker Access Setup";
-  return "Setup Agent Zero";
+  if (isDockerDesktopStopped(runtime)) return "Start Docker Desktop";
+  if (runtime?.state === "manual_install" || runtime?.state === "unsupported") return "Manual setup required";
+  if (runtime?.state === "needs_relogin") return "Sign out to finish setup";
+  return "Agent Zero Setup";
 }
 
 function detailForRuntime(runtime, progress = null) {
   if (progress?.status === "failed" && asText(progress?.error)) return asText(progress.error);
   const detail = asText(progress?.detail) || asText(progress?.message);
   if (detail) return detail;
-  if (runtime?.state === "manual_install" && Array.isArray(runtime.manualPackages) && runtime.manualPackages.length) {
-    const base = asText(runtime.detail) || "Install Docker packages manually, then refresh.";
-    return `${base} Packages: ${runtime.manualPackages.join(", ")}.`;
-  }
-  return asText(runtime?.detail) || "Agent Zero needs a local container runtime before the launcher can continue.";
+  return asText(runtime?.detail) || "Agent Zero needs a one-time local setup before it can run on this computer.";
+}
+
+function technicalNoteForRuntime(runtime) {
+  if (runtime?.state !== "manual_install" || !Array.isArray(runtime.manualPackages) || !runtime.manualPackages.length) return "";
+  return `Required system packages: ${runtime.manualPackages.join(", ")}.`;
 }
 
 function actionForRuntime(runtime, progress = null) {
@@ -177,7 +177,7 @@ function actionForRuntime(runtime, progress = null) {
   }
 
   if ((runtime.state === "manual_install" || runtime.state === "unsupported") && asText(runtime.manualUrl)) {
-    return { kind: "guide", label: "Open Install Guide" };
+    return { kind: "guide", label: "Open setup guide" };
   }
 
   return { kind: "refresh", label: "Refresh" };
@@ -262,8 +262,8 @@ function successModeForState(state = {}) {
 }
 
 function successTextForMode(mode) {
-  if (mode === "install") return "Download Agent Zero to create your first Instance.";
-  if (mode === "run") return "Agent Zero is already downloaded. Start an Instance when you're ready.";
+  if (mode === "install") return "Choose a Version to create your first Instance.";
+  if (mode === "run") return "Your Version is installed. Start an Instance when you're ready.";
   return "Agent Zero is ready on this computer.";
 }
 
@@ -271,6 +271,16 @@ function successActionForMode(mode) {
   if (mode === "install") return { kind: "install_image", label: "Download Agent Zero" };
   if (mode === "run") return { kind: "run_image", label: "Run Agent Zero" };
   return { kind: "continue", label: "Continue" };
+}
+
+function runtimeOptionLabel(candidate = {}) {
+  const provider = asText(candidate?.provider);
+  if (provider === "docker_engine") return "System setup";
+  if (provider === "wsl_engine") return "Agent Zero setup";
+  if (["docker_desktop", "orbstack", "colima", "podman", "rancher_desktop"].includes(provider)) {
+    return asText(candidate?.label) || "Local setup";
+  }
+  return "Local setup";
 }
 
 function runtimeEndpointOptions(state = {}) {
@@ -294,7 +304,7 @@ function runtimeEndpointOptions(state = {}) {
     seen.add(identity);
     out.push({
       id,
-      label: `${asText(candidate?.label) || "Container runtime"}${startable ? " (stopped)" : ""}`,
+      label: `${runtimeOptionLabel(candidate)}${startable ? " (stopped)" : ""}`,
       startable,
       isSelected: candidate?.isSelected === true || id === asText(state?.runtime?.selectedRuntimeEndpointId)
     });
@@ -368,7 +378,7 @@ function normalizedRuntimeGate(state = {}) {
     : [];
 
   return {
-    headline: success ? "Runtime Ready" : headlineForRuntime(runtime, progress),
+    headline: success ? "Agent Zero is ready" : headlineForRuntime(runtime, progress),
     detail: success ? "Agent Zero can run on this computer now." : detailForRuntime(runtime, progress),
     showDetail: success || status !== "running",
     phase,
@@ -383,6 +393,8 @@ function normalizedRuntimeGate(state = {}) {
       fallbackProgress: estimatedProgressFromSteps(renderedSteps)
     }),
     steps: renderedSteps,
+    technicalNote: technicalNoteForRuntime(runtime),
+    technicalDetail: asText(progress?.technicalDetail),
     success,
     setupFlow,
     successMode,
@@ -452,7 +464,10 @@ function runtimeStepIcon(status) {
 }
 
 function renderRuntimeDetails(model, parent) {
-  if (model.success || !Array.isArray(model.steps) || !model.steps.length) return;
+  const hasSteps = Array.isArray(model.steps) && model.steps.length > 0;
+  const technicalNote = asText(model.technicalNote);
+  const technicalDetail = asText(model.technicalDetail);
+  if (model.success || (!hasSteps && !technicalNote && !technicalDetail)) return;
 
   const details = document.createElement("details");
   details.className = "dm-runtime-details";
@@ -461,36 +476,39 @@ function renderRuntimeDetails(model, parent) {
   summary.className = "dm-runtime-details-summary";
 
   const label = document.createElement("span");
-  label.textContent = "See more";
+  label.textContent = technicalDetail ? "Technical details" : "See more";
   summary.appendChild(label);
   details.appendChild(summary);
 
-  const steps = document.createElement("div");
-  steps.className = "dm-runtime-steps";
-  steps.setAttribute("role", "list");
-  steps.setAttribute("aria-label", "Runtime setup phases");
+  if (hasSteps) {
+    const steps = document.createElement("div");
+    steps.className = "dm-runtime-steps";
+    steps.setAttribute("role", "list");
+    steps.setAttribute("aria-label", "Agent Zero setup steps");
 
-  for (const step of model.steps) {
-    const status = asText(step.status) || "pending";
-    const item = document.createElement("span");
-    item.className = `dm-runtime-step is-${status}`;
-    item.setAttribute("role", "listitem");
+    for (const step of model.steps) {
+      const status = asText(step.status) || "pending";
+      const item = document.createElement("span");
+      item.className = `dm-runtime-step is-${status}`;
+      item.setAttribute("role", "listitem");
 
-    const icon = document.createElement("span");
-    icon.className = "material-symbols-outlined dm-runtime-step-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.textContent = runtimeStepIcon(status);
-    item.appendChild(icon);
+      const icon = document.createElement("span");
+      icon.className = "material-symbols-outlined dm-runtime-step-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = runtimeStepIcon(status);
+      item.appendChild(icon);
 
-    const text = document.createElement("span");
-    text.className = "dm-runtime-step-label";
-    text.textContent = step.label;
-    item.appendChild(text);
+      const text = document.createElement("span");
+      text.className = "dm-runtime-step-label";
+      text.textContent = step.label;
+      item.appendChild(text);
 
-    steps.appendChild(item);
+      steps.appendChild(item);
+    }
+    details.appendChild(steps);
   }
-
-  details.appendChild(steps);
+  if (technicalNote) appendText(details, "dm-runtime-technical-note", technicalNote);
+  if (technicalDetail) appendText(details, "dm-runtime-technical-note", `Technical details: ${technicalDetail}`);
   parent.appendChild(details);
 }
 
@@ -505,7 +523,7 @@ function renderSuccess(model, parent) {
   icon.textContent = "check_circle";
 
   const text = document.createElement("span");
-  text.textContent = "Runtime ready";
+  text.textContent = "Local setup complete";
 
   row.appendChild(icon);
   row.appendChild(text);
@@ -559,7 +577,7 @@ function renderSetupChoice(model, parent, selectedTag = "") {
 
   const text = document.createElement("div");
   text.className = "dm-runtime-install-text";
-  text.textContent = model.setupText || "Choose an Agent Zero image.";
+  text.textContent = model.setupText || "Choose an Agent Zero Version.";
   wrap.appendChild(text);
 
   const field = document.createElement("div");
@@ -567,7 +585,7 @@ function renderSetupChoice(model, parent, selectedTag = "") {
 
   const label = document.createElement("label");
   label.setAttribute("for", "runtimeSetupTag");
-  label.textContent = "Agent Zero image";
+  label.textContent = "Version";
   field.appendChild(label);
 
   const select = document.createElement("select");
@@ -588,10 +606,10 @@ function renderSetupChoice(model, parent, selectedTag = "") {
 }
 
 function remoteOptionDetail(model = {}) {
-  if (model.successMode === "install") return "Add its URL instead of downloading a local image.";
+  if (model.successMode === "install") return "Connect using its URL instead of downloading a Version to this computer.";
   if (model.successMode === "run") return "Add its URL instead of starting one here.";
   if (model.successMode === "continue") return "Add its URL and open it in the launcher too.";
-  return "Add its URL and use the launcher without local Docker setup.";
+  return "Connect with its URL. No local setup is needed.";
 }
 
 function renderRemoteOption(model, parent) {
@@ -603,7 +621,7 @@ function renderRemoteOption(model, parent) {
 
   const title = document.createElement("div");
   title.className = "dm-runtime-remote-title";
-  title.textContent = "Agent Zero is already hosted?";
+  title.textContent = "Already running Agent Zero elsewhere?";
 
   const detail = document.createElement("div");
   detail.className = "dm-runtime-remote-detail";
@@ -694,7 +712,7 @@ function openRemoteInstanceSetup(actions = {}, state = {}) {
   openAddRemoteInstanceDialog({
     title: "Add remote Instance",
     submitLabel: "Add Instance",
-    intro: "Connect this launcher to Agent Zero already running on a VPS or another URL. You can set up local Docker later.",
+    intro: "Connect this Launcher to Agent Zero running on another computer or server. You can prepare this computer for local Instances later.",
     onCancel: () => {
       renderRuntimeGate(window.__dmLastState || state, actions);
     },

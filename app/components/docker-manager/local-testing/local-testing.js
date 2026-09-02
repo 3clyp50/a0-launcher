@@ -203,8 +203,8 @@ function deleteInstanceStorageModel(instance = {}, state = {}) {
     canOpenStorage: !!hostPath,
     storageKind,
     storageValue: hostPath || volumeName,
-    keepLabel: storageKind === "folder" ? "Keep folder" : storageKind === "volume" ? "Keep volume" : "Delete",
-    deleteStorageLabel: storageKind === "folder" ? "Delete folder" : storageKind === "volume" ? "Delete volume" : "",
+    keepLabel: storageKind ? "Keep /a0/usr data" : "Delete",
+    deleteStorageLabel: storageKind ? "Delete /a0/usr data" : "",
     openLabel: storageOpenButtonLabel(state?.runtime?.platform || state?.environment?.platform)
   };
 }
@@ -280,7 +280,7 @@ function instancePowerMenuConfig({ isRunning, canStart, canStop, containerId, co
       ? "An action is already queued for this instance"
       : canStart
         ? "Start this instance"
-        : "Start needs a container id"
+        : "Instance details are unavailable"
   };
 }
 
@@ -903,8 +903,8 @@ function openDeleteInstanceDialog({ instance, state }) {
 
   const storageCopy = storage.hasStorageChoice
     ? storage.storageKind === "folder"
-      ? `The /a0/usr folder can be kept, opened, or deleted now.`
-      : `The /a0/usr Docker volume can be kept or deleted now.`
+      ? "The Agent Zero workspace at /a0/usr can be kept, opened, or deleted now."
+      : "The Agent Zero workspace at /a0/usr can be kept or deleted now."
     : "";
   const storageValue = storage.storageValue
     ? `<div class="dm-delete-storage-path">${escapeHtml(storage.storageValue)}</div>`
@@ -928,7 +928,7 @@ function openDeleteInstanceDialog({ instance, state }) {
         <button class="button dm-dialog-close" type="button" data-dialog-close aria-label="Close">×</button>
       </div>
       <div class="dm-dialog-body">
-        <p class="dm-dialog-copy">${isRunning ? "This will stop and delete the container." : "This removes the container."}</p>
+        <p class="dm-dialog-copy">${isRunning ? "This will stop and delete the Instance." : "This removes the Instance."}</p>
         ${storageCopy ? `<p class="dm-dialog-copy">${storageCopy}</p>${storageValue}` : ""}
       </div>
       <div class="dm-dialog-footer dm-delete-instance-footer">
@@ -1041,14 +1041,14 @@ function openCloneInstanceDialog(instance) {
         <button class="button dm-dialog-close" type="button" data-dialog-close aria-label="Close">×</button>
       </div>
       <div class="dm-dialog-body">
-        <p class="dm-dialog-copy">Create a new instance from <strong>${escapeHtml(displayName)}</strong> with its current image and selected /a0/usr workspace data.</p>
+        <p class="dm-dialog-copy">Create a new Instance from <strong>${escapeHtml(displayName)}</strong> with its current Version and selected workspace data from /a0/usr.</p>
         <details class="dm-clone-details">
           <summary class="dm-clone-details-summary">
-            <span class="dm-clone-details-label">Workspace copy</span>
+            <span class="dm-clone-details-label">Workspace copy (/a0/usr)</span>
             <span class="dm-clone-selection-summary" data-clone-selection-summary>Everything selected</span>
           </summary>
           <div class="dm-clone-details-body">
-            <p class="dm-clone-details-copy">Everything is included by default. Clear categories only when you want a leaner clone; clear all to start with an empty /a0/usr.</p>
+            <p class="dm-clone-details-copy">Everything in /a0/usr is included by default. Clear categories only when you want a leaner clone; clear all to start with an empty /a0/usr workspace. The rest of /a0 is not copied.</p>
             <div class="dm-clone-toolbar">
               <button class="button" type="button" data-clone-select-all>Select all</button>
               <button class="button" type="button" data-clone-clear>Clear</button>
@@ -1076,7 +1076,7 @@ function openCloneInstanceDialog(instance) {
     if (selectedCount === categoryBoxes.length) {
       selectionSummary.textContent = "Everything selected";
     } else if (selectedCount === 0) {
-      selectionSummary.textContent = "Empty workspace";
+      selectionSummary.textContent = "Empty /a0/usr workspace";
     } else {
       selectionSummary.textContent = `${selectedCount} of ${categoryBoxes.length} selected`;
     }
@@ -1213,7 +1213,7 @@ function ensureLogsPanel(c) {
   const title = document.createElement("h3");
   title.id = "localInstanceLogsTitle";
   title.className = "dm-logs-title";
-  title.textContent = "Docker logs";
+  title.textContent = "Instance logs";
   const subtitle = document.createElement("div");
   subtitle.className = "dm-logs-subtitle";
   subtitle.textContent = displayName;
@@ -1569,33 +1569,33 @@ function renderDockerInstance(list, c, state) {
       openLogsPanel(c);
     }, {
       disabled: !containerId,
-      title: "See recent Docker logs"
+      title: "See recent Instance logs"
     }),
     workspaceStorageFolderAvailable(c) ? menuButton("folder_open", "Open storage folder", () => {
       window.dockerManagerActions?.openLocalInstanceStorageFolder?.(containerId);
     }, {
       disabled: !containerId,
-      title: "Open the persistent /a0/usr folder on this computer"
+      title: "Open the host folder used for this Instance's /a0/usr workspace"
     }) : null,
-    menuButton("archive", "Backup /a0/usr", () => {
+    menuButton("archive", "Back up workspace (/a0/usr)", () => {
       window.dockerManagerActions?.backupLocalInstance?.(containerId);
     }, {
       disabled: !containerId || operationRunning || containerOperationRunning,
-      title: "Save an Agent Zero backup zip from this instance"
+      title: "Save an Agent Zero backup zip containing /a0/usr"
     }),
-    menuButton("upload_file", "Restore /a0/usr", async () => {
-      if (!window.confirm(`Restore a backup into ${displayName}?\n\nThis writes files into /a0/usr and can overwrite existing files. Restart Agent Zero afterward so restored settings fully load.`)) return;
+    menuButton("upload_file", "Restore workspace (/a0/usr)", async () => {
+      if (!window.confirm(`Restore a backup into ${displayName}?\n\nThis writes only to the workspace at /a0/usr and can overwrite files there. The rest of /a0 is not restored. Restart Agent Zero afterward so restored settings fully load.`)) return;
       await window.dockerManagerActions?.restoreLocalInstance?.(containerId);
     }, {
       disabled: !containerId || operationRunning || containerOperationRunning,
-      title: "Restore an Agent Zero backup zip into this instance"
+      title: "Restore an Agent Zero backup zip into /a0/usr"
     }),
-    workspaceMigrationAvailable(c) ? menuButton("drive_file_move", "Persist a0/usr data", async () => {
-      if (!window.confirm(`Create persistent /a0/usr storage for ${displayName}?\n\nThe source container will be paused and resumed during the snapshot. Any running AI work stops and must be resumed manually.\n\nThe existing container will be kept until the persistent replacement starts successfully.`)) return;
+    workspaceMigrationAvailable(c) ? menuButton("drive_file_move", "Make /a0/usr persistent", async () => {
+      if (!window.confirm(`Make the /a0/usr workspace persistent for ${displayName}?\n\nThe original Instance will pause while its /a0/usr data is copied. Any running AI work stops and must be resumed manually.\n\nThe original Instance will be kept until the new persistent Instance starts successfully.`)) return;
       await window.dockerManagerActions?.migrateLocalInstanceStorage?.(containerId);
     }, {
       disabled: !containerId || operationRunning || containerOperationRunning,
-      title: "Create persistent /a0/usr storage"
+      title: "Keep this Instance's /a0/usr workspace after updates or replacement"
     }) : null,
     menuButton("content_copy", "Clone", () => {
       openCloneInstanceDialog(c);
@@ -1624,7 +1624,7 @@ function renderDockerInstance(list, c, state) {
       window.dockerManagerActions?.restartLocalInstance?.(containerId);
     }, {
       disabled: !containerId || containerOperationRunning,
-      title: containerOperationRunning ? "An action is already queued for this instance" : "Force restart this container"
+      title: containerOperationRunning ? "An action is already queued for this Instance" : "Restart this Instance now"
     }) : null,
     menuButton(powerMenuItem.icon, powerMenuItem.label, () => {
       if (powerMenuItem.action === "start") {
@@ -1641,7 +1641,7 @@ function renderDockerInstance(list, c, state) {
     }, {
       danger: true,
       disabled: !containerId || containerOperationRunning,
-      title: containerOperationRunning ? "An action is already queued for this instance" : "Delete this container"
+      title: containerOperationRunning ? "An action is already queued for this Instance" : "Delete this Instance"
     })
   ]);
   actions.appendChild(menu);
@@ -1823,7 +1823,7 @@ function render(state) {
   if (subtitle) {
     const running = containers.filter(c => c?.state === "running").length;
     const total = containers.length + remoteInstances.length;
-    const parts = [`${total} instance${total === 1 ? "" : "s"}`];
+    const parts = [`${total} Instance${total === 1 ? "" : "s"}`];
     if (running) parts.push(`${running} running`);
     if (remoteInstances.length) parts.push(`${remoteInstances.length} remote`);
     subtitle.textContent = parts.join(", ");

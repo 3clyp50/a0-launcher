@@ -316,7 +316,7 @@ test('Docker Desktop installed but stopped starts Docker Desktop instead of open
 
   const model = normalizedRuntimeGate(state);
   assert.equal(model.action.label, 'Start Docker Desktop');
-  assert.equal(buttonByText(document, 'Open Install Guide'), null);
+  assert.equal(buttonByText(document, 'Open setup guide'), null);
 
   let setupCount = 0;
   let guideCount = 0;
@@ -325,7 +325,7 @@ test('Docker Desktop installed but stopped starts Docker Desktop instead of open
     openDockerDownload: () => { guideCount += 1; }
   });
   assert.ok(buttonByText(document, 'Start Docker Desktop'));
-  assert.equal(buttonByText(document, 'Open Install Guide'), null);
+  assert.equal(buttonByText(document, 'Open setup guide'), null);
   buttonByText(document, 'Start Docker Desktop').dispatchEvent(new MiniEvent('click'));
   assert.equal(setupCount, 1);
   assert.equal(guideCount, 0);
@@ -340,8 +340,8 @@ test('runtime setup progress keeps setup disabled and shows an indeterminate bar
     progress: {
       type: 'runtime_setup',
       status: 'running',
-      headline: 'Setup Agent Zero',
-      detail: 'Installing Docker Engine',
+      headline: 'Preparing Agent Zero',
+      detail: 'Installing required files',
       phase: 'install_engine',
       indeterminate: true
     }
@@ -356,7 +356,7 @@ test('runtime setup progress keeps setup disabled and shows an indeterminate bar
   assert.equal(primary.disabled, true);
   assert.ok(document.querySelector('.indeterminate'));
   assert.equal(document.querySelector('.dm-runtime-gate-detail'), null);
-  assert.equal(document.querySelector('.sv-progress-head')?.children[0]?.textContent, 'Installing Docker Engine');
+  assert.equal(document.querySelector('.sv-progress-head')?.children[0]?.textContent, 'Installing required files');
   assert.ok(document.querySelector('.dm-runtime-details'));
   assert.equal(document.querySelector('.dm-runtime-details-current'), null);
   assert.equal(document.querySelector('.dm-runtime-step-status'), null);
@@ -379,8 +379,8 @@ test('runtime setup progress estimates remaining minutes from setup phases', () 
         type: 'runtime_setup',
         status: 'running',
         startedAt: '2026-06-16T12:00:00.000Z',
-        headline: 'Setup Agent Zero',
-        detail: 'Installing Docker Engine',
+        headline: 'Preparing Agent Zero',
+        detail: 'Installing required files',
         phase: 'install_engine',
         indeterminate: true
       }
@@ -394,6 +394,29 @@ test('runtime setup progress estimates remaining minutes from setup phases', () 
   } finally {
     Date.now = originalNow;
   }
+});
+
+test('runtime failure keeps technical detail behind disclosure', () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true,
+    dockerAvailable: false,
+    runtime: { platform: 'win32', state: 'not_provisioned', action: 'install', canProvision: true },
+    progress: {
+      opId: 'op-runtime-failed',
+      type: 'runtime_setup',
+      status: 'failed',
+      error: 'Agent Zero could not finish local setup. Try again.',
+      technicalDetail: 'Docker daemon failed inside WSL distro AgentZeroRuntime',
+      phase: 'start_wsl_engine'
+    }
+  };
+
+  renderRuntimeGate(state, {});
+  assert.equal(document.querySelector('.dm-runtime-gate-detail')?.textContent, 'Agent Zero could not finish local setup. Try again.');
+  assert.equal(document.querySelector('.dm-runtime-details-summary')?.children[0]?.textContent, 'Technical details');
+  const notes = document.querySelector('.dm-runtime-details')?.querySelectorAll('.dm-runtime-technical-note') || [];
+  assert.ok(notes.some((note) => /Docker daemon failed inside WSL/.test(note.textContent)));
 });
 
 test('completed runtime setup prompts for image download only when no image is installed', () => {
@@ -420,7 +443,7 @@ test('completed runtime setup prompts for image download only when no image is i
 
   const model = normalizedRuntimeGate(state);
   assert.equal(model.success, true);
-  assert.equal(model.headline, 'Runtime Ready');
+  assert.equal(model.headline, 'Agent Zero is ready');
   assert.equal(model.action.label, 'Download Agent Zero');
   assert.deepEqual(model.setupOptions.map((option) => option.value), ['latest', 'v1.20']);
 
@@ -428,7 +451,7 @@ test('completed runtime setup prompts for image download only when no image is i
   assert.equal(renderRuntimeGate(state, { installOrSync: () => { installCalled = true; } }), true);
   assert.ok(document.querySelector('.dm-runtime-success'));
   assert.equal(document.querySelector('.dm-runtime-gate-detail')?.textContent, 'Agent Zero can run on this computer now.');
-  assert.equal(document.querySelector('.dm-runtime-install-text')?.textContent, 'Download Agent Zero to create your first Instance.');
+  assert.equal(document.querySelector('.dm-runtime-install-text')?.textContent, 'Choose a Version to create your first Instance.');
   assert.equal(document.querySelector('#runtimeSetupTag')?.value, 'latest');
   assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
   assert.ok(buttonByAction(document, 'add_remote_instance'));
@@ -474,7 +497,7 @@ test('completed runtime setup runs an already-installed image when no local inst
     activateTag: () => { runCalled = true; }
   });
 
-  assert.equal(document.querySelector('.dm-runtime-install-text')?.textContent, "Agent Zero is already downloaded. Start an Instance when you're ready.");
+  assert.equal(document.querySelector('.dm-runtime-install-text')?.textContent, "Your Version is installed. Start an Instance when you're ready.");
   assert.equal(document.querySelector('#runtimeSetupTag')?.value, 'latest');
   buttonByText(document, 'Run Agent Zero').dispatchEvent(new MiniEvent('click'));
 
@@ -553,7 +576,7 @@ test('runtime selector is hidden unless multiple verified daemons exist', () => 
       platform: 'linux',
       state: 'ready',
       runtimeCandidates: [
-        { id: 'runtime-one', label: 'Docker Engine', daemonId: 'daemon-one', available: true, isSelected: true }
+        { id: 'runtime-one', label: 'Docker Engine', provider: 'docker_engine', daemonId: 'daemon-one', available: true, isSelected: true }
       ]
     }
   }, {});
@@ -570,9 +593,9 @@ test('runtime selector appears for multiple daemons and submits before image ins
       state: 'ready',
       selectedRuntimeEndpointId: 'runtime-one',
       runtimeCandidates: [
-        { id: 'runtime-one', label: 'OrbStack', daemonId: 'daemon-one', available: true, isSelected: true },
-        { id: 'runtime-two', label: 'Rancher Desktop', daemonId: 'daemon-two', available: true, isSelected: false },
-        { id: 'runtime-three', label: 'Podman', available: false, isSelected: false }
+        { id: 'runtime-one', label: 'OrbStack', provider: 'orbstack', daemonId: 'daemon-one', available: true, isSelected: true },
+        { id: 'runtime-two', label: 'Rancher Desktop', provider: 'rancher_desktop', daemonId: 'daemon-two', available: true, isSelected: false },
+        { id: 'runtime-three', label: 'Podman', provider: 'podman', available: false, isSelected: false }
       ]
     },
     versions: [
@@ -625,7 +648,7 @@ test('stopped Docker Desktop is a startable runtime choice', async () => {
       state: 'ready',
       selectedRuntimeEndpointId: 'runtime-engine',
       runtimeCandidates: [
-        { id: 'runtime-engine', label: 'Docker Engine', daemonId: 'daemon-engine', available: true, isSelected: true },
+        { id: 'runtime-engine', label: 'Docker Engine', provider: 'docker_engine', daemonId: 'daemon-engine', available: true, isSelected: true },
         { id: 'runtime-desktop', label: 'Docker Desktop', provider: 'docker_desktop', available: false, daemonId: null, startable: true, state: 'engine_stopped' }
       ]
     },
@@ -644,7 +667,7 @@ test('stopped Docker Desktop is a startable runtime choice', async () => {
   });
 
   const selector = document.querySelector('#runtimeEndpointChoice');
-  assert.deepEqual(selector.querySelectorAll('option').map((option) => option.textContent), ['Docker Engine', 'Docker Desktop (stopped)']);
+  assert.deepEqual(selector.querySelectorAll('option').map((option) => option.textContent), ['System setup', 'Docker Desktop (stopped)']);
   assert.ok(buttonByText(document, 'Run Agent Zero'));
 
   selector.value = 'runtime-desktop';
@@ -686,7 +709,7 @@ test('stopped Docker Desktop is a startable runtime choice', async () => {
   assert.equal(document.querySelector('.dm-runtime-gate-detail')?.textContent, 'Docker Desktop did not start.');
   assert.equal(document.querySelector('.dm-runtime-success'), null);
   const failedSelector = document.querySelector('#runtimeEndpointChoice');
-  assert.deepEqual(failedSelector.querySelectorAll('option').map((option) => option.textContent), ['Docker Engine', 'Docker Desktop (stopped)']);
+  assert.deepEqual(failedSelector.querySelectorAll('option').map((option) => option.textContent), ['System setup', 'Docker Desktop (stopped)']);
   assert.ok(buttonByText(document, 'Run Agent Zero'));
   failedSelector.value = 'runtime-desktop';
   failedSelector.dispatchEvent(new MiniEvent('change'));
@@ -726,8 +749,8 @@ test('first launch asks once when multiple runtimes are already reachable', () =
     },
     environment: {
       runtimeCandidates: [
-        { id: 'runtime-docker', label: 'Docker Desktop', daemonId: 'daemon-docker', source: 'known_socket', available: true, isSelected: true },
-        { id: 'runtime-orbstack', label: 'OrbStack', daemonId: 'daemon-orbstack', source: 'known_socket', available: true, isSelected: false }
+        { id: 'runtime-docker', label: 'Docker Desktop', provider: 'docker_desktop', daemonId: 'daemon-docker', source: 'known_socket', available: true, isSelected: true },
+        { id: 'runtime-orbstack', label: 'OrbStack', provider: 'orbstack', daemonId: 'daemon-orbstack', source: 'known_socket', available: true, isSelected: false }
       ]
     },
     versions: [{ id: 'v2.0', displayVersion: '2.0', availability: 'installed' }]
@@ -782,12 +805,12 @@ test('manual and relogin states stay blocked with recovery actions', () => {
       state: 'manual_install',
       action: 'manual',
       manualUrl: 'https://docs.docker.com/engine/install/ubuntu/',
-      detail: 'Install Docker Engine manually.'
+      detail: 'Install the required system components, then refresh.'
     }
   };
   let openedUrl = '';
   renderRuntimeGate(manual, { openDockerDownload: (url) => { openedUrl = url; } });
-  buttonByText(document, 'Open Install Guide').dispatchEvent(new MiniEvent('click'));
+  buttonByText(document, 'Open setup guide').dispatchEvent(new MiniEvent('click'));
   assert.equal(openedUrl, manual.runtime.manualUrl);
 
   document = installDom();

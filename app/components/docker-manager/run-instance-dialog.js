@@ -327,14 +327,14 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
 
   const versionField = includeVersionPicker ? `
         <div class="dm-field">
-          <label for="activateInstanceVersion">Select version</label>
+          <label for="activateInstanceVersion">Version</label>
           <select id="activateInstanceVersion" class="dm-select">
             ${versionOptionsHtml(choices, initialTag)}
           </select>
-          <div class="dm-field-hint">Choose a channel tag or an installed version.</div>
+          <div class="dm-field-hint">Choose an update channel or a downloaded Version.</div>
           <label id="activateChannelPullField" class="dm-checkbox-line dm-channel-pull-field hidden">
             <input id="activatePullChannel" type="checkbox">
-            <span id="activatePullChannelLabel">Pull updates</span>
+            <span id="activatePullChannelLabel">Download updates</span>
           </label>
           <div id="activateChannelPullHint" class="dm-field-hint hidden"></div>
         </div>
@@ -351,7 +351,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
         <div class="dm-field">
           <label for="activateInstanceName">Instance name</label>
           <input id="activateInstanceName" class="dm-text-input" type="text" maxlength="64" autocomplete="off">
-          <div class="dm-field-hint">A friendly name shown in the launcher. The managed Docker name stays stable so rollback keeps working.</div>
+          <div class="dm-field-hint">This name appears in the Launcher and can be changed later.</div>
         </div>
         <div class="dm-field">
           <div class="dm-field-label">Login</div>
@@ -400,23 +400,24 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
             <div class="dm-field">
               <label for="activatePortMappings">Port mapping</label>
               <textarea id="activatePortMappings" class="dm-textarea" spellcheck="false"></textarea>
-              <div class="dm-field-hint">Use Docker-style host:container mappings. <strong>0:80</strong> lets Docker choose an open local host port for the Agent Zero UI.</div>
+              <div class="dm-field-hint">Enter one mapping per line as computer port:Instance port. For example, <strong>3000:80</strong>. Use <strong>0:80</strong> to choose an available computer port automatically.</div>
             </div>
             <div class="dm-field">
-              <label for="activateStorageMode">Workspace storage</label>
+              <label for="activateStorageMode">Workspace storage (/a0/usr)</label>
               <select id="activateStorageMode" class="dm-text-input">
                 <option value="host_directory">Create folder named after Instance</option>
                 <option value="host_directory_exact">Choose custom folder</option>
-                <option value="named_volume">Named Docker volume</option>
+                <option value="named_volume">Launcher-managed storage</option>
               </select>
+              <div class="dm-field-hint">This stores the Instance's files and settings at /a0/usr; it does not store the whole /a0 folder.</div>
             </div>
             <div id="activateStorageHostRootField" class="dm-field" hidden>
               <label for="activateStorageHostRoot">Folder</label>
               <input id="activateStorageHostRoot" class="dm-text-input" type="text" autocomplete="off" placeholder="~/agent-zero">
             </div>
             <div id="activateStorageVolumeNameField" class="dm-field" hidden>
-              <label for="activateStorageVolumeName">Volume name</label>
-              <input id="activateStorageVolumeName" class="dm-text-input" type="text" autocomplete="off" placeholder="optional exact Docker volume name">
+              <label for="activateStorageVolumeName">Storage name</label>
+              <input id="activateStorageVolumeName" class="dm-text-input" type="text" autocomplete="off" placeholder="optional custom storage name">
             </div>
             <div class="dm-field">
               <label for="activateEnvVars">Environment variables</label>
@@ -520,11 +521,11 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
       lastChannelPullTag = "";
       return;
     }
-    if (channelPullLabel) channelPullLabel.textContent = `Pull updates from ${tag}`;
+    if (channelPullLabel) channelPullLabel.textContent = `Download updates from ${tag}`;
     if (channelPullHint) {
       channelPullHint.textContent = isInstalledRunEntry(choice)
-        ? `Run the installed ${tag} image, or pull the channel tag before creating this Instance.`
-        : `The ${tag} image is not installed yet. Pull it before creating this Instance.`;
+        ? `Use the installed ${tag} Version, or download its latest channel update before creating this Instance.`
+        : `Version ${tag} is not installed yet. It will be downloaded before this Instance is created.`;
     }
     if (channelPullInput && lastChannelPullTag !== tag) {
       channelPullInput.checked = channelPullDefault(choice);
@@ -561,7 +562,7 @@ function openRunInstanceDialog({ entry, state, versionChoices = null, includeVer
     }
     const shouldPullChannel = isChannelVersionChoice(selectedEntry) && channelPullInput?.checked === true;
     if (isChannelVersionChoice(selectedEntry) && !shouldPullChannel && !isInstalledRunEntry(selectedEntry)) {
-      window.toastFrontendError?.(`Pull ${tag} before creating this Instance.`, "Agent Zero");
+      window.toastFrontendError?.(`Download ${tag} before creating this Instance.`, "Agent Zero");
       return;
     }
     const instanceDefaults = readInstanceDefaultsFromForm(dialog, "activate");

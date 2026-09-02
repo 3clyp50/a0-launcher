@@ -176,7 +176,7 @@ function createRunChoice(state) {
   storageSelect.id = "firstSetupStorageMode";
   const storageOptions = [
     [STORAGE_MODE_HOST_DIRECTORY, "Persistent workspace (recommended)"],
-    [STORAGE_MODE_NAMED_VOLUME, "Named Docker volume"],
+    [STORAGE_MODE_NAMED_VOLUME, "Launcher-managed storage"],
     [STORAGE_MODE_EPHEMERAL, "No persistent workspace"]
   ];
   for (const [value, labelText] of storageOptions) {
@@ -187,11 +187,11 @@ function createRunChoice(state) {
   storageSelect.value = initialStorageMode(state);
   storageSelect.addEventListener("change", () => syncStorageWarning(runBlock));
   storageField.appendChild(storageSelect);
-  storageField.appendChild(createEl("div", "dm-field-hint", "Persistent choices mount a separate workspace at /a0/usr."));
+  storageField.appendChild(createEl("div", "dm-field-hint", "Persistent choices keep this Instance's Agent Zero workspace at /a0/usr when it is updated or replaced."));
   const storageWarning = createEl(
     "div",
     "dm-field-hint dm-first-instance-storage-warning hidden",
-    "No volume makes this Instance ephemeral: files and settings live inside the container and can be lost if it is replaced or deleted. You can persist it later from the Instance menu; the old container is kept until the replacement starts."
+    "No storage makes this Instance temporary: files and settings can be lost if it is replaced or deleted. You can make it persistent later from the Instance menu; the old Instance is kept until its replacement starts."
   );
   storageField.appendChild(storageWarning);
   runBlock.appendChild(storageField);

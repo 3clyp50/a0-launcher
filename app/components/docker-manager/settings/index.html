@@ -31,7 +31,7 @@
         <div class="dm-settings-panel-head">
           <div>
             <h3 class="dm-settings-title">Port Defaults</h3>
-            <div class="sv-subtitle">Starting host ports for new local Instances</div>
+            <div class="sv-subtitle">Starting ports for new local Instances</div>
           </div>
         </div>
         <div class="sv-settings-grid">
@@ -39,14 +39,14 @@
             <label class="sv-settings-label" for="uiPortInput">UI Port</label>
             <div class="sv-settings-field">
               <input id="uiPortInput" class="sv-input" type="number" min="1024" max="65535" placeholder="e.g. 8080">
-              <span class="sv-settings-hint">Preferred starting host port for the web UI. Existing Instances keep their assigned port.</span>
+              <span class="sv-settings-hint">Starting port for the Agent Zero interface. Existing Instances keep their current port.</span>
             </div>
           </div>
           <div class="sv-settings-row">
             <label class="sv-settings-label" for="sshPortInput">SSH Port</label>
             <div class="sv-settings-field">
               <input id="sshPortInput" class="sv-input" type="number" min="1024" max="65535" placeholder="e.g. 2222">
-              <span class="sv-settings-hint">Preferred starting host port when the image exposes SSH. Not every container does.</span>
+              <span class="sv-settings-hint">Starting SSH port when the selected Version supports SSH.</span>
             </div>
           </div>
         </div>
@@ -56,41 +56,41 @@
         <div class="dm-settings-panel-head">
           <div>
             <h3 class="dm-settings-title">Workspace Storage</h3>
-            <div class="sv-subtitle">Default workspace location for new local Instances</div>
+            <div class="sv-subtitle">Default location for each new local Instance's /a0/usr workspace</div>
           </div>
         </div>
         <div class="sv-settings-grid">
           <div class="sv-settings-row">
-            <label class="sv-settings-label" for="workspaceStorageMode">Workspace mode</label>
+            <label class="sv-settings-label" for="workspaceStorageMode">Storage location</label>
             <div class="sv-settings-field">
               <select id="workspaceStorageMode" class="sv-select">
-                <option value="host_directory">Host directory</option>
-                <option value="named_volume">Named Docker volume</option>
+                <option value="host_directory">Folder on this computer</option>
+                <option value="named_volume">Launcher-managed storage</option>
               </select>
             </div>
           </div>
           <div id="workspaceHostRootRow" class="sv-settings-row">
-            <label class="sv-settings-label" for="workspaceHostRoot">Host folder</label>
+            <label class="sv-settings-label" for="workspaceHostRoot">Workspace folder</label>
             <div class="sv-settings-field">
               <input id="workspaceHostRoot" class="sv-input" type="text" autocomplete="off" placeholder="~/agent-zero">
-              <span class="sv-settings-hint">Parent folder for per-Instance workspaces.</span>
+              <span class="sv-settings-hint">Each folder stores the Instance's /a0/usr workspace, not the whole /a0 folder.</span>
             </div>
           </div>
           <div id="workspaceHostPathModeRow" class="sv-settings-row">
-            <label class="sv-settings-label" for="workspaceHostPathMode">Folder mapping</label>
+            <label class="sv-settings-label" for="workspaceHostPathMode">Folder layout</label>
             <div class="sv-settings-field">
               <select id="workspaceHostPathMode" class="sv-select">
                 <option value="per_instance">Separate folder per Instance</option>
                 <option value="exact">Use this folder directly</option>
               </select>
-              <span class="sv-settings-hint">Direct mapping mounts the chosen folder itself at /a0/usr.</span>
+              <span class="sv-settings-hint">Separate folders keep each /a0/usr workspace independent; direct use maps this exact folder to /a0/usr.</span>
             </div>
           </div>
           <div id="workspaceVolumePrefixRow" class="sv-settings-row" hidden>
-            <label class="sv-settings-label" for="workspaceVolumePrefix">Volume prefix</label>
+            <label class="sv-settings-label" for="workspaceVolumePrefix">Storage name prefix</label>
             <div class="sv-settings-field">
               <input id="workspaceVolumePrefix" class="sv-input" type="text" autocomplete="off" placeholder="a0-launcher">
-              <span class="sv-settings-hint">Prefix for new named Docker volumes.</span>
+              <span class="sv-settings-hint">Prefix used when the Launcher names new workspace storage.</span>
             </div>
           </div>
         </div>

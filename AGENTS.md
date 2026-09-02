@@ -188,6 +188,19 @@ A0_LAUNCHER_LOCAL_REPO=/home/eclypso/a0/a0-launcher npm start
 - A saved runtime endpoint is a preference, not a lock: use it while reachable,
   temporarily fall back to another reachable endpoint, and return to it later.
   Explicitly starting or selecting a runtime makes that endpoint preferred.
+- On Windows client editions, automatic fallback imports only the dedicated
+  WSL2 distro `AgentZeroRuntime` from the pinned `agent0ai/a0-install`
+  `runtime-v1` manifest. Validate exact release coordinates, architecture,
+  size, SHA-256, ownership marker, WSL version, and required binaries. Never
+  install Store Ubuntu or mutate an arbitrary user distro.
+- The Windows managed runtime is shared with `a0-install` under
+  `%LOCALAPPDATA%\AgentZero\runtime`, outside Launcher-owned uninstall data and
+  outside host workspaces. Launcher uninstall, runtime repair/removal, Version
+  removal, Instance deletion, and workspace deletion are separate intents.
+- Launcher access to the WSL Docker Unix socket uses the process-owned named
+  pipe `npipe:////./pipe/agent-zero-runtime-docker`; do not expose an
+  unauthenticated fixed TCP port. Keep keepalive and cleanup scoped to the exact
+  selected distro and a unique process marker.
 - Backend release metadata defaults to `agent0ai/agent-zero`.
 - `A0_BACKEND_IMAGE_REPO` and `A0_BACKEND_GITHUB_REPO` may override those repos
   for testing.
@@ -240,13 +253,29 @@ Agent Zero runtime assumptions:
 Product language:
 
 - Say `Instances`, not `Sessions`, for running or retained containers.
+- Normal Launcher surfaces should describe the product, not its implementation:
+  use `Version`, `Instance`, `workspace`, `local setup`, and `this computer`.
+  Do not put Docker, WSL, container, image, daemon, endpoint, distribution, or
+  other runtime mechanics in primary setup, status, warning, or failure copy.
+- When the exact data boundary affects a user decision—Backup, Restore, Clone,
+  persistence, deletion, or direct folder mapping—pair `workspace` with
+  `/a0/usr`. This path is the user-owned Agent Zero workspace, not the whole
+  `/a0`; do not hide or blur that distinction.
+- Technical mechanics belong in Advanced, Diagnostics, the setup guide, logs,
+  or a collapsed `Technical details` disclosure. Docker Desktop may be named
+  when the user is choosing or starting that installed application; Docker Hub
+  may be named when account sign-in or its download limit requires action.
 - Remote Instances are a first-run path, not an advanced fallback. Do not force
   local Docker setup or an image pull before a user can add a remote Agent Zero
   URL.
-- Say `Storage volumes`, not just `Storage`, when referring to Docker volumes.
+- In normal workspace choices, say `Launcher-managed storage`; reserve
+  `Storage volumes` and Docker volume terminology for Advanced and Diagnostics.
 - Downloaded Versions may be removed from the Versions view, but image removal must be a
   non-forced Docker image delete so Docker refuses removal while any Instance
   still references the image.
+- On WSL, Docker image deletion reclaims logical runtime space but may not shrink
+  the Windows VHD file immediately. Do not promise immediate physical recovery,
+  stop unrelated distros, or call global `wsl --shutdown` silently.
 - Keep instance deletion separate from workspace deletion. Host workspace
   directories and named Docker volumes should survive container removal unless a
   user takes an explicit storage cleanup action.
@@ -255,7 +284,7 @@ Product language:
 - Per-Instance Colour/Icon choices are launcher identity metadata. The bounded
   colour tints the card and tab icon, while the bounded icon identifies attached
   and detached tabs without mutating Docker labels or runtime behavior.
-- Keep Docker mechanics behind purposeful controls.
+- Keep Docker mechanics behind purposeful technical controls.
 - Put `Open UI` where the instance lives, not in the global header.
 - Keep the surface quiet and precise: avoid excessive borders, nested cards, and
   explanatory clutter.

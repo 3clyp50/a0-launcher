@@ -139,7 +139,21 @@ This scope owns:
   fixed public URLs. Direct `window.open` should stay limited to safe public
   links such as Docker install help.
 - Use `Instances`, not `Sessions`, in visible copy.
-- Use `Storage volumes` when referring to Docker volumes.
+- Normal UI copy should use `Version`, `Instance`, `workspace`, `local setup`,
+  and `this computer`. Keep Docker, WSL, container, image, daemon, endpoint,
+  distribution, and volume terms out of primary copy unless the user
+  deliberately entered Advanced or Diagnostics. Show `/a0/usr` alongside
+  `workspace` when the exact Backup, Restore, Clone, persistence, deletion, or
+  folder-mapping scope matters; never imply that those actions cover all of
+  `/a0`.
+- Say `Launcher-managed storage` for the normal named-storage choice. Use
+  `Storage volumes` only in the Advanced storage surface.
+- Preserve recognizable provider names only when they help the user act:
+  Docker Desktop while choosing or starting it, and Docker Hub while signing in
+  or resolving its download limit.
+- Primary failures must say what Agent Zero could not do and what the user can
+  try next. Raw bounded mechanics may appear only in logs, Diagnostics, or a
+  collapsed `Technical details` disclosure.
 - Keep developer-only Docker controls in the Advanced tab. They may compose and
   run custom images or edit and operate shell-authorized Docker project files
   through named Docker Manager actions, but renderer code must not receive host

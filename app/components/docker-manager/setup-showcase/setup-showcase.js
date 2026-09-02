@@ -4,7 +4,7 @@ const SETUP_SHOWCASE_SLIDES = Object.freeze([
   Object.freeze({
     id: "ui-first",
     title: "Manage Everything Through UI",
-    description: "Configure models, plugins, and runtime behavior from Agent Zero's interface instead of editing JSON or YAML by hand.",
+    description: "Configure models, plugins, and how Agent Zero works from its interface instead of editing JSON or YAML by hand.",
     mediaType: "image",
     media: `${SHOWCASE_ASSET_BASE}/everything-is-ui.png`,
     mediaLabel: "Agent Zero model settings configured through the UI."
@@ -152,7 +152,7 @@ function createSetupShowcase() {
   const showcase = document.createElement("section");
   showcase.className = "dm-setup-showcase";
   showcase.dataset.showcaseIndex = String(activeShowcaseIndex);
-  showcase.setAttribute("aria-label", "Agent Zero capabilities while the image downloads");
+  showcase.setAttribute("aria-label", "Agent Zero capabilities while the Version downloads");
 
   const mediaFrame = document.createElement("div");
   mediaFrame.className = "dm-setup-showcase-media-frame";

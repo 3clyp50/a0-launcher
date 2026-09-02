@@ -117,10 +117,7 @@ function progressPresentation(value) {
 }
 
 function migrationDisplayName(name, containerName, fallback) {
-  const label = cleanDialogText(name, fallback);
-  const dockerName = cleanDialogText(containerName);
-  if (dockerName && dockerName !== label) return `${label} (${dockerName})`;
-  return label;
+  return cleanDialogText(name, fallback);
 }
 
 function removeWorkspacePersistedDialog() {
@@ -139,7 +136,6 @@ function showWorkspacePersistedDialog(progress = {}) {
   const migration = progress?.workspaceMigration && typeof progress.workspaceMigration === "object"
     ? progress.workspaceMigration
     : {};
-  const mountTarget = cleanDialogText(migration.mountTarget, "/a0/usr");
   const replacement = migrationDisplayName(
     migration.replacementName,
     migration.replacementContainerName,
@@ -169,14 +165,14 @@ function showWorkspacePersistedDialog(progress = {}) {
   const title = document.createElement("h2");
   title.id = "workspacePersistedTitle";
   title.className = "dm-dialog-title";
-  title.textContent = "a0/usr data persisted";
+  title.textContent = "Workspace is now persistent";
   header.appendChild(title);
 
   const body = document.createElement("div");
   body.className = "dm-dialog-body";
   const summary = document.createElement("p");
   summary.className = "dm-dialog-copy";
-  summary.textContent = `Open ${replacement} and check that your ${mountTarget} files are present.`;
+  summary.textContent = `Open ${replacement} and check that its /a0/usr files and settings are present.`;
   const next = document.createElement("p");
   next.className = "dm-dialog-copy";
   next.textContent = `When everything looks right, ${source} can be safely deleted.`;
@@ -632,7 +628,8 @@ async function refresh(options = {}) {
     if (!state?.a0Tag && inventory?.a0Tag) store.a0Tag = inventory.a0Tag;
     store.volumes = Array.isArray(inventory?.volumes) ? inventory.volumes : [];
   } catch (e) {
-    store.error = e?.message || "Failed to load Docker inventory.";
+    console.error("[Agent Zero] Refresh failed", e);
+    store.error = "Could not load your local Instances and Versions.";
     store.dockerAvailable = false;
     setBanner("error", store.error);
   } finally {
@@ -800,9 +797,9 @@ async function migrateLocalInstanceStorage(containerId, options = {}) {
   const api = window.dockerManagerAPI;
   if (!api || typeof api.migrateLocalInstanceStorage !== "function") return null;
   return runDockerOperation(
-    "Persist a0/usr data",
+    "Make /a0/usr persistent",
     () => api.migrateLocalInstanceStorage(containerId, options),
-    "Persisting /a0/usr data."
+    "Making the /a0/usr workspace persistent."
   );
 }
 
@@ -834,10 +831,13 @@ async function openDockerDownload(url = "") {
         setBanner("error", res.message);
         return;
       }
-      setBanner("info", "Docker installer opened.");
+      setBanner("info", res?.openedDocs
+        ? "Setup guide opened."
+        : "The setup installer opened. Follow its steps, then return here.");
       return;
-    } catch (e) {
-      setBanner("error", e?.message || "Unable to start Docker installer");
+  } catch (e) {
+    console.error("[Agent Zero] Could not open setup", e);
+    setBanner("error", "Could not open the setup guide.");
       return;
     }
   }
@@ -851,9 +851,9 @@ async function provisionRuntime() {
   }
 
   return runDockerOperation(
-    "Runtime Setup",
+    "Agent Zero Setup",
     () => api.provisionRuntime(),
-    "Runtime Setup requested."
+    "Agent Zero Setup started."
   );
 }
 
@@ -870,7 +870,8 @@ async function selectRuntimeEndpoint(id) {
     }
     return res;
   } catch (e) {
-    setBanner("error", e?.message || "Unable to select runtime");
+    console.error("[Agent Zero] Could not select local setup", e);
+    setBanner("error", "Could not use the selected local setup.");
     return false;
   }
 }
@@ -1399,7 +1400,8 @@ async function runDockerOperation(label, action, successMessage) {
     await refresh({ forceRefresh: false });
     return res;
   } catch (e) {
-    const message = e?.message || `${label} failed`;
+    console.error(`[Agent Zero] ${label} failed`, e);
+    const message = `${label} failed. Try again.`;
     setBanner("error", message);
     return { message };
   }
@@ -1689,7 +1691,7 @@ async function openDeveloperProject(mode = "folder") {
   try {
     const result = await api.openDeveloperProject(mode);
     if (isErrorResponse(result)) {
-      setBanner("error", result.message);
+      setBanner("error", result.technicalDetail || result.message);
       return null;
     }
     return result || null;
@@ -1705,7 +1707,7 @@ async function saveDeveloperProjectFile(options = {}) {
   try {
     const result = await api.saveDeveloperProjectFile(options);
     if (isErrorResponse(result)) {
-      setBanner("error", result.message);
+      setBanner("error", result.technicalDetail || result.message);
       return null;
     }
     return result || null;
@@ -1721,7 +1723,7 @@ async function exportDeveloperFile(options = {}) {
   try {
     const result = await api.exportDeveloperFile(options);
     if (isErrorResponse(result)) {
-      setBanner("error", result.message);
+      setBanner("error", result.technicalDetail || result.message);
       return null;
     }
     return result || null;
@@ -1737,7 +1739,7 @@ async function inspectDeveloperProject(options = {}) {
   try {
     const result = await api.inspectDeveloperProject(options);
     if (isErrorResponse(result)) {
-      setBanner("error", result.message);
+      setBanner("error", result.technicalDetail || result.message);
       return null;
     }
     return result || null;
@@ -1825,11 +1827,11 @@ async function openDockerLoginTerminal() {
       setBanner("error", res.message);
       return false;
     }
-    const target = typeof res?.command === "string" && res.command ? ` in ${res.command}` : "";
-    setBanner("info", `Docker login opened${target}. Finish sign-in, then click Retry.`);
+    setBanner("info", "Docker Hub sign-in opened. Finish signing in, then choose Retry.");
     return true;
   } catch (e) {
-    setBanner("error", e?.message || "Unable to open a Docker login terminal");
+    console.error("[Agent Zero] Could not open Docker Hub sign-in", e);
+    setBanner("error", "Could not open the Docker Hub sign-in window.");
     return false;
   }
 }

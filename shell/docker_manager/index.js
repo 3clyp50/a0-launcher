@@ -19,7 +19,7 @@ const stateStore = require('./state_store');
 const retention = require('./retention');
 const { toErrorResponse, mapDockerInterfaceErrorToUiMessage } = require('./errors');
 const { isSemverReleaseTag, compareReleaseTagsDescending } = require('./release_tags');
-const { runtimeSetupProgressPatch } = require('./progress');
+const { runtimeAssessmentDetail, runtimeSetupProgressPatch } = require('./progress');
 const { normalizeHostAccessInstance } = require('../host_access');
 
 const DEFAULT_IMAGE_REPO = 'agent0ai/agent-zero';
@@ -849,7 +849,7 @@ function dockerUsesWindowsWslEngine(docker) {
   const env = docker?.env && typeof docker.env === 'object' ? docker.env : null;
   if (env?.dockerFlavor === 'wsl_engine') return true;
   const host = env?.dockerHost;
-  return host?.kind === 'tcp' && host.host === '127.0.0.1' && Number(host.port) === 23750;
+  return host?.kind === 'npipe' && String(host.socketPath || '').toLowerCase() === '//./pipe/agent-zero-runtime-docker';
 }
 
 function dockerMountSourceForHostPath(hostPath, docker) {
@@ -1225,10 +1225,11 @@ function emptyDerivedState(runtime = null) {
 
 function normalizeRuntimeAssessment(assessment, env = null) {
   let state = typeof assessment?.state === 'string' ? assessment.state : 'unsupported';
-  const detail = typeof assessment?.detail === 'string' ? assessment.detail : 'Automatic Runtime Setup is not available.';
-  if (state === 'unsupported' && /user needs Docker access|not in the docker group/i.test(detail)) {
+  const rawDetail = typeof assessment?.detail === 'string' ? assessment.detail : '';
+  if (state === 'unsupported' && /user needs Docker access|not in the docker group/i.test(rawDetail)) {
     state = 'needs_group_membership';
   }
+  const detail = runtimeAssessmentDetail({ ...assessment, state }, process.platform);
   const actionByState = {
     not_provisioned: 'install',
     needs_group_membership: 'install',
@@ -1270,10 +1271,31 @@ function runtimeReadyAssessment(env = null) {
   return normalizeRuntimeAssessment({ state: 'ready', detail: 'Runtime is ready.' }, env);
 }
 
+function runtimeManagedDirectory({
+  platform = process.platform,
+  localAppData = process.env.LOCALAPPDATA,
+  appData = app.getPath('appData'),
+  userData = app.getPath('userData')
+} = {}) {
+  if (platform !== 'win32') return path.join(userData, 'runtime');
+
+  let root = String(localAppData || '').trim();
+  if (!path.win32.isAbsolute(root)) {
+    const roaming = String(appData || '').trim();
+    root = path.win32.basename(roaming).toLowerCase() === 'roaming'
+      ? path.win32.join(path.win32.dirname(roaming), 'Local')
+      : roaming;
+  }
+  if (!path.win32.isAbsolute(root)) {
+    throw new Error('Windows LocalAppData path is unavailable for the Agent Zero runtime.');
+  }
+  return path.win32.join(path.win32.resolve(root), 'AgentZero', 'runtime');
+}
+
 async function getRuntimeProvisioner() {
   const { RuntimeProvisioner } = await import('../docker_adapter/RuntimeProvisioner.mjs');
   return await RuntimeProvisioner.forPlatform({
-    managedDir: path.join(app.getPath('userData'), 'runtime')
+    managedDir: runtimeManagedDirectory()
   });
 }
 
@@ -2201,7 +2223,8 @@ function beginOperation(type, targetTag, options = {}) {
     indeterminate: false,
     canCancel: false,
     error: null,
-    errorCode: null
+    errorCode: null,
+    technicalDetail: null
   };
   events.emit('progress', { ..._currentOperation });
   return opId;
@@ -2213,7 +2236,12 @@ function updateOperationProgress(patch) {
   events.emit('progress', { ..._currentOperation });
 }
 
-function finishOperation(status, errorMessage, errorCode = null) {
+function operationTechnicalDetail(error, message = '') {
+  const raw = typeof error?.message === 'string' ? error.message.trim() : '';
+  return raw && raw !== message ? raw.slice(0, 2000) : null;
+}
+
+function finishOperation(status, errorMessage, errorCode = null, technicalDetail = null) {
   if (!_currentOperation) return;
   _currentOperation = {
     ..._currentOperation,
@@ -2222,9 +2250,19 @@ function finishOperation(status, errorMessage, errorCode = null) {
     canCancel: false,
     indeterminate: false,
     error: errorMessage || null,
-    errorCode: errorCode || null
+    errorCode: errorCode || null,
+    technicalDetail: technicalDetail || null
   };
   events.emit('progress', { ..._currentOperation });
+}
+
+function finishOperationFailure(error, message) {
+  finishOperation(
+    'failed',
+    message,
+    typeof error?.code === 'string' ? error.code : null,
+    operationTechnicalDetail(error, message)
+  );
 }
 
 async function buildDerivedState(options = {}) {
@@ -3318,7 +3356,7 @@ function sourceCloneImageRef(inspect) {
   if (imageRef) return imageRef;
   const imageId = String(inspect?.Image || '').trim();
   if (imageId) return imageId;
-  throw makeDockerManagerError('SOURCE_IMAGE_NOT_FOUND', 'The source Instance image is unavailable.');
+  throw makeDockerManagerError('SOURCE_IMAGE_NOT_FOUND', 'The source Instance Version is unavailable.');
 }
 
 function cloneEnvironment(env, hostConfig) {
@@ -3469,14 +3507,14 @@ async function copySelectedWorkspaceData(docker, sourceContainerId, targetContai
   const normalized = normalizeCloneWorkspaceSelection(selection);
   if (cloneWorkspaceSelectionIsEmpty(normalized)) return { copied: false, selectedCategories: [] };
   if (typeof docker.copyContainerPathToContainer !== 'function') {
-    const err = new Error('Workspace copy is not supported by the selected Docker runtime.');
+    const err = new Error('Workspace copy is not available with the selected local setup.');
     err.code = 'WORKSPACE_COPY_UNAVAILABLE';
     throw err;
   }
 
   const selectedCategories = selectedCloneWorkspaceCategoryIds(normalized);
   if (cloneWorkspaceSelectionIsAll(normalized)) {
-    onProgress?.('Copying all /a0/usr data');
+    onProgress?.('Copying all /a0/usr workspace data');
     const copied = await copyContainerPathIfPresent(
       docker,
       sourceContainerId,
@@ -3889,7 +3927,7 @@ function drainStream(stream) {
 
 async function createAgentZeroBackupZip(docker, containerId, outputPath, options = {}) {
   if (!docker || typeof docker.getContainerPathArchive !== 'function') {
-    throw makeDockerManagerError('BACKUP_UNAVAILABLE', 'Container backup is not supported by this runtime.');
+    throw makeDockerManagerError('BACKUP_UNAVAILABLE', 'Backup is not available with the selected local setup.');
   }
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -3945,7 +3983,7 @@ async function createAgentZeroBackupZip(docker, containerId, outputPath, options
     source.pipe(extract);
     await done;
     if (pendingError) throw pendingError;
-    if (!files.length) throw makeDockerManagerError('BACKUP_EMPTY', 'No /a0/usr files were found to back up.');
+    if (!files.length) throw makeDockerManagerError('BACKUP_EMPTY', 'No files were found in the /a0/usr workspace to back up.');
 
     const metadata = buildAgentZeroBackupMetadata({
       filePath: outputPath,
@@ -4042,7 +4080,7 @@ function addTarPackEntry(pack, header, data) {
 
 async function restoreAgentZeroBackupZip(docker, containerId, inputPath, onProgress = null) {
   if (!docker || typeof docker.putContainerPathArchive !== 'function') {
-    throw makeDockerManagerError('RESTORE_UNAVAILABLE', 'Container restore is not supported by this runtime.');
+    throw makeDockerManagerError('RESTORE_UNAVAILABLE', 'Restore is not available with the selected local setup.');
   }
 
   const metadata = await readBackupMetadataFromZip(inputPath);
@@ -4067,11 +4105,11 @@ async function restoreAgentZeroBackupZip(docker, containerId, inputPath, onProgr
       }, data);
       restoredFiles += 1;
       restoredBytes += data.length;
-      if (restoredFiles % 25 === 0) onProgress?.(`Restoring /a0/usr files (${restoredFiles})`);
+      if (restoredFiles % 25 === 0) onProgress?.(`Restoring /a0/usr workspace files (${restoredFiles})`);
     });
 
     if (!restoredFiles) {
-      throw makeDockerManagerError('INVALID_BACKUP_ARCHIVE', 'No /a0/usr files were found in this backup.');
+      throw makeDockerManagerError('INVALID_BACKUP_ARCHIVE', 'No /a0/usr workspace files were found in this backup.');
     }
 
     pack.finalize();
@@ -4461,9 +4499,10 @@ async function provisionRuntime(options = {}) {
       updateOperationProgress(runtimeSetupProgressPatch(assessment, 'Runtime ready', 100, 'completed'));
       finishOperation('completed', null);
     } catch (error) {
-      const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Runtime Setup failed';
+      logDockerManagerError('provisionRuntime', error, { opId });
+      const message = mapDockerInterfaceErrorToUiMessage(error) || 'Agent Zero could not finish local setup. Try again.';
       updateOperationProgress(runtimeSetupProgressPatch(runtimeAssessment, message, null, 'failed'));
-      finishOperation('failed', message);
+      finishOperationFailure(error, message);
     } finally {
       _abortControllers.delete(opId);
       resetDocker();
@@ -4918,7 +4957,7 @@ async function installOrSync(tag, options = {}) {
           ? 'This version is not available yet. Please try again later.'
           : '') ||
         (operationType === 'update' ? 'Update failed' : 'Install failed');
-      finishOperation('failed', message, error?.code || null);
+      finishOperationFailure(error, message);
     } finally {
       _abortControllers.delete(opId);
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
@@ -4981,7 +5020,7 @@ async function stopActiveInstance() {
       updateOperationProgress({ progress: 100, message: 'Stopped' });
     } catch (error) {
       const message = mapDockerInterfaceErrorToUiMessage(error) || 'Stop failed';
-      finishOperation('failed', message);
+      finishOperationFailure(error, message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
@@ -5117,7 +5156,7 @@ async function cloneLocalInstance(containerId, options = {}) {
       cloneHeadline = cloneOperationHeadline(sourceInstanceNameFromInspect(inspect, targetName));
       sourceImageRef = sourceCloneImageRef(inspect);
 
-      updateOperationProgress({ headline: cloneHeadline, message: 'Creating clone on open ports', progress: null });
+      updateOperationProgress({ headline: cloneHeadline, message: 'Creating the new Instance', progress: null });
       const createOptions = await buildCloneCreateOptions(
         inspect,
         target.containerId,
@@ -5139,8 +5178,8 @@ async function cloneLocalInstance(containerId, options = {}) {
       if (!cloneWorkspaceSelectionIsEmpty(workspaceSelection)) {
         const categoryCount = selectedCloneWorkspaceCategoryIds(workspaceSelection).length;
         const message = cloneWorkspaceSelectionIsAll(workspaceSelection)
-          ? 'Copying /a0/usr data'
-          : `Copying selected /a0/usr data (${categoryCount})`;
+          ? 'Copying /a0/usr workspace data'
+          : `Copying selected /a0/usr workspace data (${categoryCount})`;
         updateOperationProgress({ headline: cloneHeadline, message, progress: null });
         await copySelectedWorkspaceData(
           docker,
@@ -5151,11 +5190,11 @@ async function cloneLocalInstance(containerId, options = {}) {
         );
       }
 
-      updateOperationProgress({ headline: cloneHeadline, message: 'Starting clone', progress: null });
+      updateOperationProgress({ headline: cloneHeadline, message: 'Starting the new Instance', progress: null });
       await docker.startContainer(createdContainerId);
 
       finishOperation('completed', null);
-      updateOperationProgress({ headline: cloneHeadline, progress: 100, message: 'Cloned' });
+      updateOperationProgress({ headline: cloneHeadline, progress: 100, message: 'Clone complete' });
     } catch (error) {
       logDockerManagerError('cloneLocalInstance', error, { opId, containerId: id, sourceImageRef });
       try {
@@ -5165,8 +5204,8 @@ async function cloneLocalInstance(containerId, options = {}) {
       } catch {
         // ignore cleanup failure
       }
-      const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Clone failed';
-      finishOperation('failed', message, error?.code || null);
+      const message = mapDockerInterfaceErrorToUiMessage(error) || 'Agent Zero could not clone this Instance. Try again.';
+      finishOperationFailure(error, message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
@@ -5182,7 +5221,7 @@ async function migrateLocalInstanceStorage(containerId, options = {}) {
   const id = assertContainerId(containerId);
   const storageOverride = normalizeStorageOverride(options);
   if (storageOverride?.mode === STORAGE_MODE_EPHEMERAL) {
-    const err = new Error('Persisting /a0/usr data requires persistent storage.');
+    const err = new Error('Making /a0/usr persistent requires persistent storage.');
     err.code = 'INVALID_STORAGE_MODE';
     throw err;
   }
@@ -5195,7 +5234,7 @@ async function migrateLocalInstanceStorage(containerId, options = {}) {
     let docker = null;
     let cloneImageRef = '';
     let createdContainerId = '';
-    let migrationHeadline = 'Persisting /a0/usr data';
+    let migrationHeadline = 'Making /a0/usr persistent';
 
     try {
       updateOperationProgress({ headline: migrationHeadline, message: 'Preparing migration', progress: null });
@@ -5220,17 +5259,17 @@ async function migrateLocalInstanceStorage(containerId, options = {}) {
 
       const friendlyName = sourceInstanceNameFromInspect(inspect, targetName);
       const sourceContainerName = target.containerName || containerNameFromInspect(inspect) || targetName;
-      migrationHeadline = `Persisting ${friendlyName || 'instance'}`;
+      migrationHeadline = `Protecting ${friendlyName || 'Instance'} workspace`;
       cloneImageRef = cloneImageRefForContainer(target.containerId);
 
-      updateOperationProgress({ headline: migrationHeadline, message: 'Snapshotting legacy instance', progress: null });
+      updateOperationProgress({ headline: migrationHeadline, message: 'Preparing the original Instance', progress: null });
       await docker.commitContainer(target.containerId, cloneImageRef, {
         pause: true,
         comment: 'Agent Zero Launcher workspace migration',
         author: 'Agent Zero Launcher'
       });
 
-      updateOperationProgress({ headline: migrationHeadline, message: 'Creating persistent replacement', progress: null });
+      updateOperationProgress({ headline: migrationHeadline, message: 'Creating the persistent Instance', progress: null });
       const createOptions = await buildCloneCreateOptions(
         inspect,
         target.containerId,
@@ -5250,13 +5289,13 @@ async function migrateLocalInstanceStorage(containerId, options = {}) {
       const created = await docker.createContainer(createOptions);
       createdContainerId = created?.containerId || '';
       if (!createdContainerId) {
-        const err = new Error('Failed to create persistent replacement');
+        const err = new Error('Failed to create the persistent Instance');
         err.code = 'CREATE_FAILED';
         throw err;
       }
 
       if (typeof docker.copyContainerPathToContainer === 'function') {
-        updateOperationProgress({ headline: migrationHeadline, message: 'Copying workspace data', progress: null });
+        updateOperationProgress({ headline: migrationHeadline, message: 'Copying /a0/usr workspace data', progress: null });
         const copied = await docker.copyContainerPathToContainer(
           target.containerId,
           WORKSPACE_MOUNT_TARGET,
@@ -5264,40 +5303,40 @@ async function migrateLocalInstanceStorage(containerId, options = {}) {
           '/a0'
         );
         if (copied?.copied === false) {
-          updateOperationProgress({ headline: migrationHeadline, message: 'No legacy workspace files found', progress: null });
+          updateOperationProgress({ headline: migrationHeadline, message: 'No /a0/usr workspace files found', progress: null });
         }
       }
 
-      updateOperationProgress({ headline: migrationHeadline, message: 'Starting persistent replacement', progress: null });
+      updateOperationProgress({ headline: migrationHeadline, message: 'Starting the persistent Instance', progress: null });
       await docker.startContainer(createdContainerId);
 
-      updateOperationProgress({ headline: migrationHeadline, message: 'Waiting for replacement UI', progress: null });
+      updateOperationProgress({ headline: migrationHeadline, message: 'Waiting for the new Instance', progress: null });
       const waitRes = await waitForUiReachable(docker, createdContainerId, {
         timeoutMs: UI_READY_TIMEOUT_MS,
         intervalMs: 450,
         attemptTimeoutMs: UI_READY_ATTEMPT_TIMEOUT_MS,
         onTick: (seconds) => {
           const s = Number.isFinite(Number(seconds)) && seconds > 0 ? ` - ${Math.floor(seconds)}s` : '';
-          updateOperationProgress({ headline: migrationHeadline, message: `Waiting for replacement UI${s}`, progress: null });
+          updateOperationProgress({ headline: migrationHeadline, message: `Waiting for the new Instance${s}`, progress: null });
         }
       });
       if (!waitRes.ok) {
-        const err = new Error('Persistent replacement started, but the Agent Zero UI is not reachable yet.');
+        const err = new Error('The persistent Instance started, but its Agent Zero interface is not reachable yet.');
         err.code = 'UI_NOT_READY';
         throw err;
       }
 
       updateOperationProgress({
         workspaceMigration: {
-          sourceName: friendlyName || sourceContainerName || 'legacy instance',
+          sourceName: friendlyName || sourceContainerName || 'original Instance',
           sourceContainerName,
-          replacementName: friendlyName || replacementContainerName || 'persistent instance',
+          replacementName: friendlyName || replacementContainerName || 'persistent Instance',
           replacementContainerName,
           mountTarget: WORKSPACE_MOUNT_TARGET
         }
       });
       finishOperation('completed', null);
-      updateOperationProgress({ headline: migrationHeadline, progress: 100, message: 'Persisted' });
+      updateOperationProgress({ headline: migrationHeadline, progress: 100, message: 'The /a0/usr workspace is persistent' });
     } catch (error) {
       logDockerManagerError('migrateLocalInstanceStorage', error, { opId, containerId: id, cloneImageRef });
       try {
@@ -5315,13 +5354,8 @@ async function migrateLocalInstanceStorage(containerId, options = {}) {
         // ignore cleanup failure
       }
 
-      const message =
-        (error && typeof error === 'object' && error.code === 'WORKSPACE_ALREADY_PERSISTENT' && error.message) ||
-        (error && typeof error === 'object' && error.code === 'UI_NOT_READY' && error.message) ||
-        mapDockerInterfaceErrorToUiMessage(error) ||
-        error?.message ||
-        'Persisting /a0/usr data failed';
-      finishOperation('failed', message, error?.code || null);
+      const message = mapDockerInterfaceErrorToUiMessage(error) || 'Workspace change failed. Try again.';
+      finishOperationFailure(error, message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
@@ -5342,7 +5376,7 @@ async function backupLocalInstance(containerId, outputPath) {
 
   (async () => {
     try {
-      updateOperationProgress({ headline: 'Backing up /a0/usr', message: 'Preparing backup', progress: null });
+      updateOperationProgress({ headline: 'Backing up workspace (/a0/usr)', message: 'Preparing backup', progress: null });
       const docker = await getManagedDocker(imageRepo);
       const containers = await docker.listContainers(imageRepo);
       const target = (containers || []).find((c) => c && c.containerId === id) || null;
@@ -5354,7 +5388,7 @@ async function backupLocalInstance(containerId, outputPath) {
       }
 
       const sourceName = target.instanceName || target.containerName || id.slice(0, 12);
-      updateOperationProgress({ headline: `Backing up ${sourceName || 'instance'}`, message: 'Reading /a0/usr data', progress: null });
+      updateOperationProgress({ headline: `Backing up ${sourceName || 'Instance'}`, message: 'Reading /a0/usr workspace data', progress: null });
       const result = await createAgentZeroBackupZip(docker, id, targetPath, { sourceName });
 
       finishOperation('completed', null);
@@ -5365,13 +5399,8 @@ async function backupLocalInstance(containerId, outputPath) {
       });
     } catch (error) {
       logDockerManagerError('backupLocalInstance', error, { opId, containerId: id, outputPath: targetPath });
-      const message =
-        (error && typeof error === 'object' && error.code === 'BACKUP_EMPTY' && error.message) ||
-        (error && typeof error === 'object' && error.code === 'BACKUP_TOO_LARGE' && error.message) ||
-        mapDockerInterfaceErrorToUiMessage(error) ||
-        error?.message ||
-        'Backup failed';
-      finishOperation('failed', message, error?.code || null);
+      const message = mapDockerInterfaceErrorToUiMessage(error) || 'Backup failed. Try again.';
+      finishOperationFailure(error, message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
@@ -5392,7 +5421,7 @@ async function restoreLocalInstance(containerId, inputPath) {
 
   (async () => {
     try {
-      updateOperationProgress({ headline: 'Restoring /a0/usr', message: 'Preparing restore', progress: null });
+      updateOperationProgress({ headline: 'Restoring workspace (/a0/usr)', message: 'Preparing restore', progress: null });
       const docker = await getManagedDocker(imageRepo);
       const containers = await docker.listContainers(imageRepo);
       const target = (containers || []).find((c) => c && c.containerId === id) || null;
@@ -5404,12 +5433,12 @@ async function restoreLocalInstance(containerId, inputPath) {
       }
 
       const targetName = target.instanceName || target.containerName || id.slice(0, 12);
-      updateOperationProgress({ headline: `Restoring ${targetName || 'instance'}`, message: 'Ensuring /a0/usr exists', progress: null });
+      updateOperationProgress({ headline: `Restoring ${targetName || 'Instance'}`, message: 'Preparing /a0/usr', progress: null });
       if (typeof docker.ensureContainerDirectory === 'function') {
         await docker.ensureContainerDirectory(id, WORKSPACE_MOUNT_TARGET);
       }
 
-      updateOperationProgress({ headline: `Restoring ${targetName || 'instance'}`, message: 'Writing /a0/usr data', progress: null });
+      updateOperationProgress({ headline: `Restoring ${targetName || 'Instance'}`, message: 'Writing /a0/usr workspace data', progress: null });
       const result = await restoreAgentZeroBackupZip(
         docker,
         id,
@@ -5425,12 +5454,8 @@ async function restoreLocalInstance(containerId, inputPath) {
       });
     } catch (error) {
       logDockerManagerError('restoreLocalInstance', error, { opId, containerId: id, inputPath: sourcePath });
-      const message =
-        (error && typeof error === 'object' && error.code === 'INVALID_BACKUP_ARCHIVE' && error.message) ||
-        mapDockerInterfaceErrorToUiMessage(error) ||
-        error?.message ||
-        'Restore failed';
-      finishOperation('failed', message, error?.code || null);
+      const message = mapDockerInterfaceErrorToUiMessage(error) || 'Restore failed. Try again.';
+      finishOperationFailure(error, message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
@@ -5521,10 +5546,9 @@ async function startActiveInstance() {
       updateOperationProgress({ progress: 100, message: 'Started' });
     } catch (error) {
       const message =
-        (error && typeof error === 'object' && error.code === 'UI_NOT_READY' && error.message) ||
         mapDockerInterfaceErrorToUiMessage(error) ||
         'Start failed';
-      finishOperation('failed', message);
+      finishOperationFailure(error, message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
@@ -5573,7 +5597,7 @@ async function deleteRetainedInstance(containerId) {
           ? 'You cannot delete the active instance.'
           : '') ||
         'Delete failed';
-      finishOperation('failed', message);
+      finishOperationFailure(error, message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
@@ -5630,7 +5654,7 @@ async function deleteLocalInstance(containerId, options = {}) {
       await stateStore.deleteLocalInstanceAppearance(target.containerId).catch(() => {});
       await stateStore.deleteLocalInstanceCredentials(target.containerId).catch(() => {});
       if (storageError) {
-        const error = new Error('Instance deleted, but its /a0/usr folder could not be removed.');
+        const error = new Error('Instance deleted, but its /a0/usr workspace data could not be removed.');
         error.code = 'INSTANCE_DELETED_STORAGE_REMAINS';
         error.cause = storageError;
         throw error;
@@ -5808,13 +5832,12 @@ async function updateToLatest(dataLossAck) {
       }
 
       const message =
-        (error && typeof error === 'object' && error.code === 'UI_NOT_READY' && error.message) ||
         mapDockerInterfaceErrorToUiMessage(error) ||
         (error && typeof error === 'object' && error.code === 'NOT_YET_AVAILABLE'
           ? 'The newest version is not available yet. Please try again later.'
           : '') ||
         'Update failed';
-      finishOperation('failed', message);
+      finishOperationFailure(error, message);
     } finally {
       _abortControllers.delete(opId);
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
@@ -5917,11 +5940,10 @@ async function activateRetainedInstance(containerId, dataLossAck) {
       }
 
       const message =
-        (error && typeof error === 'object' && error.code === 'UI_NOT_READY' && error.message) ||
         mapDockerInterfaceErrorToUiMessage(error) ||
         (error && typeof error === 'object' && error.code === 'INSTANCE_NOT_FOUND' ? 'Instance not found.' : '') ||
         'Rollback failed';
-      finishOperation('failed', message);
+      finishOperationFailure(error, message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
@@ -6031,14 +6053,12 @@ async function activateTag(tag, dataLossAck, options = {}) {
       }
 
       const message =
-        (error && typeof error === 'object' && error.code === 'UI_NOT_READY' && error.message) ||
         mapDockerInterfaceErrorToUiMessage(error) ||
         (error && typeof error === 'object' && error.code === 'NOT_INSTALLED'
           ? 'This version is not installed yet.'
           : '') ||
-        (error && typeof error === 'object' && typeof error.message === 'string' ? error.message : '') ||
-        'Run failed';
-      finishOperation('failed', message);
+        'Agent Zero could not create the Instance. Try again.';
+      finishOperationFailure(error, message);
     } finally {
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
     }
@@ -6098,7 +6118,7 @@ async function runCustomImage(options = {}) {
     } catch (error) {
       logDockerManagerError('runCustomImage', error, { opId, imageRef: custom.imageRef });
       const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Custom image run failed';
-      finishOperation('failed', message, error?.code || null);
+      finishOperationFailure(error, message);
     } finally {
       _abortControllers.delete(opId);
       await refreshDockerManager({ forceRefresh: false }).catch(() => {});
@@ -6191,7 +6211,7 @@ async function runDeveloperProject(options = {}) {
       }
       logDockerManagerError('runDeveloperProject', error, { opId, action: project.action, fileName: project.fileName });
       const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Docker project action failed';
-      finishOperation('failed', message, error?.code || null);
+      finishOperationFailure(error, message);
       updateOperationProgress({ developerOutput: output || message });
     } finally {
       _abortControllers.delete(opId);
@@ -6477,6 +6497,7 @@ module.exports = {
 
   _test: {
     WORKSPACE_MOUNT_TARGET,
+    runtimeManagedDirectory,
     normalizeStorageOverride,
     resolveWorkspaceStorage,
     applyWorkspaceStorage,

@@ -10,7 +10,7 @@ function hasLauncherUpdate(state) {
 function isDockerHubRateLimit(progress) {
   const errorCode = typeof progress?.errorCode === "string" ? progress.errorCode : "";
   const message = `${progress?.error || ""} ${progress?.detail || ""} ${progress?.message || ""}`.trim();
-  return errorCode === "DOCKER_PULL_RATE_LIMIT" || /docker hub pull limit reached/i.test(message);
+  return errorCode === "DOCKER_PULL_RATE_LIMIT" || /(?:docker hub.*limit|version downloads.*limited)/i.test(message);
 }
 
 function progressActionsForState(state) {
@@ -18,7 +18,7 @@ function progressActionsForState(state) {
   if (progress?.status !== "failed") return [];
   if (isDockerHubRateLimit(progress)) {
     return [
-      { id: "docker-login", label: "Docker Login", emphasis: "primary" },
+      { id: "docker-login", label: "Sign in to Docker Hub", emphasis: "primary" },
       { id: "retry-install", label: "Retry", emphasis: "secondary", disabled: !progress?.targetTag }
     ];
   }

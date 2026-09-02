@@ -160,6 +160,8 @@ test('advanced options are collapsed by default', async () => {
   const source = await readFile(new URL('./run-instance-dialog.js', import.meta.url), 'utf8');
   assert.match(source, /<details class="dm-advanced">/);
   assert.doesNotMatch(source, /<details class="dm-advanced" open>/);
+  assert.match(source, /Workspace storage \(\/a0\/usr\)/);
+  assert.match(source, /it does not store the whole \/a0 folder/);
 });
 
 test('local Instance setup inherits Host access defaults and hides its options while off', async () => {

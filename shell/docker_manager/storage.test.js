@@ -11,6 +11,7 @@ const dockerManager = require('./index');
 
 const {
   WORKSPACE_MOUNT_TARGET,
+  runtimeManagedDirectory,
   resolveWorkspaceStorage,
   applyWorkspaceStorage,
   windowsPathToWslMountSource,
@@ -42,6 +43,33 @@ const {
   createAgentZeroBackupZip,
   restoreAgentZeroBackupZip
 } = dockerManager._test;
+
+test('Windows managed runtime is shared outside Launcher uninstall data', () => {
+  assert.equal(runtimeManagedDirectory({
+    platform: 'win32',
+    localAppData: 'C:\\Users\\Ada\\AppData\\Local',
+    appData: 'C:\\Users\\Ada\\AppData\\Roaming',
+    userData: 'C:\\Users\\Ada\\AppData\\Roaming\\a0-launcher'
+  }), 'C:\\Users\\Ada\\AppData\\Local\\AgentZero\\runtime');
+});
+
+test('Windows managed runtime derives LocalAppData from Electron appData when the environment is missing', () => {
+  assert.equal(runtimeManagedDirectory({
+    platform: 'win32',
+    localAppData: '',
+    appData: 'C:\\Users\\Ada\\AppData\\Roaming',
+    userData: 'C:\\Users\\Ada\\AppData\\Roaming\\a0-launcher'
+  }), 'C:\\Users\\Ada\\AppData\\Local\\AgentZero\\runtime');
+});
+
+test('non-Windows managed runtimes remain under Electron userData', () => {
+  assert.equal(runtimeManagedDirectory({
+    platform: 'linux',
+    localAppData: '',
+    appData: '/home/ada/.config',
+    userData: '/home/ada/.config/a0-launcher'
+  }), path.join('/home/ada/.config/a0-launcher', 'runtime'));
+});
 
 test('unhealthy local Instances fall back to their Git HEAD branch', async () => {
   assert.equal(gitBranchFromHead('ref: refs/heads/ready\n'), 'ready');
@@ -463,7 +491,7 @@ test('Windows WSL runtime bind mounts use WSL-visible sources while labels keep 
   const fakeWslDocker = {
     env: {
       dockerFlavor: 'wsl_engine',
-      dockerHost: { kind: 'tcp', host: '127.0.0.1', port: 23750 }
+      dockerHost: { kind: 'npipe', socketPath: '//./pipe/agent-zero-runtime-docker' }
     }
   };
   const storage = {
@@ -745,7 +773,7 @@ test('clone reuses the configured source image and falls back to its image id', 
   const imageId = `sha256:${'b'.repeat(64)}`;
   assert.equal(sourceCloneImageRef({ Image: imageId, Config: { Image: 'agent0ai/agent-zero:latest' } }), 'agent0ai/agent-zero:latest');
   assert.equal(sourceCloneImageRef({ Image: imageId }), imageId);
-  assert.throws(() => sourceCloneImageRef({}), /source Instance image is unavailable/i);
+  assert.throws(() => sourceCloneImageRef({}), /source Instance Version is unavailable/i);
 });
 
 test('migration replacement preserves a running source container settled port', async () => {

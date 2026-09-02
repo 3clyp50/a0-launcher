@@ -64,7 +64,7 @@ This scope owns:
   relogin-required states, and manual install fallback without exposing
   package-manager details as the main path.
 - Runtime setup must offer `Add remote Instance` as a first-step path for users
-  who already host Agent Zero on a VPS or URL. Saved remote Instances bypass the
+  who already run Agent Zero on another computer, server, or URL. Saved remote Instances bypass the
   local runtime blocker so the launcher can be used without Docker installed or
   an Agent Zero image pulled locally. While its dialog is open, state refreshes
   must not recreate the runtime gate above it.
@@ -85,8 +85,8 @@ This scope owns:
   the default launcher view. Programmatic tab handoffs should dispatch
   `dm:navigate` and let the sidebar apply the tab plus publish `dm:nav`.
 - Empty, loading, error, success, and disabled states must be explicit enough
-  that the user is never left wondering whether Docker or the launcher is still
-  working.
+  that the user is never left wondering whether Agent Zero or the Launcher is
+  still working.
 - Runtime setup progress belongs primarily in the blocking runtime modal.
 - Runtime setup should stay transparent without becoming a feature showcase.
   Use the `See more` disclosure for structured setup phases when detailed
@@ -143,6 +143,11 @@ This scope owns:
   of a dead-end message.
 - Operation progress failures must remain visible with the stable
   renderer-facing error message after the async operation finishes.
+- Normal setup and operation failures must not render raw adapter, Docker, WSL,
+  daemon, endpoint, distribution, pipe, arbitrary path, or command output as
+  their primary message. The canonical `/a0/usr` path may appear when it defines
+  the affected workspace. Keep a plain next action in the main state and place
+  bounded raw context only in a collapsed `Technical details` disclosure.
 - Operation progress may show a cancel action only when the Docker Manager
   progress payload marks the current phase as cancelable.
 - Official version cards must distinguish available, installable, installed,
@@ -307,11 +312,14 @@ This scope owns:
   shape and writes only into `/a0/usr`, with user confirmation before starting.
 - Retained instances are rollback candidates; storage-volume cleanup belongs in
   Advanced and must remain clearly separate from instance start/stop actions.
-- Storage UI must say `Storage volumes` when referring to Docker volumes.
-  Workspace storage preferences belong in Settings, not the Advanced storage
-  tab. Copy should distinguish workspace directories from Docker named volumes.
-  Host directory mapping should make clear whether the selected folder is a
-  parent for per-Instance workspaces or the exact folder mounted at `/a0/usr`.
+- The normal UI should call data an Instance `workspace`, use
+  `Launcher-managed storage` for named volumes, and avoid mount paths or volume
+  jargon. `Storage volumes` belongs only in Advanced. Use `/a0/usr` with
+  `workspace` when a destructive or storage-scoping choice needs the exact
+  boundary, and make clear that it does not mean all of `/a0`. Workspace
+  storage preferences belong in Settings, not the Advanced storage tab. Folder
+  copy should distinguish a parent for per-Instance workspaces from the exact
+  folder mapped to `/a0/usr`.
 - Settings owns persistence for preferred UI/SSH ports and Instance
   provider/model defaults plus workspace storage and Host access defaults. The
   Instance defaults tab must expose the same master state, five permissions,
@@ -424,6 +432,10 @@ This scope owns:
   fragment; do not rely on ids owned by sibling components.
 - Prefer short task-oriented copy. Avoid explanatory paragraphs when a label,
   status, or action name will do.
+- Lead normal copy with the Agent Zero outcome, keep the next action concrete,
+  and state preservation or interruption consequences when they affect a user
+  decision. Implementation vocabulary stays in explicitly technical surfaces;
+  `/a0/usr` is also allowed as a precise user-data boundary.
 - Keep destructive actions guarded by confirmation or explicit acknowledgement.
 - If a component's contract becomes large enough to need its own doc, add a
   child `AGENTS.md` and update this file plus the root index in the same session.

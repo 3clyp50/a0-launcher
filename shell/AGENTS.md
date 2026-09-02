@@ -332,14 +332,19 @@ This scope owns:
   `A0_DOCKER_CLI_PATH` or `DOCKER_CLI_PATH` overrides, then `PATH`, then known
   Docker Desktop, Homebrew, Linux package, and Snap locations before failing.
 - Windows client WSL setup may request UAC through an explicit runtime setup
-  action. Keep that path narrowly scoped to WSL feature/distro setup; do not add
-  generic command execution IPC.
+  action only to enable WSL features. Dedicated `AgentZeroRuntime` import stays
+  in ordinary user context; do not install a Store distro or add generic
+  command execution IPC.
 - Runtime state may expose HTTP(S) manual guide URLs, but `shell/main.js` must
   continue sanitizing that field before it reaches the renderer.
 - Long-running Docker operations should return an accepted operation id and
   report progress through Docker Manager events instead of blocking the renderer.
   The sanitized progress bridge should preserve explicit product state flags
   such as `uiReady` when the renderer depends on them for handoff behavior.
+- The progress bridge may preserve a bounded `technicalDetail`, but normal
+  renderer messages must already be product-language-safe. Raw adapter or
+  command failures belong in logs, Diagnostics, or an explicitly collapsed
+  technical disclosure, never as the primary setup or operation message.
 - Docker Manager refresh IPC accepts only a bounded forced/non-forced choice.
   Initial loading, tab navigation, and post-operation reconciliation use normal
   remote caches while rebuilding live local Docker state. Startup follows that

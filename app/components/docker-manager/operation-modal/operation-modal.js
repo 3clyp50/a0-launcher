@@ -45,11 +45,11 @@ function operationHeadline(progress = null) {
     rollback: { running: "Rolling back Agent Zero", failed: "Rollback failed", canceled: "Rollback canceled" },
     start: { running: "Starting Agent Zero", failed: "Start failed", canceled: "Start canceled" },
     stop: { running: "Stopping Agent Zero", failed: "Stop failed", canceled: "Stop canceled" },
-    delete_instance: { running: "Deleting Agent Zero instance", failed: "Delete failed", canceled: "Delete canceled" },
-    clone_instance: { running: "Cloning instance", failed: "Clone failed", canceled: "Clone canceled" },
-    migrate_workspace: { running: "Persisting /a0/usr data", failed: "Persist failed", canceled: "Persist canceled" },
-    backup_workspace: { running: "Backing up /a0/usr", failed: "Backup failed", canceled: "Backup canceled" },
-    restore_workspace: { running: "Restoring /a0/usr", failed: "Restore failed", canceled: "Restore canceled" },
+    delete_instance: { running: "Deleting Instance", failed: "Delete failed", canceled: "Delete canceled" },
+    clone_instance: { running: "Cloning Instance", failed: "Clone failed", canceled: "Clone canceled" },
+    migrate_workspace: { running: "Making /a0/usr persistent", failed: "Workspace change failed", canceled: "Workspace change canceled" },
+    backup_workspace: { running: "Backing up workspace (/a0/usr)", failed: "Backup failed", canceled: "Backup canceled" },
+    restore_workspace: { running: "Restoring workspace (/a0/usr)", failed: "Restore failed", canceled: "Restore canceled" },
     developer_run: { running: "Running developer image", failed: "Developer image failed", canceled: "Developer image canceled" },
     developer_project: { running: "Running Docker project", failed: "Docker project failed", canceled: "Docker project canceled" },
     operation: { running: "Working on Agent Zero", failed: "Operation failed", canceled: "Operation canceled" }
@@ -165,6 +165,7 @@ function normalizedOperationDialog(state = {}) {
       status
     }),
     phase: operationPhase(progress),
+    technicalDetail: asText(progress?.technicalDetail),
     primary: actions.primary,
     secondary: actions.secondary
   };
@@ -287,6 +288,17 @@ function createOperationDialogShell() {
   body.className = "dm-dialog-body";
   body.appendChild(createProgressBlock());
 
+  const technical = document.createElement("details");
+  technical.className = "dm-operation-technical-details";
+  technical.hidden = true;
+  const technicalSummary = document.createElement("summary");
+  technicalSummary.textContent = "Technical details";
+  const technicalCopy = document.createElement("div");
+  technicalCopy.className = "dm-runtime-technical-note";
+  technical.appendChild(technicalSummary);
+  technical.appendChild(technicalCopy);
+  body.appendChild(technical);
+
   const footer = document.createElement("div");
   footer.className = "dm-dialog-footer";
 
@@ -346,6 +358,10 @@ function updateOperationDialog(backdrop, model, state, actions) {
     else unmountSetupShowcase(body);
   }
   updateProgress(model, backdrop);
+  const technical = backdrop.querySelector(".dm-operation-technical-details");
+  const technicalCopy = technical?.querySelector(".dm-runtime-technical-note");
+  if (technical) technical.hidden = !model.technicalDetail;
+  if (technicalCopy) technicalCopy.textContent = model.technicalDetail;
 
   const secondaryClass = model.secondary?.kind === "cancel" ? "button cancel" : "button";
   syncActionButton(backdrop.querySelector(".dm-operation-secondary"), model.secondary, secondaryClass, state, actions);

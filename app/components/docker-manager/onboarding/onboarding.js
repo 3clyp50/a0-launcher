@@ -3,7 +3,7 @@ function byId(id) { return document.getElementById(id); }
 function runtimeMessage(runtime, fallback) {
   const detail = typeof runtime?.detail === "string" ? runtime.detail.trim() : "";
   if (runtime?.state === "manual_install" && Array.isArray(runtime.manualPackages) && runtime.manualPackages.length) {
-    return `${detail || "Install Docker packages manually, then refresh."} Packages: ${runtime.manualPackages.join(", ")}.`;
+    return `${detail || "Install the required system components, then refresh."} Required packages: ${runtime.manualPackages.join(", ")}.`;
   }
   return detail || fallback;
 }
@@ -24,7 +24,7 @@ function setupActionButtonLabel(value = "") {
 
 function titleForRuntime(runtime) {
   if (isDockerDesktopStopped(runtime)) return "Docker Desktop is not running";
-  if (isDockerDesktopRuntime(runtime)) return "Docker Desktop Setup";
+  if (isDockerDesktopRuntime(runtime)) return "Start Docker Desktop";
   return "Agent Zero Setup";
 }
 
@@ -49,7 +49,7 @@ function actionForRuntime(runtime) {
   if (runtime.action === "refresh" || runtime.state === "needs_relogin") {
     return { label: "Refresh", handler: () => window.dockerManagerActions?.refresh?.() };
   }
-  return { label: "Open Install Guide", handler: openGuide };
+  return { label: "Open setup guide", handler: openGuide };
 }
 
 function render(state) {

@@ -195,6 +195,23 @@ test('channel version card meta keeps only date and size', () => {
   ]);
 });
 
+test('numbered Version card meta does not expose image or digest details', () => {
+  const publishedAt = '2026-06-24T12:00:00Z';
+  const entry = {
+    tag: 'v2.0',
+    imageRef: 'agent0ai/agent-zero:v2.0',
+    publishedAt,
+    sizeBytes: 12348030976,
+    matchHint: 'Differs from published v2.0',
+    digestHint: 'Published: 648b9703656b / Local: dea8d7301edd'
+  };
+
+  assert.deepEqual(metaPartsForEntry(entry, [entry]), [
+    `Created ${new Date(publishedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`,
+    '11.5 GB'
+  ]);
+});
+
 test('version catalog collapses numbered version groups by default', () => {
   const model = buildInstallCatalogModel([
     { tag: 'v1.20', title: '1.20' },

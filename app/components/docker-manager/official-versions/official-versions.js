@@ -170,10 +170,7 @@ function metaPartsForEntry(entry, entries = []) {
 
   if (isPinnedChannelEntry(entry)) return parts;
 
-  if (entry?.imageRef) parts.unshift(entry.imageRef);
-  if (isReadyEntry(entry)) parts.push("Development image with alpha features under test");
-  if (entry?.matchHint) parts.push(entry.matchHint);
-  if (entry?.digestHint) parts.push(entry.digestHint);
+  if (isReadyEntry(entry)) parts.push("Development Version with alpha features under test");
   return parts;
 }
 
@@ -304,7 +301,7 @@ function canRemoveEntry(entry) {
 function confirmRemoveInstall(entry) {
   const label = entry?.title || entry?.tag || "this version";
   return window.confirm(
-    `Remove ${label} from Versions?\n\nDocker will refuse if any Instance still uses this image. Delete those Instances first, then remove the version.`
+    `Remove ${label} from Versions?\n\nA Version cannot be removed while an Instance still uses it. Delete those Instances first, then try again.`
   );
 }
 

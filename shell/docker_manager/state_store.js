@@ -711,7 +711,7 @@ function remoteInstanceCredentialMetadata(instanceId, record) {
 function requireSafeCredentialStorage() {
   if (!safeStorage || typeof safeStorage.encryptString !== 'function' || typeof safeStorage.decryptString !== 'function') {
     throw localInstanceCredentialError(
-      'Secure credential storage is not available in this launcher runtime.',
+      'Secure credential storage is not available in this Launcher.',
       'CREDENTIAL_STORAGE_UNAVAILABLE'
     );
   }

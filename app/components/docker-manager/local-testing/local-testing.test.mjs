@@ -343,8 +343,8 @@ test('delete dialog storage model exposes folder choices and platform opener lab
       canOpenStorage: true,
       storageKind: 'folder',
       storageValue: '/home/ada/agent-zero/brave-ada',
-      keepLabel: 'Keep folder',
-      deleteStorageLabel: 'Delete folder',
+      keepLabel: 'Keep /a0/usr data',
+      deleteStorageLabel: 'Delete /a0/usr data',
       openLabel: 'Open in Finder'
     }
   );
@@ -365,13 +365,21 @@ test('delete dialog storage model handles Docker volumes without file-manager ac
       canOpenStorage: false,
       storageKind: 'volume',
       storageValue: 'a0-launcher-brave-ada-usr',
-      keepLabel: 'Keep volume',
-      deleteStorageLabel: 'Delete volume',
+      keepLabel: 'Keep /a0/usr data',
+      deleteStorageLabel: 'Delete /a0/usr data',
       openLabel: 'Open folder'
     }
   );
 
   assert.equal(deleteInstanceStorageModel({ workspaceStorage: { persistent: false } }).hasStorageChoice, false);
+});
+
+test('destructive and archive copy names the exact /a0/usr workspace boundary', async () => {
+  const source = await readFile(new URL('./local-testing.js', import.meta.url), 'utf8');
+  assert.match(source, /The Agent Zero workspace at \/a0\/usr can be kept/);
+  assert.match(source, /Back up workspace \(\/a0\/usr\)/);
+  assert.match(source, /Restore workspace \(\/a0\/usr\)/);
+  assert.match(source, /The rest of \/a0 is not (?:copied|restored)/);
 });
 
 test('repo-mounted workspaces can open without offering destructive storage cleanup', () => {

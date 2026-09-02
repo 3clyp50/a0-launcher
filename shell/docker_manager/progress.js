@@ -1,42 +1,41 @@
 const RUNTIME_STEPS = Object.freeze({
   linux: Object.freeze([
-    ['check_runtime', 'Checking Docker Engine'],
-    ['authorization', 'Requesting system authorization'],
-    ['install_engine', 'Installing Docker Engine'],
-    ['start_engine', 'Starting Docker Engine'],
-    ['check_access', 'Checking Docker access'],
-    ['ready', 'Runtime ready']
+    ['check_runtime', 'Checking this computer'],
+    ['authorization', 'Waiting for system approval'],
+    ['install_engine', 'Installing required files'],
+    ['start_engine', 'Starting Agent Zero'],
+    ['check_access', 'Checking system access'],
+    ['ready', 'Agent Zero is ready']
   ]),
   windows_wsl: Object.freeze([
-    ['check_runtime', 'Checking Windows runtime'],
-    ['windows_approval', 'Requesting Windows approval'],
-    ['enable_wsl', 'Enabling WSL features'],
-    ['follow_up', 'Waiting for restart or follow-up'],
-    ['install_ubuntu', 'Installing Ubuntu'],
-    ['prepare_ubuntu', 'Preparing Ubuntu'],
-    ['install_engine', 'Installing Docker Engine in WSL'],
-    ['start_wsl_engine', 'Starting Docker Engine in WSL'],
-    ['start_bridge', 'Starting local Docker bridge'],
-    ['ready', 'Runtime ready']
+    ['check_runtime', 'Checking this computer'],
+    ['windows_approval', 'Waiting for Windows approval'],
+    ['enable_wsl', 'Preparing Windows'],
+    ['follow_up', 'Waiting for Windows restart'],
+    ['download_runtime', 'Downloading required files'],
+    ['install_runtime', 'Installing required files'],
+    ['start_wsl_engine', 'Starting Agent Zero'],
+    ['start_bridge', 'Connecting Agent Zero'],
+    ['ready', 'Agent Zero is ready']
   ]),
   docker_desktop: Object.freeze([
     ['desktop_stopped', 'Docker Desktop is installed but not running'],
     ['start_desktop', 'Starting Docker Desktop'],
     ['wait_desktop', 'Waiting for Docker Desktop'],
-    ['ready', 'Runtime ready']
+    ['ready', 'Agent Zero is ready']
   ]),
   macos_colima: Object.freeze([
-    ['find_components', 'Finding runtime components'],
-    ['download_components', 'Downloading runtime components'],
-    ['install_components', 'Installing runtime components'],
-    ['start_runtime', 'Starting Agent Zero runtime'],
-    ['start_engine', 'Starting Docker Engine'],
-    ['ready', 'Runtime ready']
+    ['find_components', 'Checking required components'],
+    ['download_components', 'Downloading required files'],
+    ['install_components', 'Installing required files'],
+    ['start_runtime', 'Starting Agent Zero'],
+    ['start_engine', 'Connecting Agent Zero'],
+    ['ready', 'Agent Zero is ready']
   ]),
   generic: Object.freeze([
-    ['check_runtime', 'Checking runtime'],
-    ['setup_runtime', 'Runtime Setup'],
-    ['ready', 'Runtime ready']
+    ['check_runtime', 'Checking this computer'],
+    ['setup_runtime', 'Preparing this computer'],
+    ['ready', 'Agent Zero is ready']
   ])
 });
 
@@ -75,9 +74,8 @@ function phaseForMessage(message, kind) {
     if (/requesting windows approval/.test(text)) return 'windows_approval';
     if (/enabl/.test(text) && /wsl/.test(text)) return 'enable_wsl';
     if (/restart|follow-up|followup/.test(text)) return 'follow_up';
-    if (/installing ubuntu/.test(text)) return 'install_ubuntu';
-    if (/preparing ubuntu/.test(text)) return 'prepare_ubuntu';
-    if (/installing docker engine/.test(text)) return 'install_engine';
+    if (/download/.test(text) && /runtime/.test(text)) return 'download_runtime';
+    if (/installing agent zero runtime|installing ubuntu|preparing ubuntu|installing docker engine/.test(text)) return 'install_runtime';
     if (/starting wsl docker engine|starting docker engine in wsl/.test(text)) return 'start_wsl_engine';
     if (/bridge/.test(text)) return 'start_bridge';
   }
@@ -137,13 +135,87 @@ function clampProgress(value) {
   return Math.max(0, Math.min(100, n));
 }
 
+function runtimeAssessmentDetail(assessment = null, platform = process.platform) {
+  const state = normalizeProgressText(assessment?.state);
+  const mode = normalizeProgressText(assessment?.mode);
+  const raw = normalizeProgressText(assessment?.detail);
+
+  if (mode === 'docker_desktop' && state === 'engine_stopped') {
+    return 'Docker Desktop is installed but not running. Start it to continue.';
+  }
+  if (state === 'ready') return 'Agent Zero is ready to run locally.';
+  if (state === 'needs_group_membership') {
+    return 'Agent Zero needs permission to run locally. Continue, then sign out and back in once.';
+  }
+  if (state === 'needs_relogin') {
+    return 'Sign out of this computer and sign back in once, then return here to finish setup.';
+  }
+  if (state === 'engine_stopped') {
+    return 'Agent Zero\'s local services are stopped. Continue to start them.';
+  }
+  if (state === 'not_provisioned') {
+    return platform === 'win32'
+      ? 'Agent Zero needs a one-time local setup. The Launcher will download and prepare it for you.'
+      : 'Agent Zero needs a one-time local setup. Continue to prepare this computer.';
+  }
+  if (state === 'manual_install') {
+    if (/docker group|user needs docker access|cannot access it yet/i.test(raw)) {
+      return 'Your account needs permission to run Agent Zero locally. Complete the manual access step, sign out and back in, then refresh.';
+    }
+    return 'Automatic local setup is not available here. Install the required system components, then refresh.';
+  }
+  if (state === 'unsupported' && /windows server/i.test(raw)) {
+    return 'Automatic setup is not available on Windows Server. Open the setup guide to complete the required server configuration.';
+  }
+  if (state === 'unsupported') {
+    return 'Automatic local setup is not available on this system. Complete the setup guide, then refresh.';
+  }
+  return 'Agent Zero needs a one-time local setup before it can run on this computer.';
+}
+
+function runtimeProgressDetail(message, kind, phase, status = 'running') {
+  const raw = normalizeProgressText(message);
+  if (status === 'failed') {
+    if (/\b(?:wsl|docker engine|container|image|daemon|runtime|endpoint|distro|distribution|socket|pipe)\b/i.test(raw)) {
+      return 'Agent Zero setup did not finish. Try again or open Technical details.';
+    }
+    return raw || 'Agent Zero setup did not finish. Try again.';
+  }
+  if (status === 'completed' || phase === 'ready') return 'Agent Zero is ready';
+
+  const copy = {
+    check_runtime: 'Checking this computer',
+    authorization: 'Waiting for system approval',
+    windows_approval: 'Waiting for Windows approval',
+    enable_wsl: 'Preparing Windows',
+    follow_up: 'Restart Windows if prompted. Setup will continue when you return.',
+    download_runtime: 'Downloading required files',
+    install_runtime: 'Installing required files',
+    install_engine: 'Installing required files',
+    start_wsl_engine: 'Starting Agent Zero',
+    start_runtime: 'Starting Agent Zero',
+    start_engine: kind === 'macos_colima' ? 'Connecting Agent Zero' : 'Starting Agent Zero',
+    start_bridge: 'Connecting Agent Zero',
+    check_access: 'Checking system access',
+    find_components: 'Checking required components',
+    download_components: 'Downloading required files',
+    install_components: 'Installing required files',
+    setup_runtime: 'Preparing this computer',
+    desktop_stopped: 'Docker Desktop is installed but not running',
+    start_desktop: 'Starting Docker Desktop',
+    wait_desktop: 'Waiting for Docker Desktop'
+  };
+  return copy[phase] || 'Preparing Agent Zero';
+}
+
 function runtimeSetupProgressPatch(assessment = null, message = '', progress = null, status = 'running') {
   const kind = runtimeKind(assessment);
-  const detail = normalizeProgressText(message) || normalizeProgressText(assessment?.detail) || 'Preparing Agent Zero Setup.';
-  const phase = phaseForMessage(detail, kind) || (status === 'completed' ? 'ready' : '');
+  const rawDetail = normalizeProgressText(message) || normalizeProgressText(assessment?.detail);
+  const phase = phaseForMessage(rawDetail, kind) || (status === 'completed' ? 'ready' : '');
+  const detail = runtimeProgressDetail(rawDetail, kind, phase, status);
   const numericProgress = clampProgress(progress);
   const patch = {
-    headline: 'Setup Agent Zero',
+    headline: status === 'completed' ? 'Agent Zero is ready' : 'Preparing Agent Zero',
     detail,
     message: detail,
     phase: phase || null,
@@ -158,5 +230,7 @@ function runtimeSetupProgressPatch(assessment = null, message = '', progress = n
 module.exports = {
   runtimeKind,
   phaseForMessage,
+  runtimeAssessmentDetail,
+  runtimeProgressDetail,
   runtimeSetupProgressPatch
 };

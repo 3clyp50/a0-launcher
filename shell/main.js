@@ -3376,7 +3376,7 @@ function findDockerCliBinary() {
     if (existing) return existing;
   }
 
-  const err = new Error('Docker CLI was not found. Finish Docker Setup, then try again.');
+  const err = new Error('The Version download sign-in tool was not found. Complete local setup, then try again.');
   err.code = 'TERMINAL_UNAVAILABLE';
   throw err;
 }
@@ -3404,18 +3404,18 @@ function writeDockerLoginShellWrapper(dockerCli) {
     '#!/usr/bin/env bash',
     'set -u',
     'clear 2>/dev/null || true',
-    'echo "Agent Zero Docker Login"',
+    'echo "Sign in to download Versions"',
     'echo',
-    'echo "Sign in to Docker Hub so Agent Zero image downloads can continue."',
-    'echo "When login succeeds, return to Agent Zero and click Retry."',
+    'echo "Sign in to Docker Hub so Agent Zero can continue downloading Versions."',
+    'echo "When sign-in succeeds, return to Agent Zero and click Retry."',
     'echo',
     `${shellSingleQuote(dockerCli)} login`,
     'code=$?',
     'echo',
     'if [ "$code" -eq 0 ]; then',
-    '  echo "Docker login completed."',
+    '  echo "Sign-in complete."',
     'else',
-    '  echo "Docker login exited with code $code."',
+    '  echo "Sign-in did not finish (code $code)."',
     'fi',
     'echo',
     'read -r -p "Press Enter to close this window..." _',
@@ -3434,18 +3434,18 @@ function writeDockerLoginShellWrapper(dockerCli) {
 function writeDockerLoginPowerShellWrapper(dockerCli) {
   const scriptPath = path.join(terminalWrapperDir(), 'docker-login.ps1');
   const script = [
-    'Write-Host "Agent Zero Docker Login"',
+    'Write-Host "Sign in to download Versions"',
     'Write-Host ""',
-    'Write-Host "Sign in to Docker Hub so Agent Zero image downloads can continue."',
-    'Write-Host "When login succeeds, return to Agent Zero and click Retry."',
+    'Write-Host "Sign in to Docker Hub so Agent Zero can continue downloading Versions."',
+    'Write-Host "When sign-in succeeds, return to Agent Zero and click Retry."',
     'Write-Host ""',
     `& ${powerShellSingleQuote(dockerCli)} login`,
     '$code = $LASTEXITCODE',
     'Write-Host ""',
     'if ($code -eq 0) {',
-    '  Write-Host "Docker login completed."',
+    '  Write-Host "Sign-in complete."',
     '} else {',
-    '  Write-Host "Docker login exited with code $code."',
+    '  Write-Host "Sign-in did not finish (code $code)."',
     '}',
     'Write-Host ""',
     'Read-Host "Press Enter to close this window"',
@@ -3705,7 +3705,7 @@ function openDockerLoginTerminalWindows(dockerCli) {
 
   if (findCommandOnPath('wt.exe')) {
     try {
-      spawnDetached('wt.exe', ['new-tab', '--title', 'Docker Login', 'powershell.exe', ...psArgs], { env: process.env });
+      spawnDetached('wt.exe', ['new-tab', '--title', 'Agent Zero Sign-In', 'powershell.exe', ...psArgs], { env: process.env });
       return { opened: true, command: 'wt.exe' };
     } catch {
       // Fall through to PowerShell's own console window.
@@ -3730,7 +3730,7 @@ function openDockerLoginTerminalWindows(dockerCli) {
   });
   if (launched.error || launched.status !== 0) {
     const detail = launched.error?.message || launched.stderr?.trim() || `PowerShell exited with code ${launched.status}`;
-    const err = new Error(`Could not open the Docker login terminal. ${detail}`);
+    const err = new Error(`Could not open the Version download sign-in window. ${detail}`);
     err.code = 'TERMINAL_UNAVAILABLE';
     throw err;
   }
@@ -3786,7 +3786,7 @@ function openDockerLoginTerminal() {
   if (process.platform === 'darwin') return openDockerLoginTerminalMac(dockerCli);
   if (process.platform === 'linux') return openDockerLoginTerminalLinux(dockerCli);
 
-  const err = new Error('Opening the Docker login terminal is not available on this system.');
+  const err = new Error('Version download sign-in is not available on this system.');
   err.code = 'TERMINAL_UNAVAILABLE';
   throw err;
 }
@@ -3872,7 +3872,9 @@ async function installDockerDesktop() {
     }
   });
   if (!response.ok) {
-    throw new Error(`Docker download failed: ${response.status} ${response.statusText}`);
+    const error = new Error(`Setup download failed: ${response.status} ${response.statusText}`);
+    error.code = 'SETUP_DOWNLOAD_FAILED';
+    throw error;
   }
 
   const buffer = Buffer.from(await response.arrayBuffer());
@@ -3886,7 +3888,9 @@ async function installDockerDesktop() {
 
   const opened = await shell.openPath(targetPath);
   if (opened) {
-    throw new Error(`Failed to open Docker installer: ${opened}`);
+    const error = new Error(`Failed to open setup installer: ${opened}`);
+    error.code = 'SETUP_INSTALLER_OPEN_FAILED';
+    throw error;
   }
   return { started: true, installerPath: targetPath, installerType: 'exe' };
 }
@@ -3959,7 +3963,7 @@ function ensureZipExtension(filePath) {
 
 async function chooseBackupSavePath(ownerWindow) {
   const options = {
-    title: 'Backup Instance /a0/usr',
+    title: 'Back Up Instance Workspace (/a0/usr)',
     buttonLabel: 'Backup',
     defaultPath: path.join(app.getPath('downloads'), `agent-zero-backup-${backupDateStamp()}.zip`),
     filters: [{ name: 'Agent Zero backup', extensions: ['zip'] }],
@@ -3974,7 +3978,7 @@ async function chooseBackupSavePath(ownerWindow) {
 
 async function chooseBackupRestorePath(ownerWindow) {
   const options = {
-    title: 'Restore Instance /a0/usr',
+    title: 'Restore Instance Workspace (/a0/usr)',
     buttonLabel: 'Restore',
     defaultPath: app.getPath('downloads'),
     filters: [{ name: 'Agent Zero backup', extensions: ['zip'] }],
@@ -4490,6 +4494,7 @@ function sanitizeDockerManagerProgress(progress) {
   }
   if (typeof progress.error === 'string') out.error = progress.error;
   if (typeof progress.errorCode === 'string') out.errorCode = progress.errorCode;
+  if (typeof progress.technicalDetail === 'string') out.technicalDetail = progress.technicalDetail.slice(0, 2000);
   if (isPlainObject(progress.workspaceMigration)) {
     const migration = {};
     const cleanText = (value, maxLength = 160) => String(value || '')

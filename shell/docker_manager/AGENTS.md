@@ -217,6 +217,11 @@ This scope owns:
 - When a product operation fails for a recoverable reason, progress payloads
   should carry a stable error code so the renderer can show the right recovery
   action without parsing human-readable copy.
+- Docker Manager owns the normal-UI language boundary. Map known failures to a
+  stable Agent Zero-first message and next action; use one plain fallback for
+  unknown failures. Preserve bounded raw context separately as
+  `technicalDetail` for collapsed technical disclosure and logs, never in the
+  primary `message` or `detail`.
 - Runtime setup is additive and reuse-first: existing Docker Desktop, native
   Engine, and rootless endpoints are used before Linux Engine provisioning is
   offered.
@@ -229,18 +234,26 @@ This scope owns:
 - Windows RunOnce resume commands must work for both packaged apps and local
   default-app Electron launches. If Electron injects flags before the app path,
   skip those flags and preserve the first non-option app path.
-- Windows WSL setup may complete an intermediate step such as feature enablement
-  or distro installation. Preserve the follow-up message instead of reporting
-  the runtime as ready prematurely.
-- Windows WSL setup can continue from distro installation into Docker Engine
-  installation when the distro is immediately usable; if Windows requires a
-  restart or first-run distro setup, report that as the next step.
+- Windows WSL setup may complete the intermediate WSL-feature enablement step.
+  Preserve the restart/follow-up message instead of reporting the runtime as
+  ready prematurely.
+- Windows automatic fallback imports the dedicated prebuilt
+  `AgentZeroRuntime`; it must not install a Store distro or Docker packages into
+  a user distro. Resolve its shared managed directory beneath
+  `%LOCALAPPDATA%\AgentZero\runtime`, outside Launcher uninstall data, so
+  `a0-install` and Launcher converge on one owned runtime.
 - Linux runtime setup may install/start Docker Engine, then report
   `needs_relogin` when docker group access cannot apply to the current desktop
   session yet. Do not introduce CPU, memory, or disk sizing controls for native
   Linux Engine.
-- Progress messages should be user-oriented: `Starting selected version`, not
-  raw Docker implementation chatter.
+- Normal progress messages should use `Version`, `Instance`, `workspace`,
+  `local setup`, and `this computer`, led by the Agent Zero outcome. Docker,
+  WSL, image, container, daemon, endpoint, distribution, pipe, arbitrary
+  internal mount paths, and command output belong only in Advanced,
+  Diagnostics, setup guides, logs, or bounded `technicalDetail`. Pair
+  `/a0/usr` with `workspace` when Backup, Restore, Clone, persistence, deletion,
+  or folder mapping needs the exact data boundary. Docker Desktop and Docker
+  Hub may be named when the user must interact with those specific products.
 - Running an installed Version from Versions should create a new launcher-managed
   container with a unique Docker name and open host ports, so repeated runs of
   the same image can coexist.

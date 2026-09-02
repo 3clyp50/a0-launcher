@@ -447,7 +447,7 @@ test('running clone operation shows source-specific headline', () => {
       type: 'clone_instance',
       status: 'running',
       headline: 'Cloning agent-zero-latest',
-      message: 'Snapshotting container',
+      message: 'Creating the new Instance',
       canCancel: false
     }
   };
@@ -455,7 +455,7 @@ test('running clone operation shows source-specific headline', () => {
   const model = normalizedOperationDialog(state);
   assert.equal(model.headline, 'Cloning agent-zero-latest');
   assert.equal(model.primary?.label, 'Cloning agent-zero-latest');
-  assert.equal(model.detail, 'Snapshotting container');
+  assert.equal(model.detail, 'Creating the new Instance');
 });
 
 test('workspace persistence operation uses persistence wording', () => {
@@ -465,24 +465,24 @@ test('workspace persistence operation uses persistence wording', () => {
       opId: 'op-persist',
       type: 'migrate_workspace',
       status: 'running',
-      message: 'Creating persistent replacement',
+      message: 'Creating the persistent Instance',
       canCancel: false
     }
   });
 
-  assert.equal(model.headline, 'Persisting /a0/usr data');
-  assert.equal(model.primary?.label, 'Persisting /a0/usr data');
-  assert.equal(model.detail, 'Creating persistent replacement');
+  assert.equal(model.headline, 'Making /a0/usr persistent');
+  assert.equal(model.primary?.label, 'Making /a0/usr persistent');
+  assert.equal(model.detail, 'Creating the persistent Instance');
 });
 
-test('workspace backup and restore operations use Agent Zero usr wording', () => {
+test('workspace backup and restore operations preserve the exact /a0/usr boundary', () => {
   installDom();
   const backup = normalizedOperationDialog({
     progress: {
       opId: 'op-backup',
       type: 'backup_workspace',
       status: 'running',
-      message: 'Reading /a0/usr data'
+      message: 'Reading /a0/usr workspace data'
     }
   });
   const restore = normalizedOperationDialog({
@@ -490,16 +490,16 @@ test('workspace backup and restore operations use Agent Zero usr wording', () =>
       opId: 'op-restore',
       type: 'restore_workspace',
       status: 'running',
-      message: 'Writing /a0/usr data'
+      message: 'Writing /a0/usr workspace data'
     }
   });
 
-  assert.equal(backup.headline, 'Backing up /a0/usr');
-  assert.equal(backup.primary?.label, 'Backing up /a0/usr');
-  assert.equal(backup.detail, 'Reading /a0/usr data');
-  assert.equal(restore.headline, 'Restoring /a0/usr');
-  assert.equal(restore.primary?.label, 'Restoring /a0/usr');
-  assert.equal(restore.detail, 'Writing /a0/usr data');
+  assert.equal(backup.headline, 'Backing up workspace (/a0/usr)');
+  assert.equal(backup.primary?.label, 'Backing up workspace (/a0/usr)');
+  assert.equal(backup.detail, 'Reading /a0/usr workspace data');
+  assert.equal(restore.headline, 'Restoring workspace (/a0/usr)');
+  assert.equal(restore.primary?.label, 'Restoring workspace (/a0/usr)');
+  assert.equal(restore.detail, 'Writing /a0/usr workspace data');
 });
 
 test('rate-limited install failure shows docker login and retry actions in modal', () => {
@@ -510,7 +510,7 @@ test('rate-limited install failure shows docker login and retry actions in modal
       type: 'install',
       status: 'failed',
       errorCode: 'DOCKER_PULL_RATE_LIMIT',
-      error: 'Docker Hub pull limit reached. Sign in to Docker or try again later.',
+      error: 'Version downloads are temporarily limited. Sign in to Docker Hub or try again later.',
       targetTag: 'v1.20',
       finishedAt: '2026-06-16T12:00:00.000Z'
     }
@@ -525,7 +525,7 @@ test('rate-limited install failure shows docker login and retry actions in modal
   });
 
   assert.ok(document.querySelector('.dm-operation-close'));
-  buttonByText(document, 'Docker Login').dispatchEvent(new MiniEvent('click'));
+  buttonByText(document, 'Sign in to Docker Hub').dispatchEvent(new MiniEvent('click'));
   assert.equal(loginCount, 1);
   buttonByText(document, 'Retry').dispatchEvent(new MiniEvent('click'));
   assert.equal(retryTag, 'v1.20');
@@ -539,7 +539,7 @@ test('failed operation header close dismisses the modal', () => {
       type: 'install',
       status: 'failed',
       errorCode: 'DOCKER_PULL_RATE_LIMIT',
-      error: 'Docker Hub pull limit reached. Sign in to Docker or try again later.',
+      error: 'Version downloads are temporarily limited. Sign in to Docker Hub or try again later.',
       targetTag: 'v1.20',
       finishedAt: '2026-06-16T12:05:00.000Z'
     }
@@ -582,4 +582,24 @@ test('generic failed operation can be dismissed and completed operations do not 
     }
   };
   assert.equal(shouldShowOperationDialog(completed), false);
+});
+
+test('failed operation keeps technical detail behind disclosure', () => {
+  const document = installDom();
+  const state = {
+    progress: {
+      opId: 'op-clone-failed-detail',
+      type: 'clone_instance',
+      status: 'failed',
+      error: 'Agent Zero could not clone this Instance. Try again.',
+      technicalDetail: 'Docker container create returned ENOENT',
+      finishedAt: '2026-06-16T12:10:00.000Z'
+    }
+  };
+
+  renderOperationDialog(state, {});
+  assert.equal(document.querySelector('.dm-operation-phase')?.textContent, 'Agent Zero could not clone this Instance. Try again.');
+  const details = document.querySelector('.dm-operation-technical-details');
+  assert.equal(details?.hidden, false);
+  assert.equal(details?.querySelector('.dm-runtime-technical-note')?.textContent, 'Docker container create returned ENOENT');
 });

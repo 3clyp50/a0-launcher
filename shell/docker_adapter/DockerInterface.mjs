@@ -13,6 +13,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const DOCKER_CONTEXT_TIMEOUT_MS = 1200;
+const WINDOWS_WSL_DOCKER_HOST = 'npipe:////./pipe/agent-zero-runtime-docker';
+const WINDOWS_WSL_DOCKER_SOCKET = '//./pipe/agent-zero-runtime-docker';
 
 /**
  * @typedef {Object} DockerHostInfo
@@ -793,7 +795,7 @@ export class DockerInterface {
     if (context.platform === 'win32') {
       return [
         { provider: 'docker_desktop', label: 'Docker Desktop', dockerHost: 'npipe:////./pipe/docker_engine', source: 'known_socket' },
-        { provider: 'wsl_engine', label: 'Agent Zero local runtime', dockerHost: 'tcp://127.0.0.1:23750', source: 'known_socket' }
+        { provider: 'wsl_engine', label: 'Agent Zero local runtime', dockerHost: WINDOWS_WSL_DOCKER_HOST, source: 'known_socket' }
       ];
     }
 
@@ -975,7 +977,7 @@ export class DockerInterface {
     if (raw.includes('podman')) return 'podman';
     if (raw.includes('colima')) return 'colima';
     if (raw.includes('desktop') || raw.includes('/.docker/run/docker.sock') || raw.includes('/.docker/desktop/')) return 'docker_desktop';
-    if (raw.includes('127.0.0.1:23750')) return 'wsl_engine';
+    if (raw.includes('agent-zero-runtime-docker')) return 'wsl_engine';
     if (raw.includes('npipe:')) return 'docker_desktop';
     if (raw.includes('rootless')) return 'docker_engine';
     return 'docker_engine';
@@ -1010,15 +1012,15 @@ export class DockerInterface {
     if (raw.includes('podman')) return 'podman';
     if (raw.includes('/.colima/')) return 'colima';
     if (raw.includes('/.docker/desktop/') || raw.includes('/.docker/run/docker.sock')) return 'docker_desktop';
+    if (hostInfo?.kind === 'npipe' && String(hostInfo.socketPath || '').toLowerCase() === WINDOWS_WSL_DOCKER_SOCKET) return 'wsl_engine';
     if (hostInfo?.kind === 'npipe') return 'docker_desktop';
-    if (hostInfo?.kind === 'tcp' && hostInfo.host === '127.0.0.1' && Number(hostInfo.port) === 23750) return 'wsl_engine';
     if (platform === 'darwin' || platform === 'win32') return 'docker_desktop';
     if (platform === 'linux') return 'docker_engine';
     return 'unknown';
   }
 
   static #isWindowsWslProxyHost(hostInfo, platform = process.platform) {
-    return platform === 'win32' && hostInfo?.kind === 'tcp' && hostInfo.host === '127.0.0.1' && Number(hostInfo.port) === 23750;
+    return platform === 'win32' && hostInfo?.kind === 'npipe' && String(hostInfo.socketPath || '').toLowerCase() === WINDOWS_WSL_DOCKER_SOCKET;
   }
 
   static async #prepareDockerHost(hostInfo, platform = process.platform, options = {}) {

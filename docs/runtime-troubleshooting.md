@@ -25,6 +25,15 @@ launcher:
 unset DOCKER_HOST
 ```
 
+On Windows PowerShell, inspect the same sources plus WSL with:
+
+```powershell
+docker info
+docker context show
+$env:DOCKER_HOST
+wsl --list --verbose
+```
+
 Docker contexts are also reused when they point to a reachable Docker-compatible
 endpoint. Tools such as OrbStack, Rancher Desktop, Colima, rootless Docker, and
 Podman can work when their Docker API endpoint is running. Portainer is a
@@ -45,6 +54,78 @@ On Linux, Docker Desktop uses a user socket such as:
 If Docker Desktop is running but the launcher still cannot connect, check that
 your shell or desktop session is not overriding `DOCKER_HOST` with a stale
 value.
+
+## Agent Zero Local Runtime On Windows
+
+On supported Windows client editions, Launcher can provide Linux containers
+without Docker Desktop. It imports the dedicated WSL2 distro
+`AgentZeroRuntime` from the pinned `agent0ai/a0-install` `runtime-v1` release.
+The download is accepted only when its manifest shape, repository/tag, x64 or
+ARM64 asset URL, declared size, and SHA-256 match the client contract.
+
+The managed runtime is shared by Launcher and `a0-install` beneath:
+
+```text
+%LOCALAPPDATA%\AgentZero\runtime
+```
+
+It sits outside Launcher uninstall data and outside Agent Zero workspaces. The
+appliance is deliberately narrow: Docker Engine/CLI, containerd, Buildx,
+Compose, Python, and a bounded Docker-start helper. Launcher does not install
+Store Ubuntu, run `apt` in an arbitrary distro, change its services, or expose
+Docker on a fixed TCP port.
+
+### Existing WSL distributions
+
+An existing WSL2 distribution is reusable only when Docker, `dockerd`, Python,
+and `docker info` already work. Launcher may connect its process-owned named
+pipe but does not start its Docker daemon, repair packages or configuration, or
+write into that distribution. A plain Ubuntu installation without a running
+Docker Engine is ignored and left untouched.
+
+If a distro already has the exact `AgentZeroRuntime` name, Launcher requires
+the compatible ownership marker and matching architecture. An unmarked name
+collision fails closed; rename or remove it yourself only after confirming what
+it contains.
+
+### Diagnostics and repair
+
+Inspect registration and ownership from PowerShell:
+
+```powershell
+wsl --list --verbose
+wsl -d AgentZeroRuntime -u root -- cat /etc/agent-zero-runtime.json
+wsl -d AgentZeroRuntime -u root -- /usr/local/sbin/a0-runtime-start 120
+```
+
+The last command waits at most 120 seconds and prints a bounded Docker daemon
+log tail on failure. A missing/unreadable marker, wrong WSL version,
+architecture mismatch, or missing runtime binary is treated as a repair state;
+Launcher preserves the distro and its Docker data instead of overwriting it.
+Production setup also requires the published `runtime-v1` manifest. A 404
+before publication or a blocked GitHub download is not repaired by weakening
+checksum or URL validation.
+
+### Storage and removal
+
+Docker images (called Versions in Launcher), containers, and build cache live
+inside the managed distro's virtual disk. Instance workspaces remain separate,
+under `%USERPROFILE%\agent-zero` by default. Deleting a Version reclaims logical
+Docker space, but the Windows VHD file may remain at its previous high-water
+size until a separate Windows/WSL compaction. Launcher never silently calls
+global `wsl --shutdown` or stops unrelated distributions to compact it.
+
+Launcher uninstall preserves `AgentZeroRuntime`. To remove the runtime, first
+inspect the marker above, stop its Instances, and understand that this command
+permanently deletes all Docker images, containers, and cache inside it:
+
+```powershell
+wsl --unregister AgentZeroRuntime
+```
+
+Do not delete `ext4.vhdx` directly. Unregistering the runtime does not delete
+host workspace directories, but any Instance records referring to containers
+inside the removed runtime will no longer have those containers.
 
 ## Native Docker Engine
 

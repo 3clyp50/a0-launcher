@@ -34,10 +34,11 @@ This scope owns:
   start mechanics.
 - `impl/LinuxEngineRuntime.mjs`: Linux native Docker Engine assessment, daemon
   start, and package-manager bootstrap mechanics.
-- `impl/WindowsWslDockerProxy.mjs`: Windows loopback bridge from
-  `127.0.0.1:23750` to the WSL Docker Engine Unix socket.
-- `impl/WindowsWslRuntime.mjs`: Windows Docker Desktop, Windows client WSL
-  Docker Engine, and Windows Server WSL2/nested-virtualization assessment.
+- `impl/WindowsWslDockerProxy.mjs`: process-owned Windows named-pipe bridge to
+  the selected WSL Docker Engine Unix socket.
+- `impl/WindowsWslRuntime.mjs`: Windows Docker Desktop reuse, dedicated
+  `AgentZeroRuntime` WSL appliance import/start, read-only reuse of already-
+  functional WSL Docker engines, and Windows Server assessment.
 - `LOG_PROCESSOR.md`: explanatory implementation notes for log processing.
 
 ## Local Contracts
@@ -66,10 +67,11 @@ This scope owns:
 - Runtime provisioners are consulted only after the Docker Manager has tried to
   reuse an existing Docker endpoint. They should classify repairable states
   before proposing installation.
-- Runtime provisioners should report user-facing progress through `onProgress`
+- Runtime provisioners should report stable source progress through `onProgress`
   for platform setup phases such as authorization, component download, Docker
-  Engine install/start, follow-up/relogin, and Docker Desktop waiting. Keep the
-  messages stable enough for Docker Manager to normalize into modal steps.
+  Engine install/start, follow-up/relogin, and Docker Desktop waiting. These
+  messages may remain technically precise because Docker Manager must normalize
+  them before they reach a normal product surface.
 - Runtime start and provision results should report the Docker endpoint they
   made reachable so the product layer can remember an explicit user choice.
 - Platform provisioners should expose Docker Desktop-only assessment and
@@ -101,22 +103,21 @@ This scope owns:
 - Windows assessment must not direct Windows Server users to Docker Desktop.
   Docker Desktop is for client Windows; Windows Server needs an existing Docker
   endpoint or a WSL2-backed Linux Docker Engine with nested virtualization.
-- Windows WSL Engine support must keep unauthenticated Docker API exposure on
-  Windows loopback only. Do not bind Docker TCP on WSL public or non-loopback
-  interfaces.
-- Windows WSL Engine detection may prepare the launcher-owned loopback bridge
-  for the built-in `127.0.0.1:23750` endpoint before probing it, so an
-  installed Ubuntu Docker Engine can be reused at startup without another setup
-  modal.
+- Windows WSL Engine support uses the launcher-owned
+  `npipe:////./pipe/agent-zero-runtime-docker` endpoint. Keep `dockerd` on its
+  Unix socket; do not bind Docker TCP in WSL or on Windows.
+- Windows WSL Engine detection may prepare that named-pipe bridge for the exact
+  managed `AgentZeroRuntime` distro before probing it. It must never fall back
+  to the default or an arbitrary WSL distro.
 - Windows WSL Engine support must also keep the selected WSL distro alive while
-  the launcher-owned loopback bridge is active; otherwise WSL can idle-stop and
+  the launcher-owned named-pipe bridge is active; otherwise WSL can idle-stop and
   Docker marks healthy Linux containers as exited.
-- Windows WSL keepalive helpers must carry a launcher-specific marker and clean
-  up their child sleep process on shutdown so app restarts do not leave orphaned
-  WSL helper loops.
-- Windows WSL loopback detection may need a longer first probe than other
+- Windows WSL keepalive helpers must carry a unique launcher/process marker,
+  target only the selected distro, and clean up only that marker's child sleep
+  process on shutdown.
+- Windows WSL named-pipe detection may need a longer first probe than other
   Docker endpoints because starting the bridge can cold-start WSL. Keep that
-  extra wait scoped to `127.0.0.1:23750`.
+  extra wait scoped to the Agent Zero pipe.
 - Windows client WSL onboarding details should stay Agent Zero-first for normal
   users. Reserve explicit Docker Desktop naming for Docker Desktop reuse or
   repair states, and keep low-level Docker Engine wording out of the primary
@@ -131,15 +132,18 @@ This scope owns:
   continue from ordinary user context. Do not rely only on admin-only optional
   feature queries; infer feature readiness from `wsl.exe` status/list output
   when it reports WSL2 is available but no distro is installed.
-- On Windows 10, `wsl.exe --install -d Ubuntu --no-launch` may install the
-  Ubuntu Appx package without registering a WSL distro. The Windows client setup
-  path should use the Ubuntu launcher root-registration path when available so
-  users are not forced through an interactive Unix user setup.
-- Windows client WSL Docker Engine setup may install Docker Engine packages
-  inside an existing Ubuntu WSL2 distro using Docker's official apt repository.
-  Include the Python bridge dependency and keep Docker API access on the
-  launcher-owned Windows loopback bridge.
-- The Windows loopback bridge may run its WSL helper as `root` so users do not
+- Windows client runtime Setup imports the pinned, checksum-verified runtime-v1
+  appliance as WSL2 distro `AgentZeroRuntime` under shared app-owned
+  `%LOCALAPPDATA%\AgentZero\runtime`, outside Launcher uninstall data. Validate
+  the manifest, architecture, exact ownership marker, WSL version, and required
+  binaries; never install or repair packages in a user-owned distro.
+- Existing WSL2 distros may be reused only when Docker, dockerd, Python, and
+  `docker info` already work. Reuse may start the bridge but must not run apt,
+  alter configuration, or unregister the distro.
+- An exact `AgentZeroRuntime` name collision without the compatible ownership
+  marker fails closed. Ordinary assessment, Setup, and cleanup must not modify,
+  overwrite, or unregister it.
+- The Windows named-pipe bridge may run its WSL helper as `root` so users do not
   need to manage Linux `docker` group membership during onboarding.
 - Concrete implementations live under `impl/` and are loaded on demand.
 - Docker Hub calls should expose digest/content-type/rate-limit and tag update
@@ -201,6 +205,9 @@ This scope owns:
 - Keep this layer reusable. Do not import Electron UI modules or renderer files.
 - Do not add launcher-specific labels such as `Instances` here; translate
   low-level results in `shell/docker_manager`.
+- Adapter error text is diagnostic input, not approved normal-UI copy. Return
+  structured codes and bounded details where possible so Docker Manager can map
+  the primary message without parsing or leaking mechanics.
 - Prefer structured return values over throwing when the caller can recover or
   show a diagnostic.
 - Keep all Dockerode-specific assumptions behind this adapter.

@@ -52,11 +52,34 @@ once the payload is ready. `Continue` opens the launcher without updating.
 
 - Node.js 20+
 - npm 9+
-- Docker Desktop, Docker Engine, Colima, or rootless Docker for Docker Manager
-  features
+- A reachable Docker Desktop, Docker Engine, Colima, or rootless Docker; on
+  supported Windows clients the Launcher can instead install its lightweight
+  local runtime on WSL2
 
 Runtime setup and repair notes are in
 [docs/runtime-troubleshooting.md](docs/runtime-troubleshooting.md).
+
+### Windows local runtime
+
+When no compatible endpoint is reachable, Windows 10 22H2 and current Windows
+11 clients can use the dedicated `AgentZeroRuntime` WSL2 appliance. Launcher
+downloads the architecture-specific asset from the pinned
+`agent0ai/a0-install` `runtime-v1` release, enforces the bounded manifest and
+exact HTTPS release URLs, verifies size and SHA-256, then imports it under
+`%LOCALAPPDATA%\AgentZero\runtime`. It does not install Store Ubuntu or add
+packages to a user-owned WSL distro.
+
+The appliance contains only the Docker/Python runtime layer and is intended to
+remain in the hundreds-of-megabytes range before images, rather than carrying a
+general-purpose Linux desktop environment. Agent Zero Versions and container
+data can still be much larger and live inside its WSL virtual disk. Host
+workspaces remain separate under `%USERPROFILE%\agent-zero` by default.
+
+Launcher reaches the runtime through a process-owned Windows named pipe; Docker
+is not exposed on a fixed TCP port. Docker Desktop and already-functional WSL2
+Docker engines remain reuse-first choices and are never modified. Launcher
+uninstall preserves the shared runtime and its Docker data; removal is a
+separate marker-checked decision described in the troubleshooting guide.
 
 ## Quick Start
 

@@ -29,7 +29,7 @@ import path from 'node:path';
 export class RuntimeProvisioner {
   /**
    * @param {Object} options
-   * @param {string} options.managedDir Writable launcher-owned directory.
+   * @param {string} options.managedDir Writable app-owned runtime directory.
    */
   constructor(options = {}) {
     if (!options.managedDir) throw makeError('INVALID_ARGS', 'managedDir is required');
@@ -186,6 +186,74 @@ export async function pathExists(filePath) {
   }
 }
 
+export async function acquireRuntimeSetupLock(lockPath, product = 'a0-launcher') {
+  const target = path.resolve(String(lockPath || ''));
+  if (!lockPath || target === path.parse(target).root) {
+    throw makeError('INVALID_RUNTIME_PATH', 'Runtime setup lock path is invalid');
+  }
+  await fsp.mkdir(path.dirname(target), { recursive: true });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let handle;
+    try {
+      handle = await fsp.open(target, 'wx', 0o600);
+    } catch (error) {
+      if (error?.code === 'EEXIST' && attempt === 0 && await removeStaleRuntimeSetupLock(target)) continue;
+      throw makeError('RUNTIME_SETUP_BUSY', 'Another Agent Zero local runtime setup is already in progress. Retry after it finishes.');
+    }
+
+    try {
+      await handle.writeFile(JSON.stringify({
+        schemaVersion: 1,
+        processId: process.pid,
+        product,
+        createdAt: new Date().toISOString()
+      }));
+    } catch (error) {
+      await handle.close().catch(() => {});
+      await fsp.rm(target, { force: true }).catch(() => {});
+      throw error;
+    }
+
+    let released = false;
+    return {
+      path: target,
+      async release() {
+        if (released) return;
+        released = true;
+        await handle.close().catch(() => {});
+        await fsp.rm(target, { force: true }).catch(() => {});
+      }
+    };
+  }
+  throw makeError('RUNTIME_SETUP_BUSY', 'Another Agent Zero local runtime setup is already in progress. Retry after it finishes.');
+}
+
+async function removeStaleRuntimeSetupLock(lockPath) {
+  try {
+    const stats = await fsp.stat(lockPath);
+    if (Date.now() - stats.mtimeMs < 5 * 60_000) return false;
+    const text = await fsp.readFile(lockPath, 'utf8');
+    let record = null;
+    try { record = JSON.parse(text); } catch { /* stale invalid owner record */ }
+    const pid = Number(record?.processId);
+    if (Number.isSafeInteger(pid) && pid > 0 && processIsRunning(pid)) return false;
+    await fsp.rm(lockPath, { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function processIsRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code !== 'ESRCH';
+  }
+}
+
 export async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     signal: options.signal,
@@ -197,7 +265,45 @@ export async function fetchJson(url, options = {}) {
   if (!response.ok) {
     throw makeError('DOWNLOAD_FAILED', `Request failed: ${response.status} ${response.statusText}`, { url });
   }
-  return await response.json();
+  assertAllowedResponseUrl(response, url, options.allowedHosts);
+  const maxBytes = Number.isSafeInteger(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : 0;
+  const contentLength = Number(response.headers.get('content-length')) || 0;
+  if (maxBytes && contentLength > maxBytes) {
+    throw makeError('DOWNLOAD_TOO_LARGE', 'JSON response exceeds the allowed size', { url, maxBytes, contentLength });
+  }
+  let text;
+  if (maxBytes && response.body && typeof response.body.getReader === 'function') {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let receivedBytes = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = Buffer.from(value);
+        receivedBytes += chunk.length;
+        if (receivedBytes > maxBytes) {
+          await reader.cancel().catch(() => {});
+          throw makeError('DOWNLOAD_TOO_LARGE', 'JSON response exceeds the allowed size', { url, maxBytes, receivedBytes });
+        }
+        chunks.push(chunk);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    text = Buffer.concat(chunks, receivedBytes).toString('utf8');
+  } else {
+    text = await response.text();
+    const receivedBytes = Buffer.byteLength(text, 'utf8');
+    if (maxBytes && receivedBytes > maxBytes) {
+      throw makeError('DOWNLOAD_TOO_LARGE', 'JSON response exceeds the allowed size', { url, maxBytes, receivedBytes });
+    }
+  }
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw makeError('INVALID_JSON', 'Response is not valid JSON', { url, message: error?.message || String(error) });
+  }
 }
 
 export async function fetchText(url, options = {}) {
@@ -226,22 +332,40 @@ export async function downloadVerified(url, destPath, sha256 = '', options = {})
   if (!response.ok) {
     throw makeError('DOWNLOAD_FAILED', `Download failed: ${response.status} ${response.statusText}`, { url });
   }
+  assertAllowedResponseUrl(response, url, options.allowedHosts);
+
+  const maxBytes = Number.isSafeInteger(options.maxBytes) && options.maxBytes > 0 ? options.maxBytes : 0;
+  const expectedSize = Number.isSafeInteger(options.expectedSize) && options.expectedSize > 0 ? options.expectedSize : 0;
+  const contentLength = Number(response.headers.get('content-length')) || 0;
+  if ((maxBytes && contentLength > maxBytes) || (expectedSize && contentLength && contentLength !== expectedSize)) {
+    throw makeError('DOWNLOAD_SIZE_MISMATCH', 'Downloaded component has an unexpected size', {
+      url,
+      expectedSize: expectedSize || undefined,
+      maxBytes: maxBytes || undefined,
+      contentLength
+    });
+  }
 
   await fsp.mkdir(path.dirname(destPath), { recursive: true });
   const tempPath = `${destPath}.tmp-${process.pid}-${Date.now()}`;
   const hash = crypto.createHash('sha256');
   let file = null;
+  let received = 0;
+  let lastProgress = -1;
 
   try {
     if (!response.body || typeof response.body.getReader !== 'function') {
       const buffer = Buffer.from(await response.arrayBuffer());
+      received = buffer.length;
+      if (maxBytes && received > maxBytes) {
+        throw makeError('DOWNLOAD_TOO_LARGE', 'Downloaded component exceeds the allowed size', { url, maxBytes, receivedBytes: received });
+      }
       hash.update(buffer);
       await fsp.writeFile(tempPath, buffer);
     } else {
       file = fs.createWriteStream(tempPath, { mode: 0o644 });
       const reader = response.body.getReader();
       const total = Number(response.headers.get('content-length')) || 0;
-      let received = 0;
 
       for (;;) {
         const { done, value } = await reader.read();
@@ -249,13 +373,29 @@ export async function downloadVerified(url, destPath, sha256 = '', options = {})
         const chunk = Buffer.from(value);
         hash.update(chunk);
         received += chunk.length;
+        if (maxBytes && received > maxBytes) {
+          throw makeError('DOWNLOAD_TOO_LARGE', 'Downloaded component exceeds the allowed size', { url, maxBytes, receivedBytes: received });
+        }
         if (total && typeof options.onProgress === 'function') {
-          options.onProgress(null, Math.max(0, Math.min(100, Math.round((received / total) * 100))));
+          const progress = Math.max(0, Math.min(100, Math.round((received / total) * 100)));
+          if (progress !== lastProgress) {
+            lastProgress = progress;
+            options.onProgress(null, progress);
+          }
         }
         await new Promise((resolve, reject) => file.write(chunk, (error) => (error ? reject(error) : resolve())));
       }
 
       await new Promise((resolve, reject) => file.end((error) => (error ? reject(error) : resolve())));
+      if (!file.closed) await new Promise((resolve) => file.once('close', resolve));
+    }
+
+    if (expectedSize && received !== expectedSize) {
+      throw makeError('DOWNLOAD_SIZE_MISMATCH', 'Downloaded component has an unexpected size', {
+        url,
+        expectedSize,
+        receivedBytes: received
+      });
     }
 
     const actual = hash.digest('hex');
@@ -266,15 +406,27 @@ export async function downloadVerified(url, destPath, sha256 = '', options = {})
 
     await fsp.rename(tempPath, destPath);
   } catch (error) {
-    if (file) {
-      try {
-        file.destroy();
-      } catch {
-        // ignore
-      }
+    if (file && !file.closed) {
+      const closed = new Promise((resolve) => file.once('close', resolve));
+      file.destroy();
+      await closed;
     }
     await fsp.rm(tempPath, { force: true }).catch(() => {});
     throw error;
+  }
+}
+
+function assertAllowedResponseUrl(response, requestedUrl, allowedHosts) {
+  if (!Array.isArray(allowedHosts) || allowedHosts.length === 0) return;
+  let finalUrl;
+  try {
+    finalUrl = new URL(response?.url || requestedUrl);
+  } catch {
+    throw makeError('DOWNLOAD_UNTRUSTED_REDIRECT', 'Download resolved to an invalid URL', { url: response?.url || requestedUrl });
+  }
+  const hosts = allowedHosts.map((value) => String(value || '').toLowerCase());
+  if (finalUrl.protocol !== 'https:' || !hosts.includes(finalUrl.hostname.toLowerCase())) {
+    throw makeError('DOWNLOAD_UNTRUSTED_REDIRECT', 'Download redirected to an untrusted host', { url: finalUrl.href });
   }
 }
 

@@ -1,17 +1,18 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 
-const DEFAULT_HOST = '127.0.0.1';
-const DEFAULT_PORT = 23750;
+const DEFAULT_PIPE_PATH = '\\\\.\\pipe\\agent-zero-runtime-docker';
+const DEFAULT_DOCKER_HOST = 'npipe:////./pipe/agent-zero-runtime-docker';
+const DEFAULT_DISTRO = 'AgentZeroRuntime';
 const DEFAULT_SOCKET = '/var/run/docker.sock';
-const WSL_KEEPALIVE_MARKER = 'a0-launcher-wsl-keepalive';
-const WSL_KEEPALIVE_PKILL_PATTERN = 'a0-launcher-wsl-[k]eepalive';
 
 let proxyServer = null;
 let proxyPromise = null;
 let proxyDistro = '';
 let keepAliveProcess = null;
 let keepAliveDistro = '';
+let keepAliveMarker = '';
 let keepAliveSpawnCommand = null;
 let cleanupRegistered = false;
 
@@ -72,14 +73,11 @@ while :; do
 done
 `;
 
-const WSL_KEEPALIVE_CLEANUP_SCRIPT = `pkill -TERM -f '${WSL_KEEPALIVE_PKILL_PATTERN}' >/dev/null 2>&1 || true`;
-
 export function isWindowsWslProxyEndpoint(hostInfo) {
   return (
     process.platform === 'win32' &&
-    hostInfo?.kind === 'tcp' &&
-    hostInfo.host === DEFAULT_HOST &&
-    Number(hostInfo.port) === DEFAULT_PORT
+    hostInfo?.kind === 'npipe' &&
+    normalizePipePath(hostInfo.socketPath || hostInfo.raw) === normalizePipePath(DEFAULT_PIPE_PATH)
   );
 }
 
@@ -88,22 +86,24 @@ export async function ensureWindowsWslDockerProxy(options = {}) {
     return { started: false, reason: 'unsupported_platform' };
   }
 
-  const host = options.host || DEFAULT_HOST;
-  const port = Number(options.port || DEFAULT_PORT);
-  if (host !== DEFAULT_HOST || port !== DEFAULT_PORT) {
+  const pipePath = options.pipePath || DEFAULT_PIPE_PATH;
+  if (normalizePipePath(pipePath) !== normalizePipePath(DEFAULT_PIPE_PATH)) {
     return { started: false, reason: 'unsupported_endpoint' };
   }
+  const selectedDistro = (options.distro || process.env.A0_WSL_DOCKER_DISTRO || DEFAULT_DISTRO).trim();
 
   if (proxyServer?.listening) {
-    const keepAlive = ensureWindowsWslKeepAlive({ distro: proxyDistro || options.distro, spawnCommand: options.spawnCommand });
-    return { started: true, reused: true, keepAlive, dockerHost: `tcp://${host}:${port}` };
+    if (proxyDistro !== selectedDistro) await closeProxyServer();
+    else {
+      const keepAlive = ensureWindowsWslKeepAlive({ distro: selectedDistro, spawnCommand: options.spawnCommand });
+      return { started: true, reused: true, keepAlive, dockerHost: DEFAULT_DOCKER_HOST };
+    }
   }
   if (proxyPromise) return proxyPromise;
 
   proxyPromise = startProxy({
-    host,
-    port,
-    distro: options.distro,
+    pipePath,
+    distro: selectedDistro,
     socketPath: options.socketPath || DEFAULT_SOCKET,
     spawnCommand: options.spawnCommand
   })
@@ -113,8 +113,8 @@ export async function ensureWindowsWslDockerProxy(options = {}) {
   return proxyPromise;
 }
 
-async function startProxy({ host, port, distro, socketPath, spawnCommand }) {
-  const selectedDistro = (distro || process.env.A0_WSL_DOCKER_DISTRO || '').trim();
+async function startProxy({ pipePath, distro, socketPath, spawnCommand }) {
+  const selectedDistro = String(distro || DEFAULT_DISTRO).trim();
   const keepAlive = ensureWindowsWslKeepAlive({ distro: selectedDistro, spawnCommand });
   const server = net.createServer({ allowHalfOpen: true }, (client) => {
     client.setKeepAlive(true);
@@ -162,12 +162,12 @@ async function startProxy({ host, port, distro, socketPath, spawnCommand }) {
   try {
     await new Promise((resolve, reject) => {
       server.once('error', reject);
-      server.listen({ host, port }, resolve);
+      server.listen({ path: pipePath, readableAll: false, writableAll: false }, resolve);
     });
   } catch (error) {
     stopWindowsWslKeepAlive();
     if (error?.code === 'EADDRINUSE') {
-      return { started: false, reason: 'port_in_use', dockerHost: `tcp://${host}:${port}` };
+      return { started: false, reason: 'pipe_in_use', dockerHost: DEFAULT_DOCKER_HOST };
     }
     throw error;
   }
@@ -175,7 +175,13 @@ async function startProxy({ host, port, distro, socketPath, spawnCommand }) {
   server.unref();
   proxyServer = server;
   proxyDistro = selectedDistro;
-  return { started: true, reused: false, keepAlive, dockerHost: `tcp://${host}:${port}` };
+  return { started: true, reused: false, keepAlive, dockerHost: DEFAULT_DOCKER_HOST };
+}
+
+async function closeProxyServer() {
+  const server = proxyServer;
+  if (!server) return;
+  await new Promise((resolve) => server.close(resolve));
 }
 
 export function ensureWindowsWslKeepAlive(options = {}) {
@@ -183,16 +189,17 @@ export function ensureWindowsWslKeepAlive(options = {}) {
     return { started: false, reason: 'unsupported_platform' };
   }
 
-  const selectedDistro = (options.distro || process.env.A0_WSL_DOCKER_DISTRO || '').trim();
+  const selectedDistro = (options.distro || process.env.A0_WSL_DOCKER_DISTRO || DEFAULT_DISTRO).trim();
   if (keepAliveProcess && !keepAliveProcess.killed && keepAliveDistro === selectedDistro) {
     return { started: true, reused: true, distro: selectedDistro || null };
   }
 
   stopWindowsWslKeepAlive();
 
+  const marker = `a0-launcher-wsl-keepalive-${process.pid}-${randomUUID()}`;
   const args = [];
-  if (selectedDistro) args.push('-d', selectedDistro);
-  args.push('-u', 'root', '--exec', 'sh', '-lc', WSL_KEEPALIVE_SCRIPT, WSL_KEEPALIVE_MARKER);
+  args.push('-d', selectedDistro);
+  args.push('-u', 'root', '--exec', 'sh', '-c', WSL_KEEPALIVE_SCRIPT, marker);
 
   const spawnCommand = typeof options.spawnCommand === 'function' ? options.spawnCommand : spawn;
   const child = spawnCommand('wsl.exe', args, {
@@ -203,6 +210,7 @@ export function ensureWindowsWslKeepAlive(options = {}) {
 
   keepAliveProcess = child;
   keepAliveDistro = selectedDistro;
+  keepAliveMarker = marker;
   keepAliveSpawnCommand = spawnCommand;
   registerProcessCleanup();
 
@@ -210,6 +218,7 @@ export function ensureWindowsWslKeepAlive(options = {}) {
     if (keepAliveProcess === child) {
       keepAliveProcess = null;
       keepAliveDistro = '';
+      keepAliveMarker = '';
       keepAliveSpawnCommand = null;
     }
   });
@@ -217,6 +226,7 @@ export function ensureWindowsWslKeepAlive(options = {}) {
     if (keepAliveProcess === child) {
       keepAliveProcess = null;
       keepAliveDistro = '';
+      keepAliveMarker = '';
       keepAliveSpawnCommand = null;
     }
   });
@@ -227,11 +237,13 @@ export function ensureWindowsWslKeepAlive(options = {}) {
 export function stopWindowsWslKeepAlive(options = {}) {
   const child = keepAliveProcess;
   const selectedDistro = keepAliveDistro;
+  const marker = keepAliveMarker;
   const spawnCommand = typeof options.spawnCommand === 'function'
     ? options.spawnCommand
     : keepAliveSpawnCommand;
   keepAliveProcess = null;
   keepAliveDistro = '';
+  keepAliveMarker = '';
   keepAliveSpawnCommand = null;
   if (!child && !selectedDistro) {
     return { stopped: false, cleanup: { started: false, reason: 'not_running' } };
@@ -239,19 +251,22 @@ export function stopWindowsWslKeepAlive(options = {}) {
   if (child && !child.killed) {
     child.kill();
   }
-  const cleanup = cleanupWindowsWslKeepAlive({ distro: selectedDistro, spawnCommand });
+  const cleanup = cleanupWindowsWslKeepAlive({ distro: selectedDistro, marker, spawnCommand });
   return { stopped: !!child, cleanup };
 }
 
-function cleanupWindowsWslKeepAlive({ distro = '', spawnCommand = spawn } = {}) {
+function cleanupWindowsWslKeepAlive({ distro = '', marker = '', spawnCommand = spawn } = {}) {
   if (process.platform !== 'win32') {
     return { started: false, reason: 'unsupported_platform' };
   }
 
   const selectedDistro = String(distro || '').trim();
-  const args = [];
-  if (selectedDistro) args.push('-d', selectedDistro);
-  args.push('-u', 'root', '--exec', 'sh', '-lc', WSL_KEEPALIVE_CLEANUP_SCRIPT);
+  const selectedMarker = String(marker || '').trim();
+  if (!selectedDistro || !/^a0-launcher-wsl-keepalive-[A-Za-z0-9-]+$/.test(selectedMarker)) {
+    return { started: false, reason: 'invalid_scope' };
+  }
+  const pattern = selectedMarker.replace(/^a/, '[a]');
+  const args = ['-d', selectedDistro, '-u', 'root', '--exec', 'sh', '-c', `pkill -TERM -f '${pattern}' >/dev/null 2>&1 || true`];
 
   try {
     const child = (typeof spawnCommand === 'function' ? spawnCommand : spawn)('wsl.exe', args, {
@@ -266,10 +281,21 @@ function cleanupWindowsWslKeepAlive({ distro = '', spawnCommand = spawn } = {}) 
   }
 }
 
+export const WINDOWS_WSL_DOCKER_HOST = DEFAULT_DOCKER_HOST;
+export const WINDOWS_WSL_DOCKER_PIPE_PATH = DEFAULT_PIPE_PATH;
+
 function registerProcessCleanup() {
   if (cleanupRegistered) return;
   cleanupRegistered = true;
   process.once('exit', () => {
     stopWindowsWslKeepAlive();
   });
+}
+
+function normalizePipePath(value) {
+  return String(value || '')
+    .replace(/^npipe:/i, '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '//')
+    .toLowerCase();
 }

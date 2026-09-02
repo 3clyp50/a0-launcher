@@ -1,16 +1,21 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdir as mkdirp, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdir as mkdirp, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
 import { DockerInterface } from './DockerInterface.mjs';
-import { RuntimeProvisioner } from './RuntimeProvisioner.mjs';
+import { acquireRuntimeSetupLock, downloadVerified, fetchJson, RuntimeProvisioner } from './RuntimeProvisioner.mjs';
 import { ColimaRuntime, selectLatestDockerCliAsset } from './impl/ColimaRuntime.mjs';
 import { LinuxEngineRuntime } from './impl/LinuxEngineRuntime.mjs';
 import { ensureWindowsWslKeepAlive, stopWindowsWslKeepAlive } from './impl/WindowsWslDockerProxy.mjs';
-import { WindowsWslRuntime } from './impl/WindowsWslRuntime.mjs';
+import {
+  WINDOWS_WSL_RUNTIME_CONTRACT,
+  WindowsWslRuntime,
+  validateWindowsWslRuntimeManifest
+} from './impl/WindowsWslRuntime.mjs';
 
 test('RuntimeProvisioner.forPlatform selects runtime implementations by platform', async () => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
@@ -98,11 +103,13 @@ test('WindowsWslRuntime assess directs Windows clients without WSL to runtime in
 
 test('WindowsWslRuntime assess detects installed Docker Desktop on Windows clients', async () => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
   try {
     const runtime = new WindowsWslRuntime({
       managedDir,
       isWindowsServer: false,
       runCommand: fakeWindowsCommandRunner({
+        calls,
         dockerDesktopPath: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe'
       })
     });
@@ -114,6 +121,7 @@ test('WindowsWslRuntime assess detects installed Docker Desktop on Windows clien
     assert.match(assessment.detail, /Docker Desktop is installed/i);
     assert.match(assessment.detail, /Start Docker Desktop/i);
     assert.equal(assessment.manualUrl, undefined);
+    assert.ok(calls.some((call) => call.cmd === 'powershell.exe' && /LOCALAPPDATA.*DockerDesktop/.test(String(call.args?.at(-1)))));
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -157,7 +165,8 @@ test('WindowsWslRuntime can detect stopped Docker Desktop beside a WSL runtime',
         binaries: ['wsl.exe'],
         dockerDesktopPath: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe',
         wslList: '  NAME      STATE    VERSION\r\n* Ubuntu    Running  2\r\n',
-        wslDockerInstalled: true
+        wslDockerInstalled: true,
+        wslDockerReady: true
       })
     });
 
@@ -193,47 +202,7 @@ test('WindowsWslRuntime provision requests UAC for WSL feature setup', async () 
   }
 });
 
-test('WindowsWslRuntime provision installs Ubuntu when WSL2 has no distro', async () => {
-  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
-  const calls = [];
-  const proxyCalls = [];
-  try {
-    const runtime = new WindowsWslRuntime({
-      managedDir,
-      isWindowsServer: false,
-      ensureProxy: async (options) => {
-        proxyCalls.push(options);
-      },
-      runCommand: fakeWindowsCommandRunner({
-        binaries: ['wsl.exe'],
-        calls,
-        wslRootReady: true,
-        features: {
-          'Microsoft-Windows-Subsystem-Linux': 'Enabled',
-          VirtualMachinePlatform: 'Enabled'
-        },
-        wslList: '  NAME      STATE           VERSION\n'
-      })
-    });
-
-    const assessment = await runtime.assess();
-    assert.equal(assessment.state, 'not_provisioned');
-    assert.equal(assessment.mode, 'wsl_distribution');
-    assert.equal(assessment.setupActionLabel, 'Setup Agent Zero');
-
-    const result = await runtime.provision();
-
-    assert.equal(result, undefined);
-    const install = calls.find((call) => call.cmd === 'wsl.exe' && call.args?.[0] === '--install');
-    assert.deepEqual(install?.args, ['--install', '-d', 'Ubuntu', '--no-launch']);
-    assert.ok(calls.some((call) => call.cmd === 'wsl.exe' && /docker-ce docker-ce-cli containerd\.io/.test(String(call.args?.at(-1)))));
-    assert.deepEqual(proxyCalls, [{ distro: 'Ubuntu' }]);
-  } finally {
-    await rm(managedDir, { recursive: true, force: true });
-  }
-});
-
-test('WindowsWslRuntime resumes to distro setup after WSL feature reboot', async () => {
+test('WindowsWslRuntime resumes after the WSL feature reboot with managed appliance Setup', async () => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
   try {
     const runtime = new WindowsWslRuntime({
@@ -250,105 +219,131 @@ test('WindowsWslRuntime resumes to distro setup after WSL feature reboot', async
     });
 
     const assessment = await runtime.assess();
-
     assert.equal(assessment.state, 'not_provisioned');
-    assert.equal(assessment.mode, 'wsl_distribution');
+    assert.equal(assessment.mode, 'wsl_managed_distribution');
     assert.equal(assessment.setupActionLabel, 'Setup Agent Zero');
-    assert.match(assessment.manualCommand, /wsl\.exe --install -d Ubuntu --no-launch/i);
+    assert.doesNotMatch(String(assessment.manualCommand || ''), /Ubuntu/i);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
 });
 
-test('WindowsWslRuntime registers installed Ubuntu package as root when WSL install leaves no distro', async () => {
-  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
-  const calls = [];
-  const proxyCalls = [];
+test('fetchJson stops a chunked response at the configured byte limit', async () => {
+  const server = http.createServer((_request, response) => {
+    response.setHeader('content-type', 'application/json');
+    response.write('{"value":"');
+    response.write('x'.repeat(2048));
+    response.end('"}');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   try {
-    const runtime = new WindowsWslRuntime({
-      managedDir,
-      isWindowsServer: false,
-      ensureProxy: async (options) => {
-        proxyCalls.push(options);
-      },
-      runCommand: fakeWindowsCommandRunner({
-        binaries: ['wsl.exe', 'ubuntu.exe'],
-        calls,
-        features: {
-          'Microsoft-Windows-Subsystem-Linux': 'Enabled',
-          VirtualMachinePlatform: 'Enabled'
-        },
-        wslList: 'Windows Subsystem for Linux has no installed distributions.',
-        wslRootReady: false,
-        ubuntuInstallRootRegisters: true
-      })
-    });
+    const address = server.address();
+    await assert.rejects(
+      fetchJson(`http://127.0.0.1:${address.port}/manifest`, { maxBytes: 1024 }),
+      (error) => error?.code === 'DOWNLOAD_TOO_LARGE'
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
 
-    await runtime.provision();
+test('fetchJson rejects a final response outside the allowed HTTPS hosts', async () => {
+  const server = http.createServer((_request, response) => {
+    response.setHeader('content-type', 'application/json');
+    response.end('{"ok":true}');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    await assert.rejects(
+      fetchJson(`http://127.0.0.1:${address.port}/manifest`, { allowedHosts: ['github.com'] }),
+      (error) => error?.code === 'DOWNLOAD_UNTRUSTED_REDIRECT'
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
 
-    assert.ok(calls.some((call) => call.cmd === 'ubuntu.exe' && call.args?.[0] === 'install' && call.args?.[1] === '--root'));
-    assert.ok(calls.some((call) => call.cmd === 'wsl.exe' && /docker-ce docker-ce-cli containerd\.io/.test(String(call.args?.at(-1)))));
-    assert.deepEqual(proxyCalls, [{ distro: 'Ubuntu' }]);
+test('downloadVerified removes staging after a checksum mismatch', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-download-'));
+  const destination = path.join(managedDir, 'runtime.tar.gz');
+  const server = http.createServer((_request, response) => response.end('runtime-bytes'));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    await assert.rejects(
+      downloadVerified(`http://127.0.0.1:${address.port}/runtime`, destination, '0'.repeat(64)),
+      (error) => error?.code === 'CHECKSUM_MISMATCH'
+    );
+    assert.deepEqual(await readdir(managedDir), []);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('runtime setup lock excludes concurrent consumers and recovers an old abandoned record', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-lock-'));
+  const lockPath = path.join(managedDir, 'locks', 'setup.lock');
+  try {
+    const first = await acquireRuntimeSetupLock(lockPath, 'test-first');
+    await assert.rejects(
+      acquireRuntimeSetupLock(lockPath, 'test-second'),
+      (error) => error?.code === 'RUNTIME_SETUP_BUSY'
+    );
+    await first.release();
+
+    const second = await acquireRuntimeSetupLock(lockPath, 'test-second');
+    await second.release();
+
+    await writeFile(lockPath, '{abandoned', 'utf8');
+    const old = new Date(Date.now() - 10 * 60_000);
+    await utimes(lockPath, old, old);
+    const recovered = await acquireRuntimeSetupLock(lockPath, 'test-recovered');
+    await recovered.release();
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
 });
 
-test('WindowsWslRuntime provision installs Docker Engine inside an existing WSL distro', async () => {
+test('WindowsWslRuntime ignores a user distro without a working Docker Engine', async () => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
   const calls = [];
-  const progress = [];
-  const proxyCalls = [];
   try {
     const runtime = new WindowsWslRuntime({
       managedDir,
       isWindowsServer: false,
-      ensureProxy: async (options) => {
-        proxyCalls.push(options);
-      },
       runCommand: fakeWindowsCommandRunner({
         binaries: ['wsl.exe'],
         calls,
-        features: {
-          'Microsoft-Windows-Subsystem-Linux': 'Enabled',
-          VirtualMachinePlatform: 'Enabled'
-        },
-        wslList: '  NAME      STATE           VERSION\n* Ubuntu    Running         2\n',
-        wslDockerInstalled: false,
-        wslRootReady: true
+        wslList: '  NAME      STATE           VERSION\n* Ubuntu    Running         2\n'
       })
     });
 
     const assessment = await runtime.assess();
+    assert.equal(assessment.mode, 'wsl_managed_distribution');
     assert.equal(assessment.state, 'not_provisioned');
-    assert.equal(assessment.mode, 'wsl_engine');
-    assert.equal(assessment.setupActionLabel, 'Setup Agent Zero');
-
-    await runtime.provision({ onProgress: (message) => progress.push(message) });
-
-    assert.deepEqual(progress, ['Installing Docker Engine', 'Starting WSL Docker Engine', 'Starting local Docker bridge']);
-    const dockerInstall = calls.find((call) => call.cmd === 'wsl.exe' && /docker-ce docker-ce-cli containerd\.io/.test(String(call.args?.at(-1))));
-    assert.ok(dockerInstall, 'expected Docker Engine install script');
-    assert.match(String(dockerInstall.args.at(-1)), /download\.docker\.com\/linux\/ubuntu/);
-    assert.match(String(dockerInstall.args.at(-1)), /apt-get install -y ca-certificates curl python3/);
-    assert.deepEqual(proxyCalls, [{ distro: 'Ubuntu' }]);
+    assert.ok(!calls.some((call) => /apt-get|docker\.sources/.test(String(call.args?.join(' ')))));
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
 });
 
-test('WindowsWslRuntime assess detects WSL Docker Engine on Windows clients', async () => {
+test('WindowsWslRuntime reuses only an already-functional WSL Docker Engine without modifying it', async () => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  const proxyCalls = [];
   try {
     const runtime = new WindowsWslRuntime({
       managedDir,
       isWindowsServer: false,
+      ensureProxy: async (options) => {
+        proxyCalls.push(options);
+        return { started: true };
+      },
       runCommand: fakeWindowsCommandRunner({
         binaries: ['wsl.exe'],
-        features: {
-          'Microsoft-Windows-Subsystem-Linux': 'Enabled',
-          VirtualMachinePlatform: 'Enabled'
-        },
+        calls,
         wslList: '  NAME      STATE           VERSION\n* Ubuntu    Running         2\n',
         wslDockerInstalled: true,
         wslDockerReady: true
@@ -356,13 +351,233 @@ test('WindowsWslRuntime assess detects WSL Docker Engine on Windows clients', as
     });
 
     const assessment = await runtime.assess();
-
-    assert.equal(assessment.state, 'engine_stopped');
     assert.equal(assessment.mode, 'wsl_engine');
     assert.equal(assessment.distro, 'Ubuntu');
-    assert.match(assessment.detail, /Agent Zero local runtime/i);
+    const result = await runtime.start();
+    assert.equal(result.endpoint.dockerHost, 'npipe:////./pipe/agent-zero-runtime-docker');
+    assert.deepEqual(proxyCalls, [{ distro: 'Ubuntu' }]);
+    assert.ok(!calls.some((call) => /apt-get|systemctl start docker|service docker start/.test(String(call.args?.join(' ')))));
   } finally {
     await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime refuses an unmarked AgentZeroRuntime name collision', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  try {
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      isWindowsServer: false,
+      runCommand: fakeWindowsCommandRunner({
+        binaries: ['wsl.exe'],
+        calls,
+        wslList: '  NAME                 STATE      VERSION\n* AgentZeroRuntime     Stopped    2\n'
+      })
+    });
+
+    const assessment = await runtime.assess();
+    assert.equal(assessment.state, 'manual_install');
+    assert.equal(assessment.diagnosticCode, 'RUNTIME_NAME_COLLISION');
+    assert.match(assessment.detail, /made no changes/i);
+    assert.ok(!calls.some((call) => call.args?.includes('--unregister')));
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime validates and starts the marked managed appliance', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  const proxyCalls = [];
+  try {
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      architecture: 'x64',
+      isWindowsServer: false,
+      ensureProxy: async (options) => {
+        proxyCalls.push(options);
+        return { started: true };
+      },
+      runCommand: fakeWindowsCommandRunner({
+        binaries: ['wsl.exe'],
+        calls,
+        managedMarker: windowsRuntimeMarker(),
+        managedRuntimeComplete: true,
+        wslList: '  NAME                 STATE      VERSION\n* AgentZeroRuntime     Stopped    2\n'
+      })
+    });
+
+    const assessment = await runtime.assess();
+    assert.equal(assessment.mode, 'wsl_managed');
+    assert.equal(assessment.state, 'engine_stopped');
+    await runtime.start();
+    const start = calls.find((call) => call.args?.includes(WINDOWS_WSL_RUNTIME_CONTRACT.startPath));
+    assert.ok(start);
+    assert.deepEqual(proxyCalls, [{ distro: 'AgentZeroRuntime' }]);
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime imports the verified appliance and never invokes Store Ubuntu or apt', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  const downloads = [];
+  const progress = [];
+  const proxyCalls = [];
+  const manifest = windowsRuntimeManifest();
+  try {
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      architecture: 'x64',
+      isWindowsServer: false,
+      fetchJson: async (_url, options) => {
+        assert.equal(options.maxBytes, WINDOWS_WSL_RUNTIME_CONTRACT.maxManifestBytes);
+        return manifest;
+      },
+      downloadVerified: async (url, destination, sha256, options) => {
+        downloads.push({ url, destination, sha256, options });
+        await mkdirp(path.dirname(destination), { recursive: true });
+        await writeFile(destination, Buffer.alloc(manifest.assets.amd64.sizeBytes));
+      },
+      ensureProxy: async (options) => {
+        proxyCalls.push(options);
+        return { started: true };
+      },
+      runCommand: fakeWindowsCommandRunner({
+        binaries: ['wsl.exe'],
+        calls,
+        features: {
+          'Microsoft-Windows-Subsystem-Linux': 'Enabled',
+          VirtualMachinePlatform: 'Enabled'
+        },
+        managedMarker: windowsRuntimeMarker(),
+        managedRuntimeComplete: true,
+        wslList: '  NAME      STATE           VERSION\n'
+      })
+    });
+
+    const result = await runtime.provision({ onProgress: (message, percent) => progress.push([message, percent]) });
+    assert.equal(result.endpoint.dockerHost, 'npipe:////./pipe/agent-zero-runtime-docker');
+    const imported = calls.find((call) => call.cmd === 'wsl.exe' && call.args?.[0] === '--import');
+    assert.equal(imported.args[1], 'AgentZeroRuntime');
+    assert.equal(imported.args.at(-2), '--version');
+    assert.equal(imported.args.at(-1), '2');
+    assert.equal(downloads[0].sha256, manifest.assets.amd64.sha256);
+    assert.equal(downloads[0].options.expectedSize, manifest.assets.amd64.sizeBytes);
+    assert.deepEqual(proxyCalls, [{ distro: 'AgentZeroRuntime' }]);
+    assert.ok(progress.some(([message]) => message === 'Downloading Agent Zero runtime'));
+    assert.ok(!calls.some((call) => call.args?.[0] === '--install' && call.args?.includes('Ubuntu')));
+    assert.ok(!calls.some((call) => /apt-get|docker\.sources/.test(String(call.args?.join(' ')))));
+    await assert.rejects(access(downloads[0].destination));
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime preserves an unregistered runtime directory', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const installPath = path.join(managedDir, 'wsl', 'AgentZeroRuntime');
+  const orphanPath = path.join(installPath, 'ext4.vhdx');
+  const calls = [];
+  try {
+    await mkdirp(installPath, { recursive: true });
+    await writeFile(orphanPath, 'recoverable');
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      architecture: 'x64',
+      isWindowsServer: false,
+      fetchJson: async () => {
+        throw new Error('An existing runtime path must fail before download.');
+      },
+      runCommand: fakeWindowsCommandRunner({
+        binaries: ['wsl.exe'],
+        calls,
+        wslList: '  NAME      STATE           VERSION\n'
+      })
+    });
+
+    await assert.rejects(runtime.provision(), { code: 'RUNTIME_PATH_COLLISION' });
+    await access(orphanPath);
+    assert.ok(!calls.some((call) => call.args?.[0] === '--import'));
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime rejects an unsupported Windows architecture before download', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  try {
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      architecture: 'ia32',
+      isWindowsServer: false,
+      fetchJson: async () => {
+        throw new Error('Unsupported architecture reached download.');
+      },
+      runCommand: fakeWindowsCommandRunner({
+        binaries: ['wsl.exe'],
+        calls,
+        wslList: '  NAME      STATE           VERSION\n'
+      })
+    });
+
+    await assert.rejects(runtime.provision(), { code: 'RUNTIME_UNSUPPORTED_ARCHITECTURE' });
+    assert.ok(!calls.some((call) => call.args?.[0] === '--import'));
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('WindowsWslRuntime keeps partial import state but removes verified staging', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const calls = [];
+  let archivePath = '';
+  try {
+    const manifest = windowsRuntimeManifest();
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      architecture: 'x64',
+      isWindowsServer: false,
+      fetchJson: async () => manifest,
+      downloadVerified: async (_url, destination) => {
+        archivePath = destination;
+        await mkdirp(path.dirname(destination), { recursive: true });
+        await writeFile(destination, 'verified');
+      },
+      runCommand: fakeWindowsCommandRunner({
+        binaries: ['wsl.exe'],
+        calls,
+        wslList: '  NAME      STATE           VERSION\n',
+        wslImportCode: 5
+      })
+    });
+
+    await assert.rejects(runtime.provision(), { code: 'RUNTIME_PROVISION_FAILED' });
+    await access(path.join(managedDir, 'wsl', 'AgentZeroRuntime'));
+    await assert.rejects(access(archivePath));
+    await assert.rejects(access(path.join(managedDir, 'locks', 'setup.lock')));
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('validateWindowsWslRuntimeManifest fails closed on release, URL, checksum, size, and shape drift', () => {
+  const valid = windowsRuntimeManifest();
+  assert.equal(validateWindowsWslRuntimeManifest(valid, 'amd64').name, WINDOWS_WSL_RUNTIME_CONTRACT.assets.amd64);
+
+  for (const mutate of [
+    (manifest) => { manifest.release.repository = 'attacker/runtime'; },
+    (manifest) => { manifest.assets.amd64.url = 'https://example.com/runtime.tar.gz'; },
+    (manifest) => { manifest.assets.amd64.sha256 = 'A'.repeat(64); },
+    (manifest) => { manifest.assets.amd64.sizeBytes = WINDOWS_WSL_RUNTIME_CONTRACT.maxCompressedSizeBytes + 1; },
+    (manifest) => { manifest.unexpected = true; }
+  ]) {
+    const manifest = structuredClone(valid);
+    mutate(manifest);
+    assert.throws(() => validateWindowsWslRuntimeManifest(manifest, 'amd64'), { code: 'RUNTIME_MANIFEST_INVALID' });
   }
 });
 
@@ -418,7 +633,7 @@ test('WindowsWslRuntime assess calls out nested virtualization when WSL has no d
   }
 });
 
-test('DockerInterface classifies Windows npipe and loopback WSL endpoints', async () => {
+test('DockerInterface distinguishes Docker Desktop and Agent Zero named pipes', async () => {
   const dockerDesktop = await DockerInterface.detectEnvironment({
     dockerHost: 'npipe:////./pipe/docker_engine',
     timeoutMs: 250,
@@ -432,16 +647,15 @@ test('DockerInterface classifies Windows npipe and loopback WSL endpoints', asyn
   assert.equal(dockerDesktop.dockerFlavor, 'docker_desktop');
 
   const wslEngine = await DockerInterface.detectEnvironment({
-    dockerHost: 'tcp://127.0.0.1:23750',
+    dockerHost: 'npipe:////./pipe/agent-zero-runtime-docker',
     timeoutMs: 250,
     enableWindowsWslProxy: false,
     discoverDockerContexts: false,
     candidateHosts: [],
     dockerodeClass: fakeDockerodeClass()
   });
-  assert.equal(wslEngine.dockerHost.kind, 'tcp');
-  assert.equal(wslEngine.dockerHost.host, '127.0.0.1');
-  assert.equal(wslEngine.dockerHost.port, 23750);
+  assert.equal(wslEngine.dockerHost.kind, 'npipe');
+  assert.equal(wslEngine.dockerHost.socketPath, '//./pipe/agent-zero-runtime-docker');
   assert.equal(wslEngine.dockerFlavor, 'wsl_engine');
 });
 
@@ -454,8 +668,7 @@ test('DockerInterface prepares the built-in Windows WSL endpoint before probing'
     }
 
     async ping() {
-      const tcpHost = this.options.host ? `${this.options.host}:${this.options.port || 2375}` : '';
-      if (prepared && tcpHost === '127.0.0.1:23750') return true;
+      if (prepared && this.options.socketPath === '//./pipe/agent-zero-runtime-docker') return true;
       const error = new Error('Docker endpoint is not reachable');
       error.code = 'ECONNREFUSED';
       throw error;
@@ -471,7 +684,7 @@ test('DockerInterface prepares the built-in Windows WSL endpoint before probing'
     timeoutMs: 250,
     discoverDockerContexts: false,
     candidateHosts: [
-      { provider: 'wsl_engine', label: 'Agent Zero local runtime', dockerHost: 'tcp://127.0.0.1:23750', source: 'known_socket' }
+      { provider: 'wsl_engine', label: 'Agent Zero local runtime', dockerHost: 'npipe:////./pipe/agent-zero-runtime-docker', source: 'known_socket' }
     ],
     prepareDockerHost: async (hostInfo) => {
       prepared = true;
@@ -480,7 +693,7 @@ test('DockerInterface prepares the built-in Windows WSL endpoint before probing'
     dockerodeClass: FakeDockerode
   });
 
-  assert.deepEqual(preparedHosts, ['tcp://127.0.0.1:23750']);
+  assert.deepEqual(preparedHosts, ['npipe:////./pipe/agent-zero-runtime-docker']);
   assert.equal(env.dockerAvailable, true);
   assert.equal(env.dockerFlavor, 'wsl_engine');
   assert.equal(env.runtimeCandidates[0].available, true);
@@ -494,7 +707,7 @@ test('DockerInterface does not prepare the built-in Windows WSL endpoint when an
     discoverDockerContexts: false,
     candidateHosts: [
       { provider: 'docker_desktop', label: 'Docker Desktop', dockerHost: 'npipe:////./pipe/docker_engine', source: 'known_socket' },
-      { provider: 'wsl_engine', label: 'Agent Zero local runtime', dockerHost: 'tcp://127.0.0.1:23750', source: 'known_socket' }
+      { provider: 'wsl_engine', label: 'Agent Zero local runtime', dockerHost: 'npipe:////./pipe/agent-zero-runtime-docker', source: 'known_socket' }
     ],
     prepareDockerHost: async (hostInfo) => {
       preparedHosts.push(hostInfo.raw);
@@ -721,7 +934,7 @@ test('WindowsWslDockerProxy keepalive holds the selected WSL distro open', { ski
     assert.ok(calls[0].args.includes('sh'));
     assert.match(calls[0].args.at(-2), /sleep 2147483647/);
     assert.match(calls[0].args.at(-2), /kill "\$sleep_pid"/);
-    assert.equal(calls[0].args.at(-1), 'a0-launcher-wsl-keepalive');
+    assert.match(calls[0].args.at(-1), /^a0-launcher-wsl-keepalive-\d+-[a-f0-9-]{36}$/);
     assert.deepEqual(calls[0].options.stdio, 'ignore');
     assert.equal(calls[0].options.windowsHide, true);
     assert.equal(child.unrefCalled, true);
@@ -734,7 +947,7 @@ test('WindowsWslDockerProxy keepalive holds the selected WSL distro open', { ski
   assert.equal(calls[1].cmd, 'wsl.exe');
   assert.deepEqual(calls[1].args.slice(0, 2), ['-d', 'Ubuntu']);
   assert.match(calls[1].args.at(-1), /pkill -TERM/);
-  assert.match(calls[1].args.at(-1), /a0-launcher-wsl-\[k\]eepalive/);
+  assert.match(calls[1].args.at(-1), /\[a\]0-launcher-wsl-keepalive-/);
   assert.deepEqual(calls[1].options.stdio, 'ignore');
   assert.equal(calls[1].options.windowsHide, true);
   assert.equal(calls[1].options.detached, true);
@@ -1048,6 +1261,52 @@ class FakeChildProcess extends EventEmitter {
   }
 }
 
+function windowsRuntimeMarker(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    runtimeVersion: 1,
+    distroName: 'AgentZeroRuntime',
+    wslVersion: 2,
+    architecture: 'amd64',
+    ...overrides
+  };
+}
+
+function windowsRuntimeManifest() {
+  const packageVersions = {
+    'docker-ce': '5:29.7.2-1',
+    'docker-ce-cli': '5:29.7.2-1',
+    'containerd.io': '2.3.4-1',
+    'docker-buildx-plugin': '0.36.1-1',
+    'docker-compose-plugin': '5.5.0-1',
+    python3: '3.12.3-1'
+  };
+  const asset = (architecture, sha256) => ({
+    name: WINDOWS_WSL_RUNTIME_CONTRACT.assets[architecture],
+    url: `https://github.com/agent0ai/a0-install/releases/download/runtime-v1/${WINDOWS_WSL_RUNTIME_CONTRACT.assets[architecture]}`,
+    sha256,
+    sizeBytes: 16,
+    sbomName: `agent-zero-runtime-wsl-${architecture}.spdx.json`,
+    packageVersions: { ...packageVersions }
+  });
+  return {
+    schemaVersion: 1,
+    runtimeVersion: 1,
+    distro: {
+      name: 'AgentZeroRuntime',
+      wslVersion: 2,
+      markerPath: '/etc/agent-zero-runtime.json'
+    },
+    release: { repository: 'agent0ai/a0-install', tag: 'runtime-v1' },
+    base: { distribution: 'ubuntu', version: '24.04.4', codename: 'noble' },
+    createdAt: '2026-09-01T00:00:00Z',
+    assets: {
+      amd64: asset('amd64', 'a'.repeat(64)),
+      arm64: asset('arm64', 'b'.repeat(64))
+    }
+  };
+}
+
 function fakeWindowsCommandRunner({
   binaries = [],
   calls = [],
@@ -1056,16 +1315,15 @@ function fakeWindowsCommandRunner({
   productType = 3,
   wslList = '',
   dockerDesktopPath = '',
-  wslInstallDistroCode = 0,
-  wslDockerInstallCode = 0,
   wslDockerInstalled = false,
   wslDockerReady = false,
   wslPythonInstalled = true,
-  wslRootReady = false,
-  ubuntuInstallRootRegisters = false
+  managedMarker = null,
+  managedRuntimeComplete = false,
+  wslImportCode = 0
 } = {}) {
   const present = new Set(binaries);
-  let ubuntuRootRegistered = false;
+  let managedImported = false;
   return async (cmd, args) => {
     calls.push({ cmd, args: Array.isArray(args) ? [...args] : args });
     if (cmd === 'where.exe') {
@@ -1089,47 +1347,44 @@ function fakeWindowsCommandRunner({
       }
       const featureMatch = script.match(/FeatureName '([^']+)'/);
       if (featureMatch) {
-        const state = features[featureMatch[1]] || 'Unknown';
-        return { code: 0, stdout: `${state}\r\n`, stderr: '' };
+        return { code: 0, stdout: `${features[featureMatch[1]] || 'Unknown'}\r\n`, stderr: '' };
       }
     }
     if (cmd === 'wsl.exe' && args?.[0] === '-l') {
-      return { code: 0, stdout: wslList, stderr: '' };
+      const imported = managedImported
+        ? `${wslList.trimEnd()}\n  AgentZeroRuntime     Stopped    2\n`
+        : wslList;
+      return { code: 0, stdout: imported, stderr: '' };
     }
-    if (cmd === 'wsl.exe' && args?.[0] === '--install') {
-      return { code: wslInstallDistroCode, stdout: '', stderr: '' };
-    }
-    if (/^ubuntu(2404|2204|2004)?\.exe$/i.test(cmd) && args?.[0] === 'install' && args?.[1] === '--root') {
-      if (ubuntuInstallRootRegisters) ubuntuRootRegistered = true;
-      return { code: ubuntuInstallRootRegisters ? 0 : 1, stdout: '', stderr: ubuntuInstallRootRegisters ? '' : 'install failed' };
+    if (cmd === 'wsl.exe' && args?.[0] === '--import') {
+      if (wslImportCode === 0) managedImported = true;
+      return { code: wslImportCode, stdout: '', stderr: wslImportCode ? 'import failed' : '' };
     }
     if (cmd === 'wsl.exe' && args?.includes('--exec')) {
-      const script = String(args?.[args.length - 1] || '');
-      if (args?.includes('-u') && args?.includes('root')) {
-        if (script.trim() === 'true') {
-          return { code: wslRootReady || ubuntuRootRegistered ? 0 : 1, stdout: '', stderr: '' };
+      const distroIndex = args.indexOf('-d');
+      const distro = distroIndex >= 0 ? String(args[distroIndex + 1] || '') : '';
+      const execIndex = args.indexOf('--exec');
+      const command = args.slice(execIndex + 1);
+      if (command[0] === 'cat' && command[1] === WINDOWS_WSL_RUNTIME_CONTRACT.markerPath) {
+        if (/^AgentZeroRuntime$/i.test(distro) && managedMarker && (managedImported || /AgentZeroRuntime/i.test(wslList))) {
+          return { code: 0, stdout: `${JSON.stringify(managedMarker)}\n`, stderr: '' };
         }
-        if (/docker-ce docker-ce-cli containerd\.io/.test(script)) {
-          return { code: wslDockerInstallCode, stdout: '', stderr: '' };
+        return { code: 1, stdout: '', stderr: 'marker missing' };
+      }
+      if (command[0] === WINDOWS_WSL_RUNTIME_CONTRACT.startPath) {
+        return { code: managedRuntimeComplete ? 0 : 1, stdout: '', stderr: managedRuntimeComplete ? '' : 'start failed' };
+      }
+      if (command[0] === 'sh' && command[1] === '-c') {
+        const script = String(command[2] || '');
+        if (/^AgentZeroRuntime$/i.test(distro)) {
+          return { code: managedRuntimeComplete ? 0 : 1, stdout: '', stderr: '' };
         }
-        if (/apt-get install -y python3/.test(script)) {
-          return { code: 0, stdout: '', stderr: '' };
+        const ready = wslDockerInstalled && wslDockerReady && wslPythonInstalled;
+        if (/docker info/.test(script)) return { code: ready ? 0 : 1, stdout: '', stderr: '' };
+        if (/command -v docker|command -v dockerd/.test(script)) {
+          return { code: wslDockerInstalled ? 0 : 1, stdout: '', stderr: '' };
         }
-        if (/systemctl start docker|service docker start|dockerd >\/tmp\/a0-dockerd\.log/.test(script)) {
-          return { code: 0, stdout: '', stderr: '' };
-        }
-      }
-      if (/command -v docker/.test(script)) {
-        return { code: wslDockerInstalled ? 0 : 1, stdout: wslDockerInstalled ? '/usr/bin/docker\n' : '', stderr: '' };
-      }
-      if (/command -v dockerd/.test(script)) {
-        return { code: wslDockerInstalled ? 0 : 1, stdout: wslDockerInstalled ? '/usr/bin/dockerd\n' : '', stderr: '' };
-      }
-      if (/command -v python3/.test(script)) {
-        return { code: wslPythonInstalled ? 0 : 1, stdout: wslPythonInstalled ? '/usr/bin/python3\n' : '', stderr: '' };
-      }
-      if (/docker info/.test(script)) {
-        return { code: wslDockerReady ? 0 : 1, stdout: '', stderr: '' };
+        if (/command -v python3/.test(script)) return { code: wslPythonInstalled ? 0 : 1, stdout: '', stderr: '' };
       }
     }
     return { code: 1, stdout: '', stderr: '' };

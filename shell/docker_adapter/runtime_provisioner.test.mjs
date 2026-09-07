@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import net from 'node:net';
 import { mkdir as mkdirp, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +12,42 @@ import { ColimaRuntime, selectLatestDockerCliAsset } from './impl/ColimaRuntime.
 import { LinuxEngineRuntime } from './impl/LinuxEngineRuntime.mjs';
 import { ensureWindowsWslKeepAlive, stopWindowsWslKeepAlive } from './impl/WindowsWslDockerProxy.mjs';
 import { WindowsWslRuntime } from './impl/WindowsWslRuntime.mjs';
+import progressHelpers from '../docker_manager/progress.js';
+
+test('Colima startup logs keep one active step until the socket is reachable', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-colima-progress-'));
+  const socketPath = path.join(managedDir, 'docker.sock');
+  const server = net.createServer((socket) => socket.end());
+  const updates = [];
+  try {
+    await new Promise((resolve) => server.listen(socketPath, resolve));
+    const runtime = new ColimaRuntime({
+      managedDir,
+      dockerDesktopAppPaths: [],
+      runCommand: async (_cmd, args, options) => {
+        if (args[0] === 'start') {
+          for (const line of ['runtime: docker', 'starting colima', 'downloading disk', 'preparing VM', 'done', 'ready', 'booting VM']) {
+            options.onLine(line);
+          }
+          assert.equal(updates.at(-1).phase, 'start_runtime');
+          assert.ok(updates.every((patch) => patch.steps.some((step) => step.status === 'running')));
+        }
+        return { code: 0, stdout: '', stderr: '' };
+      }
+    });
+    runtime.ensureBinaries = async () => {};
+    runtime.endpoint = () => ({ socketPath });
+    await runtime.provision({ onProgress: (message, progress, phase) => {
+      updates.push(progressHelpers.runtimeSetupProgressPatch({ mode: 'colima' }, message, progress, 'running', { phase }));
+    } });
+    assert.deepEqual(updates.map((patch) => patch.phase), [
+      'start_runtime', 'start_runtime', 'start_runtime', 'start_runtime', 'start_runtime', 'start_runtime', 'verify_runtime', 'ready'
+    ]);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
 
 test('RuntimeProvisioner.forPlatform selects runtime implementations by platform', async () => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));

@@ -340,6 +340,8 @@ This scope owns:
   report progress through Docker Manager events instead of blocking the renderer.
   The sanitized progress bridge should preserve explicit product state flags
   such as `uiReady` when the renderer depends on them for handoff behavior.
+  Preserve image-pull `progressStartedAt` and numeric `progressStartValue` so
+  modal and background-toast ETAs use the current phase's observed work.
 - Docker Manager refresh IPC accepts only a bounded forced/non-forced choice.
   Initial loading, tab navigation, and post-operation reconciliation use normal
   remote caches while rebuilding live local Docker state. Startup follows that

@@ -33,10 +33,11 @@ const RUNTIME_STEPS = Object.freeze({
   ]),
   macos_colima: Object.freeze([
     ["find_components", "Finding runtime components"],
+    ["prepare_client", "Preparing Docker client"],
     ["download_components", "Downloading runtime components"],
     ["install_components", "Installing runtime components"],
     ["start_runtime", "Starting Agent Zero runtime"],
-    ["start_engine", "Starting Docker Engine"],
+    ["verify_runtime", "Checking Docker Engine"],
     ["ready", "Runtime ready"]
   ]),
   generic: Object.freeze([
@@ -91,6 +92,7 @@ function phaseForRuntime(runtime = null) {
   if (runtime?.state === "manual_install" || runtime?.state === "unsupported") return "check_runtime";
   if (runtime?.mode === "wsl_distribution") return "install_ubuntu";
   if (runtime?.mode === "wsl_bridge_dependency") return "start_bridge";
+  if (runtime?.state === "engine_stopped" && runtimeKind(runtime) === "macos_colima") return "start_runtime";
   if (runtime?.state === "engine_stopped") return runtimeKind(runtime) === "windows_wsl" ? "start_wsl_engine" : "start_engine";
   return "check_runtime";
 }
@@ -420,6 +422,7 @@ function renderProgress(model, parent) {
   head.className = "sv-progress-head";
 
   const phase = document.createElement("span");
+  phase.className = "dm-runtime-phase";
   const activeStep = model.steps.find((step) => ["running", "current", "failed", "canceled"].includes(step.status));
   phase.textContent = model.showDetail ? (activeStep?.label || model.detail) : (model.detail || activeStep?.label);
 
@@ -756,10 +759,29 @@ function renderRuntimeGate(state = {}, actions = {}) {
   const previousSetupTag = asText(existing?.querySelector?.("#runtimeSetupTag")?.value);
   const previousRuntimeEndpointId = asText(existing?.querySelector?.("#runtimeEndpointChoice")?.value);
   const model = normalizedRuntimeGate(state);
+  const runningKey = model.status === "running" ? asText(state.progress?.opId) : "";
+  const stepItems = existing?.querySelectorAll(".dm-runtime-step");
+  if (runningKey && existing?.dataset.runningKey === runningKey && stepItems.length === model.steps.length) {
+    existing.querySelector(".dm-dialog-title").textContent = model.headline;
+    existing.querySelector(".dm-runtime-phase").textContent = model.detail;
+    existing.querySelector(".dm-runtime-progress-meta").textContent = model.progressMeta;
+    const fill = existing.querySelector(".sv-progress-fill");
+    fill.className = `sv-progress-fill${model.indeterminate ? " indeterminate" : ""}`;
+    fill.style.width = model.indeterminate ? "" : `${model.progress ?? 0}%`;
+    model.steps.forEach((step, index) => {
+      const item = stepItems[index];
+      item.className = `dm-runtime-step is-${step.status}`;
+      item.querySelector(".dm-runtime-step-icon").textContent = runtimeStepIcon(step.status);
+      item.querySelector(".dm-runtime-step-label").textContent = step.label;
+    });
+    return true;
+  }
+  const detailsOpen = existing?.querySelector(".dm-runtime-details")?.open === true;
   if (existing) existing.remove();
 
   const backdrop = document.createElement("div");
   backdrop.id = RUNTIME_GATE_ID;
+  backdrop.dataset.runningKey = runningKey;
   backdrop.className = "dm-dialog-backdrop dm-runtime-gate-backdrop";
   backdrop.setAttribute("role", "presentation");
   backdrop.addEventListener("click", (event) => {
@@ -795,6 +817,8 @@ function renderRuntimeGate(state = {}, actions = {}) {
   if (!model.success) {
     renderProgress(model, body);
     renderRuntimeDetails(model, body);
+    const details = body.querySelector(".dm-runtime-details");
+    if (details) details.open = detailsOpen;
   }
 
   const footer = document.createElement("div");

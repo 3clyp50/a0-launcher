@@ -305,6 +305,33 @@ test('running image pull shows a minute-level ETA near the percentage', () => {
   }
 });
 
+test('extraction renders its own percentage and ETA after overlapping downloads', () => {
+  const originalNow = Date.now;
+  Date.now = () => Date.parse('2026-09-07T12:06:00Z');
+  try {
+    const document = installDom();
+    const state = { progress: {
+      opId: 'op-extract', type: 'install', status: 'running',
+      startedAt: '2026-09-07T12:00:00Z',
+      progressStartedAt: '2026-09-07T12:05:00Z',
+      progressStartValue: 40,
+      message: 'Extracting', progress: 60, downloadProgress: 100, extractProgress: 60
+    } };
+    renderOperationDialog(state, {});
+    assert.equal(document.querySelector('.dm-operation-phase').textContent, 'Extracting');
+    assert.equal(document.querySelector('.dm-operation-percent').textContent, '60% · ~2 min remaining');
+    assert.equal(document.querySelector('.dm-operation-progress-fill').style.width, '60%');
+
+    state.progress.progress = 40;
+    assert.equal(normalizedOperationDialog(state).progressMeta, '40%');
+    state.progress.progress = null;
+    assert.equal(normalizedOperationDialog(state).indeterminate, true);
+    assert.equal(normalizedOperationDialog(state).progressMeta, '');
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
 test('install availability check stays compact before image pull starts', () => {
   const document = installDom();
   const state = {

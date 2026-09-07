@@ -4,6 +4,31 @@ import { test } from 'node:test';
 
 import { DockerodeDocker } from './impl/DockerodeDocker.mjs';
 
+test('pull extraction uses expanded byte totals and waits for layer completion', async () => {
+  const docker = new DockerodeDocker({ imageRepo: 'agent0ai/agent-zero' });
+  const id = 'abcdef123456';
+  const events = [
+    { status: 'Downloading', progressDetail: { current: 100, total: 100 } },
+    { status: 'Download complete' },
+    { status: 'Extracting', progressDetail: { current: 200, total: 1000 } },
+    { status: 'Extracting', progressDetail: { current: 600, total: 1000 } },
+    { status: 'Extracting', progressDetail: { current: 1000, total: 1000 } },
+    { status: 'Pull complete' }
+  ];
+  docker.getRemoteLayerSizes = async () => ({ exists: true, totalBytes: 100, layersById: new Map([[id, 100]]) });
+  docker.docker = {
+    pull: (_ref, _options, callback) => callback(null, Readable.from([])),
+    modem: { followProgress: (_stream, complete, progress) => {
+      events.forEach((event) => progress({ id, ...event }));
+      complete(null);
+    } }
+  };
+  const updates = [];
+  await docker.pullImage('agent0ai/agent-zero:latest', { onProgress: (event) => updates.push(event) });
+  assert.deepEqual(updates.map((event) => event.downloadProgress), [99, 100, 100, 100, 100, 100]);
+  assert.deepEqual(updates.map((event) => event.extractProgress), [0, 0, 20, 60, 99, 100]);
+});
+
 function tarArchiveForFile(name, text) {
   const data = Buffer.from(text, 'utf8');
   const header = Buffer.alloc(512);

@@ -27,6 +27,7 @@ This scope owns:
 - `release_tags.js`: shared validation and ordering for Agent Zero release tags.
 - `retention.js`: retained instance pruning policy.
 - `errors.js`: stable UI-facing error response and Docker diagnostic mapping.
+- `progress.js`: runtime checklist phases and shared image-pull phase progress.
 
 ## Local Contracts
 
@@ -209,6 +210,13 @@ This scope owns:
   `indeterminate` in addition to the legacy `message` and numeric progress
   fields. Runtime setup progress uses those fields for the blocking startup
   modal.
+- Runtime callbacks may supply an explicit phase as their third argument so
+  nested Colima download/start logs stay on their owning checklist step. Keep
+  failure on the last active step. Image-pull progress uses the current phase's
+  percentage plus `progressStartedAt` and `progressStartValue` for an ETA based
+  only on work observed since that phase became visible.
+  Numeric-only runtime download callbacks retain their current detail and phase;
+  a new stage without a percentage clears the previous download percentage.
 - Renderer-visible setup progress copy should use `Setup`, not `Set up`,
   `Set Up`, or `Setting up`; internal identifiers may stay `setup`.
 - Progress payloads may include `canCancel`; set it only while a user cancel

@@ -27,10 +27,11 @@ const RUNTIME_STEPS = Object.freeze({
   ]),
   macos_colima: Object.freeze([
     ['find_components', 'Finding runtime components'],
+    ['prepare_client', 'Preparing Docker client'],
     ['download_components', 'Downloading runtime components'],
     ['install_components', 'Installing runtime components'],
     ['start_runtime', 'Starting Agent Zero runtime'],
-    ['start_engine', 'Starting Docker Engine'],
+    ['verify_runtime', 'Checking Docker Engine'],
     ['ready', 'Runtime ready']
   ]),
   generic: Object.freeze([
@@ -87,7 +88,7 @@ function phaseForMessage(message, kind) {
     if (/downloading/.test(text)) return 'download_components';
     if (/installing/.test(text)) return 'install_components';
     if (/starting agent zero runtime|starting the runtime/.test(text)) return 'start_runtime';
-    if (/starting docker engine/.test(text)) return 'start_engine';
+    if (/starting docker engine/.test(text)) return 'start_runtime';
   }
 
   if (kind === 'linux') {
@@ -137,26 +138,46 @@ function clampProgress(value) {
   return Math.max(0, Math.min(100, n));
 }
 
-function runtimeSetupProgressPatch(assessment = null, message = '', progress = null, status = 'running') {
+function runtimeSetupProgressPatch(assessment = null, message = '', progress = null, status = 'running', { phase: explicitPhase = '', previous = null } = {}) {
   const kind = runtimeKind(assessment);
-  const detail = normalizeProgressText(message) || normalizeProgressText(assessment?.detail) || 'Preparing Agent Zero Setup.';
-  const phase = phaseForMessage(detail, kind) || (status === 'completed' ? 'ready' : '');
+  const detail = normalizeProgressText(message) || normalizeProgressText(previous?.detail) || normalizeProgressText(assessment?.detail) || 'Preparing Agent Zero Setup.';
+  const phase = explicitPhase || (status === 'completed' ? 'ready' : '')
+    || (message && status === 'running' ? phaseForMessage(message, kind) : '') || previous?.phase || '';
   const numericProgress = clampProgress(progress);
   const patch = {
     headline: 'Setup Agent Zero',
     detail,
     message: detail,
+    progress: numericProgress,
     phase: phase || null,
     steps: decorateSteps(kind, phase, status),
     indeterminate: numericProgress === null && status === 'running'
   };
 
-  if (numericProgress !== null) patch.progress = numericProgress;
   return patch;
+}
+
+function imagePullProgressPatch(event = {}, previous = {}, suffix = '', nowMs = Date.now()) {
+  const downloadProgress = clampProgress(event.downloadProgress);
+  const extractProgress = clampProgress(event.extractProgress);
+  const extracting = downloadProgress === 100;
+  const message = `${extracting ? 'Extracting' : 'Downloading'}${suffix}`;
+  const progress = extracting ? extractProgress : downloadProgress;
+  const samePhase = previous.message === message && previous.progressStartedAt;
+  return {
+    message,
+    progress,
+    downloadProgress,
+    extractProgress,
+    progressStartedAt: samePhase ? previous.progressStartedAt : new Date(nowMs).toISOString(),
+    progressStartValue: samePhase ? previous.progressStartValue : progress,
+    canCancel: true
+  };
 }
 
 module.exports = {
   runtimeKind,
   phaseForMessage,
-  runtimeSetupProgressPatch
+  runtimeSetupProgressPatch,
+  imagePullProgressPatch
 };

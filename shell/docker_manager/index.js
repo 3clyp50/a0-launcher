@@ -19,7 +19,7 @@ const stateStore = require('./state_store');
 const retention = require('./retention');
 const { toErrorResponse, mapDockerInterfaceErrorToUiMessage } = require('./errors');
 const { isSemverReleaseTag, compareReleaseTagsDescending } = require('./release_tags');
-const { runtimeSetupProgressPatch } = require('./progress');
+const { runtimeSetupProgressPatch, imagePullProgressPatch } = require('./progress');
 const { normalizeHostAccessInstance } = require('../host_access');
 
 const DEFAULT_IMAGE_REPO = 'agent0ai/agent-zero';
@@ -4365,8 +4365,8 @@ async function provisionRuntime(options = {}) {
   requireNoRunningOperation();
   const opId = beginOperation('runtime_setup', null);
   let runtimeAssessment = null;
-  const reportRuntimeProgress = (message, progress = null) => {
-    updateOperationProgress(runtimeSetupProgressPatch(runtimeAssessment, message, progress));
+  const reportRuntimeProgress = (message, progress = null, phase = '') => {
+    updateOperationProgress(runtimeSetupProgressPatch(runtimeAssessment, message, progress, 'running', { phase, previous: _currentOperation }));
   };
   const finishRuntimeFollowup = async (result, assessment) => {
     if (!result || typeof result !== 'object' || typeof result.detail !== 'string') return false;
@@ -4462,7 +4462,7 @@ async function provisionRuntime(options = {}) {
       finishOperation('completed', null);
     } catch (error) {
       const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Runtime Setup failed';
-      updateOperationProgress(runtimeSetupProgressPatch(runtimeAssessment, message, null, 'failed'));
+      updateOperationProgress(runtimeSetupProgressPatch(runtimeAssessment, message, null, 'failed', { previous: _currentOperation }));
       finishOperation('failed', message);
     } finally {
       _abortControllers.delete(opId);
@@ -4891,15 +4891,7 @@ async function installOrSync(tag, options = {}) {
       const result = await docker.pullImage(imageRef, {
         signal: controller.signal,
         onProgress: (evt) => {
-          const dl =
-            typeof evt?.downloadProgress === 'number' && Number.isFinite(evt.downloadProgress) ? evt.downloadProgress : null;
-          const ex =
-            typeof evt?.extractProgress === 'number' && Number.isFinite(evt.extractProgress) ? evt.extractProgress : null;
-
-          const message =
-            typeof dl === 'number' && dl < 100 ? 'Downloading' : typeof ex === 'number' && ex < 100 ? 'Extracting' : 'Downloading';
-
-          updateOperationProgress({ progress: dl, downloadProgress: dl, extractProgress: ex, message, canCancel: true });
+          updateOperationProgress(imagePullProgressPatch(evt, _currentOperation));
         }
       });
       _abortControllers.delete(opId);
@@ -5694,15 +5686,7 @@ async function updateToLatest(dataLossAck) {
       const pullResult = await docker.pullImage(imageRefForTag(imageRepo, latest), {
         signal: controller.signal,
         onProgress: (evt) => {
-          const dl =
-            typeof evt?.downloadProgress === 'number' && Number.isFinite(evt.downloadProgress) ? evt.downloadProgress : null;
-          const ex =
-            typeof evt?.extractProgress === 'number' && Number.isFinite(evt.extractProgress) ? evt.extractProgress : null;
-
-          const message =
-            typeof dl === 'number' && dl < 100 ? 'Downloading' : typeof ex === 'number' && ex < 100 ? 'Extracting' : 'Downloading';
-
-          updateOperationProgress({ progress: dl, downloadProgress: dl, extractProgress: ex, message, canCancel: true });
+          updateOperationProgress(imagePullProgressPatch(evt, _currentOperation));
         }
       });
       _abortControllers.delete(opId);
@@ -6075,13 +6059,7 @@ async function runCustomImage(options = {}) {
         const pullResult = await docker.pullImage(custom.imageRef, {
           signal: controller.signal,
           onProgress: (evt) => {
-            const dl =
-              typeof evt?.downloadProgress === 'number' && Number.isFinite(evt.downloadProgress) ? evt.downloadProgress : null;
-            const ex =
-              typeof evt?.extractProgress === 'number' && Number.isFinite(evt.extractProgress) ? evt.extractProgress : null;
-            const message =
-              typeof dl === 'number' && dl < 100 ? 'Downloading custom image' : typeof ex === 'number' && ex < 100 ? 'Extracting custom image' : 'Downloading custom image';
-            updateOperationProgress({ progress: dl, downloadProgress: dl, extractProgress: ex, message, canCancel: true });
+            updateOperationProgress(imagePullProgressPatch(evt, _currentOperation, ' custom image'));
           }
         });
         _abortControllers.delete(opId);

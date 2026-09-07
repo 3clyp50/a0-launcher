@@ -260,6 +260,31 @@ test('no Docker on Linux shows blocking setup action', () => {
   assert.equal(setupCount, 1);
 });
 
+test('runtime progress keeps the modal and expanded checklist in place', () => {
+  const document = installDom();
+  const state = {
+    stateLoaded: true, dockerAvailable: false,
+    runtime: { platform: 'darwin', mode: 'colima', state: 'not_provisioned' },
+    progress: { type: 'runtime_setup', opId: 'op-stable-setup', status: 'running',
+      detail: 'Starting the runtime', phase: 'start_runtime' }
+  };
+  renderRuntimeGate(state);
+  const modal = document.getElementById('runtimeSetupDialog');
+  const details = modal.querySelector('.dm-runtime-details');
+  details.open = true;
+  const summary = details.querySelector('summary');
+  summary.focus();
+  state.progress.detail = 'Downloading runtime components';
+  renderRuntimeGate(state);
+  assert.equal(document.getElementById('runtimeSetupDialog'), modal);
+  assert.equal(details.open, true);
+  assert.equal(document.activeElement, summary);
+  assert.equal(modal.querySelector('.dm-runtime-phase').textContent, 'Downloading runtime components');
+  state.progress.status = 'failed';
+  renderRuntimeGate(state);
+  assert.equal(document.querySelector('.dm-runtime-details').open, true);
+});
+
 test('remote Instance dialog suppresses a runtime-gate refresh', () => {
   const document = installDom();
   const remoteDialog = document.createElement('div');

@@ -4463,6 +4463,8 @@ function sanitizeDockerManagerProgress(progress) {
   if (typeof progress.status === 'string') out.status = progress.status;
   if (progress.presentation === 'toast') out.presentation = 'toast';
   if (typeof progress.startedAt === 'string') out.startedAt = progress.startedAt;
+  if (typeof progress.progressStartedAt === 'string') out.progressStartedAt = progress.progressStartedAt;
+  if (hasNumericValue(progress.progressStartValue)) out.progressStartValue = Number(progress.progressStartValue);
   if (typeof progress.finishedAt === 'string') out.finishedAt = progress.finishedAt;
   if (typeof progress.targetTag === 'string') out.targetTag = progress.targetTag;
   if (typeof progress.canCancel === 'boolean') out.canCancel = progress.canCancel;

@@ -617,9 +617,7 @@ export class DockerodeDocker extends DockerInterface {
       _layers: new Map(),
       _lastNewLayerAtMs: Date.now(),
       _dlDenomFrozen: 0,
-      _xDenomFrozen: 0,
       _lastDlPercent: 0,
-      _lastXPercent: 0,
       _stream: null,
       _abortListener: null
     };
@@ -699,7 +697,6 @@ export class DockerodeDocker extends DockerInterface {
 
       if (prefetched) {
         pullState._dlDenomFrozen = prefetched.totalBytes;
-        pullState._xDenomFrozen = prefetched.totalBytes;
         for (const [id, size] of prefetched.layersById.entries()) {
           if (!id || !Number.isFinite(Number(size)) || Number(size) <= 0) continue;
           pullState._layers.set(id, {
@@ -835,26 +832,24 @@ export class DockerodeDocker extends DockerInterface {
 
                 totalBytes += tot;
                 doneBytes += isDone ? tot : Math.min(cur, tot);
-                if (isDone || cur >= tot) doneLayers += 1;
+                if (isDone) doneLayers += 1;
               }
 
-              const frozen = kind === 'dl' ? Number(pullState._dlDenomFrozen) || 0 : Number(pullState._xDenomFrozen) || 0;
-              const denom = frozen > 0 ? frozen : totalBytes;
-              const percent = denom > 0 ? Math.max(0, Math.min(100, Math.round((doneBytes / denom) * 100))) : null;
+              // Manifest sizes are compressed; extraction totals grow as Docker reports them.
+              const frozen = kind === 'dl' ? Number(pullState._dlDenomFrozen) || 0 : 0;
+              const denom = Math.max(frozen, totalBytes);
+              const ceiling = doneLayers === layerCount ? 100 : 99;
+              const percent = denom > 0 ? Math.max(0, Math.min(ceiling, Math.round((doneBytes / denom) * 100))) : null;
               return { doneBytes, totalBytes, doneLayers, denom, percent };
             };
 
-            // Freeze denominators after 1.5s with no new layers (prevents jitter when totals appear late).
+            // Freeze the download denominator after 1.5s with no new layers.
             const timeSinceNewLayer = Math.max(0, nowMs - (Number(pullState._lastNewLayerAtMs) || nowMs));
             const FREEZE_DELAY_MS = 1500;
             if (!prefetched && timeSinceNewLayer >= FREEZE_DELAY_MS) {
               if (!pullState._dlDenomFrozen) {
                 const dlNow = computeTotals('dl');
                 if (dlNow.totalBytes > 0) pullState._dlDenomFrozen = dlNow.totalBytes;
-              }
-              if (!pullState._xDenomFrozen) {
-                const xNow = computeTotals('x');
-                if (xNow.totalBytes > 0) pullState._xDenomFrozen = xNow.totalBytes;
               }
             }
 
@@ -867,10 +862,6 @@ export class DockerodeDocker extends DockerInterface {
             if (typeof downloadProgress === 'number') {
               downloadProgress = Math.max(Number(pullState._lastDlPercent) || 0, downloadProgress);
               pullState._lastDlPercent = downloadProgress;
-            }
-            if (typeof extractProgress === 'number') {
-              extractProgress = Math.max(Number(pullState._lastXPercent) || 0, extractProgress);
-              pullState._lastXPercent = extractProgress;
             }
 
             pullState.message = status;

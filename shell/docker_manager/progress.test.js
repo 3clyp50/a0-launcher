@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
-const { runtimeKind, runtimeSetupProgressPatch } = require('./progress');
+const { runtimeKind, runtimeSetupProgressPatch, imagePullProgressPatch } = require('./progress');
 
 function activeStep(progress) {
   return progress.steps.find((step) => ['running', 'failed', 'canceled'].includes(step.status)) || null;
@@ -58,7 +58,68 @@ test('runtime progress normalizes macOS Colima setup phases', () => {
   assert.equal(download.phase, 'download_components');
   assert.equal(activeStep(download)?.label, 'Downloading runtime components');
 
-  const engine = runtimeSetupProgressPatch(assessment, 'Starting Docker Engine');
-  assert.equal(engine.phase, 'start_engine');
-  assert.equal(activeStep(engine)?.label, 'Starting Docker Engine');
+  const messages = [
+    ['Finding runtime components', 'find_components'],
+    ['Downloading Docker client', 'prepare_client'],
+    ['Installing Docker client', 'prepare_client'],
+    ['Downloading runtime components', 'download_components'],
+    ['Installing runtime components', 'install_components'],
+    ['Starting the runtime', 'start_runtime'],
+    ['Downloading runtime components', 'start_runtime'],
+    ['Preparing the runtime', 'start_runtime'],
+    ['Starting Docker Engine', 'start_runtime'],
+    ['Checking Docker Engine', 'verify_runtime']
+  ];
+  let previousIndex = -1;
+  for (const [message, phase] of messages) {
+    const patch = runtimeSetupProgressPatch(assessment, message, null, 'running', { phase });
+    assert.equal(activeStep(patch)?.id, phase);
+    const index = patch.steps.findIndex((step) => step.status === 'running');
+    assert.ok(index >= previousIndex);
+    previousIndex = index;
+  }
+  const failed = runtimeSetupProgressPatch(assessment, 'The runtime could not be started.', null, 'failed', { previous: { phase: 'start_runtime' } });
+  assert.equal(activeStep(failed)?.id, 'start_runtime');
+});
+
+test('runtime download byte updates retain their step and installation clears 100 percent', () => {
+  const assessment = { mode: 'colima', detail: 'Install Colima to run Agent Zero.' };
+  for (const [message, phase] of [
+    ['Downloading Docker client', 'prepare_client'],
+    ['Downloading runtime components', 'download_components']
+  ]) {
+    let previous = runtimeSetupProgressPatch(assessment, message, null, 'running', { phase });
+    for (const percent of [0, 45, 100, 0, 75, 100]) {
+      previous = runtimeSetupProgressPatch(assessment, null, percent, 'running', { previous });
+      assert.equal(previous.phase, phase);
+      assert.equal(previous.detail, message);
+      assert.equal(previous.progress, percent);
+      assert.equal(activeStep(previous)?.id, phase);
+    }
+    const installing = runtimeSetupProgressPatch(assessment, 'Installing runtime components', null, 'running', { previous });
+    assert.equal(installing.progress, null);
+    assert.equal(installing.indeterminate, true);
+    assert.equal(installing.phase, 'install_components');
+  }
+});
+
+test('image pulls switch percentage and ETA baseline from download to extraction', () => {
+  const now = Date.parse('2026-09-07T12:00:00Z');
+  for (const suffix of ['', ' custom image']) {
+    const downloading = imagePullProgressPatch({ downloadProgress: 80, extractProgress: 20 }, {}, suffix, now);
+    assert.equal(downloading.progress, 80);
+    const extracting = imagePullProgressPatch({ downloadProgress: 100, extractProgress: 40 }, downloading, suffix, now + 60_000);
+    assert.equal(extracting.message, `Extracting${suffix}`);
+    assert.equal(extracting.progress, 40);
+    assert.equal(extracting.progressStartValue, 40);
+    assert.equal(extracting.progressStartedAt, new Date(now + 60_000).toISOString());
+    const later = imagePullProgressPatch({ downloadProgress: 100, extractProgress: 60 }, extracting, suffix, now + 120_000);
+    assert.equal(later.progress, 60);
+    assert.equal(later.progressStartValue, 40);
+    assert.equal(later.progressStartedAt, extracting.progressStartedAt);
+    const done = imagePullProgressPatch({ downloadProgress: 100, extractProgress: 100 }, later, suffix);
+    assert.equal(done.message, `Extracting${suffix}`);
+    const unknown = imagePullProgressPatch({ downloadProgress: 100 }, downloading, suffix);
+    assert.equal(unknown.progress, null);
+  }
 });

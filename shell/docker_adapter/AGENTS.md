@@ -70,6 +70,9 @@ This scope owns:
   for platform setup phases such as authorization, component download, Docker
   Engine install/start, follow-up/relogin, and Docker Desktop waiting. Keep the
   messages stable enough for Docker Manager to normalize into modal steps.
+- Colima reports explicit phases for Docker client preparation, nested startup
+  logs, and final socket verification. Log lines containing `done` or `ready`
+  must not complete setup before the runtime socket is reachable.
 - Runtime start and provision results should report the Docker endpoint they
   made reachable so the product layer can remember an explicit user choice.
 - Platform provisioners should expose Docker Desktop-only assessment and
@@ -191,6 +194,8 @@ This scope owns:
   remove the helper.
 - Log processing should normalize stream events into stable progress messages and
   preserve enough detail for cancellation/failure diagnosis.
+- Image extraction percentages use Docker's expanded layer totals, not frozen
+  compressed manifest sizes. Reserve 100% for explicit layer completion.
 - Docker project execution may use the installed Compose plugin or legacy
   `docker-compose` fallback. Keep paths in argument arrays, never invoke a
   shell, bind `DOCKER_HOST` to the adapter's selected endpoint, bound returned

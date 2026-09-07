@@ -90,6 +90,8 @@ This scope owns:
   the modal flow exists. Post-onboarding image downloads may be moved into a
   background progress toast by explicit user action; first-run image downloads
   must keep visible progress.
+- Image-download modals and background toasts use the same phase percentage and
+  phase timing metadata for their progress and ETA.
 - Once a long-running operation returns an operation ID, let progress and state
   events drive its visible lifecycle; accepting the operation must not wait for
   an immediate full inventory refresh.

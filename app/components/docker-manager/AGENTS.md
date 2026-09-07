@@ -137,6 +137,14 @@ This scope owns:
 - Active modal progress should show the current phase once, in the progress
   header above the bar. Do not repeat the same phase as body detail under the
   modal title.
+- Keep the Colima fallback checklist aligned with the shell's client preparation,
+  component installation, runtime start, and verification phases. Image-pull
+  percentages and ETAs describe the visible phase; extraction must not inherit
+  the completed download percentage or its elapsed time.
+  Keep operation progress outside the scrolling slideshow/form body so its
+  percentage and ETA remain visible in short windows.
+- Running runtime progress updates the existing modal in place, preserving
+  keyboard focus and the expanded `See more` checklist across events.
 - Operation progress should keep actionable recovery affordances for
   user-fixable failures. For Docker Hub pull-rate limits, keep the error
   visible and offer the shell-owned Docker sign-in wrapper plus retry instead

@@ -161,7 +161,8 @@ function normalizedOperationDialog(state = {}) {
     progressMeta: progressMetaText({
       progress: numericProgress,
       indeterminate,
-      startedAt: progress?.startedAt,
+      startedAt: progress?.progressStartedAt || progress?.startedAt,
+      progressStartValue: progress?.progressStartValue,
       status
     }),
     phase: operationPhase(progress),
@@ -285,7 +286,6 @@ function createOperationDialogShell() {
 
   const body = document.createElement("div");
   body.className = "dm-dialog-body";
-  body.appendChild(createProgressBlock());
 
   const footer = document.createElement("div");
   footer.className = "dm-dialog-footer";
@@ -299,6 +299,7 @@ function createOperationDialogShell() {
   footer.appendChild(primaryWrap);
   dialog.appendChild(header);
   dialog.appendChild(body);
+  dialog.appendChild(createProgressBlock());
   dialog.appendChild(footer);
   backdrop.appendChild(dialog);
   return backdrop;

@@ -36,6 +36,7 @@ function estimateEtaText({
   startedAt = "",
   status = "",
   progress = null,
+  progressStartValue = 0,
   fallbackProgress = null,
   nowMs = Date.now(),
   minElapsedMs = 15_000
@@ -52,7 +53,9 @@ function estimateEtaText({
   const effectiveProgress = primary !== null && primary > 0 ? primary : fallback;
   if (effectiveProgress === null || effectiveProgress <= 2 || effectiveProgress >= 99.5) return "";
 
-  const remainingMs = (elapsedMs / effectiveProgress) * (100 - effectiveProgress);
+  const completedProgress = effectiveProgress - (percentValue(progressStartValue) || 0);
+  if (completedProgress <= 0) return "";
+  const remainingMs = (elapsedMs / completedProgress) * (100 - effectiveProgress);
   if (!Number.isFinite(remainingMs) || remainingMs <= 0 || remainingMs > 24 * 60 * 60 * 1000) return "";
   if (remainingMs < 60_000) return "<1 min remaining";
 
@@ -62,6 +65,7 @@ function estimateEtaText({
 
 function progressMetaText({
   progress = null,
+  progressStartValue = 0,
   indeterminate = false,
   startedAt = "",
   status = "",
@@ -70,7 +74,7 @@ function progressMetaText({
 } = {}) {
   const numericProgress = percentValue(progress);
   const percentText = !indeterminate && numericProgress !== null ? `${Math.round(numericProgress)}%` : "";
-  const etaText = estimateEtaText({ startedAt, status, progress: numericProgress, fallbackProgress, nowMs });
+  const etaText = estimateEtaText({ startedAt, status, progress: numericProgress, progressStartValue, fallbackProgress, nowMs });
   return [percentText, etaText].filter(Boolean).join(" · ");
 }
 

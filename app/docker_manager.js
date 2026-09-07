@@ -431,7 +431,8 @@ function renderBackgroundProgressToast(progress = null) {
   const meta = progressMetaText({
     progress: numericProgress,
     indeterminate,
-    startedAt: progress?.startedAt,
+    startedAt: progress?.progressStartedAt || progress?.startedAt,
+    progressStartValue: progress?.progressStartValue,
     status,
     fallbackProgress: progressPercentValue(progress?.downloadProgress)
   });

@@ -36,8 +36,7 @@ const PROGRESS_MAP = Object.freeze([
   [/download/i, 'Downloading runtime components'],
   [/provision|prepar/i, 'Preparing the runtime'],
   [/creating|starting|boot/i, 'Starting the runtime'],
-  [/runtime:\s*docker/i, 'Starting Docker Engine'],
-  [/(done|ready)/i, 'Runtime ready']
+  [/runtime:\s*docker/i, 'Starting Docker Engine']
 ]);
 
 export class ColimaRuntime extends RuntimeProvisioner {
@@ -71,13 +70,15 @@ export class ColimaRuntime extends RuntimeProvisioner {
     if (!bin) {
       return {
         state: 'not_provisioned',
-        detail: 'No container runtime was found. The launcher can set up a Colima runtime for Agent Zero.'
+        mode: 'colima',
+        detail: 'Install Colima to run Agent Zero.'
       };
     }
 
     return {
       state: 'not_provisioned',
-      detail: 'Colima is installed. The Agent Zero runtime profile has not been created yet.'
+      mode: 'colima',
+      detail: 'Colima is installed. Continue to prepare Agent Zero.'
     };
   }
 
@@ -98,7 +99,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
       onLine: (line) => {
         for (const [pattern, message] of PROGRESS_MAP) {
           if (pattern.test(line)) {
-            options.onProgress?.(message);
+            options.onProgress?.(message, null, 'start_runtime');
             return;
           }
         }
@@ -111,6 +112,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
       });
     }
 
+    options.onProgress?.('Checking Docker Engine', null, 'verify_runtime');
     const ready = await this.#waitForSocket({ signal: options.signal });
     if (!ready) {
       throw makeError('RUNTIME_START_FAILED', 'The runtime started, but Docker did not become reachable.');
@@ -294,11 +296,11 @@ export class ColimaRuntime extends RuntimeProvisioner {
     const tarPath = path.join(this.managedDir, asset.name);
     const extractDir = path.join(this.managedDir, `docker-cli-${process.pid}-${Date.now()}`);
 
-    options.onProgress?.('Downloading Docker client');
+    options.onProgress?.('Downloading Docker client', null, 'prepare_client');
     // Docker's static macOS index does not publish checksum sidecars.
     await downloadVerified(asset.url, tarPath, '', options);
 
-    options.onProgress?.('Installing Docker client');
+    options.onProgress?.('Installing Docker client', null, 'prepare_client');
     await fsp.mkdir(extractDir, { recursive: true });
     try {
       const result = await this._runCommand('/usr/bin/tar', ['-xzf', tarPath, '-C', extractDir, 'docker/docker'], {

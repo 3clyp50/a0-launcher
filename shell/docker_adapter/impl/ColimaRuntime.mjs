@@ -71,7 +71,7 @@ export class ColimaRuntime extends RuntimeProvisioner {
       return {
         state: 'not_provisioned',
         mode: 'colima',
-        detail: 'Install Colima to run Agent Zero.'
+        detail: 'Finish local Agent Zero runtime Setup.'
       };
     }
 

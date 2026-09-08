@@ -20,8 +20,8 @@ This scope owns:
   progress-recovery helpers.
 - `operation-modal/`: centered progress/error modal for non-runtime installs,
   updates, activation, start/stop, delete, rollback, and recovery actions.
-- `runtime-gate/`: mandatory startup runtime setup modal, runtime setup
-  progress, recovery actions, and non-dismissable gating.
+- `runtime-gate/`: first-run local/remote choice, local runtime setup progress,
+  and explicitly opened runtime recovery for returning users.
 - `remote-instance-dialog.js`: shared remote Instance URL and optional saved
   credential dialog used by the startup runtime gate and the Instances tab.
 - `host-access-dialog.js`: existing-Instance Host access settings, scope
@@ -63,11 +63,14 @@ This scope owns:
   should distinguish installable Linux Engine setup, stopped daemons,
   relogin-required states, and manual install fallback without exposing
   package-manager details as the main path.
-- Runtime setup must offer `Add remote Instance` as a first-step path for users
-  who already host Agent Zero on a VPS or URL. Saved remote Instances bypass the
-  local runtime blocker so the launcher can be used without Docker installed or
-  an Agent Zero image pulled locally. While its dialog is open, state refreshes
-  must not recreate the runtime gate above it.
+- New onboarding first offers matching local and remote choice blocks. Remote
+  copy describes needing no local setup without naming Docker. Save the local
+  choice before opening the platform setup with `See more` expanded; no
+  later local step repeats the remote offer. Canceling the remote form returns
+  to the choice. Completed or unknown onboarding must not open automatically;
+  returning users can explicitly open Runtime Setup from Instances and close
+  recovery when it is not running. Create/Add dialogs and a handed-off image
+  download must not be covered by a recreated runtime modal.
 - If Docker is already reachable through the Docker Manager state, stale
   non-ready runtime assessments must not reopen the blocking runtime modal.
   Only completed runtime setup progress may keep the modal open to guide the
@@ -114,7 +117,7 @@ This scope owns:
 - Post-runtime image installs, activation, rollback, start, stop, and delete
   progress should use the centered operation modal rather than a top-page
   status strip.
-  Non-onboarding image installs may offer `Download in background`, which moves
+  All image installs may offer `Download in background`, which moves
   that operation into the same progress toast without stopping the download.
 - Local instance card `Start`, `Stop`, `Restart`, and `Delete` are the exception:
   they are accepted as background queued per-container actions so a slow or
@@ -130,8 +133,8 @@ This scope owns:
   pull, the operation modal should not show a separate launch wizard, model
   defaults panel, workspace storage step, or "start my first Instance" checkbox.
   Starting after a pull is automatic only for the submitted Create local
-  Instance form. First-run image pulls should keep visible progress and should
-  not expose `Download in background`, and their modal copy must say `Install`
+  Instance form. First-run image pulls may use `Download in background`,
+  including during extraction, and their modal copy must say `Install`
   / `Installing`; channel pulls for an existing local image say `Update` /
   `Updating`.
 - Active modal progress should show the current phase once, in the progress

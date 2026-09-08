@@ -99,6 +99,16 @@ This scope owns:
   inspection rather than renderer guesses.
 - Persist user preferences and remote instances through `state_store.js`; do not
   invent parallel files.
+- Persist Launcher `onboarding` as `local` or `complete` in that same state
+  file. Missing state is `new` unless saved Instance metadata, Host access
+  Instance records, health identity history, or discovered Instances establish
+  an existing installation. A pending runtime resume implies local intent.
+  Merely installed Docker and the legacy Host access onboarding flag do not
+  establish completion. Completion survives removal of Instances/images and
+  unavailable runtimes; expose it in state and inventory. State-file writes
+  serialize and atomically replace the file, preserving the furthest onboarding
+  state even when another settings writer read an older snapshot. Read failures
+  must remain errors, not new-install signals.
 - The Settings page persists port, workspace storage, Instance defaults, Host
   access defaults, and A0 Tag through one combined state-store write and
   cached-state publication. Duplicate ports keep the previous valid port pair

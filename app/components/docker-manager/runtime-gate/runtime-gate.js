@@ -49,6 +49,8 @@ const RUNTIME_STEPS = Object.freeze({
 
 let blockingKeyHandlerDocument = null;
 let acknowledgedRuntimeSetupKey = "";
+let requestedSetupDocument = null;
+let setupHandedOffDocument = null;
 
 function asText(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -338,13 +340,18 @@ function shouldChooseRuntime(state = {}) {
 
 function shouldShowRuntimeGate(state = {}) {
   if (!state?.stateLoaded) return false;
-  if (hasRemoteInstances(state)) return false;
+  if (requestedSetupDocument && requestedSetupDocument === globalThis.document) return true;
+  if (!["new", "local", "complete"].includes(state.onboarding)) return false;
+  if (state.onboarding === "complete" || hasRemoteInstances(state) || hasLocalInstances(state)) return false;
+  if (state.onboarding === "new") return true;
+  if (setupHandedOffDocument && setupHandedOffDocument === globalThis.document) return false;
   if (state?.progress?.type === "runtime_setup" && state.progress.status === "running") return true;
   if (state?.progress?.type === "runtime_setup" && state.progress.status === "failed") {
     return acknowledgedRuntimeSetupKey !== runtimeSetupKey(state.progress);
   }
   if (shouldChooseRuntime(state)) return true;
   if (shouldShowRuntimeSuccess(state)) return true;
+  if (isRuntimeReady(state)) return acknowledgedRuntimeSetupKey !== runtimeSetupKey(state.progress);
   return !isRuntimeReady(state);
 }
 
@@ -352,7 +359,8 @@ function normalizedRuntimeGate(state = {}) {
   const runtime = state?.runtime || null;
   const progress = state?.progress?.type === "runtime_setup" ? state.progress : null;
   const kind = runtimeKind(runtime);
-  const success = shouldShowRuntimeSuccess(state) || shouldChooseRuntime(state);
+  const success = shouldShowRuntimeSuccess(state) || shouldChooseRuntime(state)
+    || (isRuntimeReady(state) && progress?.status !== "running" && progress?.status !== "failed");
   const runtimeOptions = runtimeEndpointOptions(state);
   const failedWithReadyRuntime = progress?.status === "failed" && isRuntimeReady(state);
   const setupFlow = success || failedWithReadyRuntime;
@@ -364,7 +372,7 @@ function normalizedRuntimeGate(state = {}) {
   const indeterminate = !completedButStillBlocked && (progress?.indeterminate === true || (progress?.type === "runtime_setup" && status === "running" && numericProgress === null));
   const steps = completedButStillBlocked ? [] : normalizeSteps(progress?.steps);
   const renderedSteps = steps.length ? steps : decorateSteps(kind, phase, status);
-  const successMode = setupFlow ? successModeForState(state) : "";
+  const successMode = setupFlow ? (state.onboarding === "complete" ? "continue" : successModeForState(state)) : "";
   const setupOptions = setupFlow
     ? successMode === "run" ? installedTagOptions(state) : successMode === "install" ? setupTagOptions(state) : []
     : [];
@@ -590,14 +598,7 @@ function renderSetupChoice(model, parent, selectedTag = "") {
   return select;
 }
 
-function remoteOptionDetail(model = {}) {
-  if (model.successMode === "install") return "Add its URL instead of downloading a local image.";
-  if (model.successMode === "run") return "Add its URL instead of starting one here.";
-  if (model.successMode === "continue") return "Add its URL and open it in the launcher too.";
-  return "Add its URL and use the launcher without local Docker setup.";
-}
-
-function renderRemoteOption(model, parent) {
+function renderSetupOption(parent, { titleText, detailText, action, iconText, labelText }) {
   const wrap = document.createElement("div");
   wrap.className = "dm-runtime-remote-option";
 
@@ -606,11 +607,11 @@ function renderRemoteOption(model, parent) {
 
   const title = document.createElement("div");
   title.className = "dm-runtime-remote-title";
-  title.textContent = "Agent Zero is already hosted?";
+  title.textContent = titleText;
 
   const detail = document.createElement("div");
   detail.className = "dm-runtime-remote-detail";
-  detail.textContent = remoteOptionDetail(model);
+  detail.textContent = detailText;
 
   copy.appendChild(title);
   copy.appendChild(detail);
@@ -618,15 +619,15 @@ function renderRemoteOption(model, parent) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "button";
-  button.dataset.runtimeAction = "add_remote_instance";
+  button.dataset.runtimeAction = action;
 
   const icon = document.createElement("span");
   icon.className = "material-symbols-outlined";
   icon.setAttribute("aria-hidden", "true");
-  icon.textContent = "add_link";
+  icon.textContent = iconText;
 
   const label = document.createElement("span");
-  label.textContent = "Add remote Instance";
+  label.textContent = labelText;
 
   button.appendChild(icon);
   button.appendChild(label);
@@ -697,7 +698,7 @@ function openRemoteInstanceSetup(actions = {}, state = {}) {
   openAddRemoteInstanceDialog({
     title: "Add remote Instance",
     submitLabel: "Add Instance",
-    intro: "Connect this launcher to Agent Zero already running on a VPS or another URL. You can set up local Docker later.",
+    intro: "Connect this launcher to Agent Zero already running on a VPS or another URL. You can set up a local Instance later.",
     onCancel: () => {
       renderRuntimeGate(window.__dmLastState || state, actions);
     },
@@ -731,6 +732,8 @@ async function runAction(action, runtime, actions, root = null) {
       if (result === false || asText(result?.opId)) return;
     }
     acknowledgedRuntimeSetupKey = runtimeSetupKey(state.progress);
+    setupHandedOffDocument = document;
+    requestedSetupDocument = null;
     removeRuntimeGate();
     if (action.kind === "install_image" || action.kind === "run_image") {
       openCreateLocalInstanceDialog(state, { selectedTag });
@@ -744,8 +747,13 @@ function removeRuntimeGate() {
   if (!hasOtherBlockingDialog()) setPageBlocked(false);
 }
 
+function openRuntimeSetup(state = {}, actions = {}) {
+  requestedSetupDocument = document;
+  renderRuntimeGate(state, actions);
+}
+
 function renderRuntimeGate(state = {}, actions = {}) {
-  if (document.getElementById("remoteInstanceDialog")) return false;
+  if (document.getElementById("remoteInstanceDialog") || document.getElementById("activateInstanceDialog")) return false;
   if (!shouldShowRuntimeGate(state)) {
     removeRuntimeGate();
     return false;
@@ -759,6 +767,7 @@ function renderRuntimeGate(state = {}, actions = {}) {
   const previousSetupTag = asText(existing?.querySelector?.("#runtimeSetupTag")?.value);
   const previousRuntimeEndpointId = asText(existing?.querySelector?.("#runtimeEndpointChoice")?.value);
   const model = normalizedRuntimeGate(state);
+  const welcome = state.onboarding === "new" && requestedSetupDocument !== document;
   const runningKey = model.status === "running" ? asText(state.progress?.opId) : "";
   const stepItems = existing?.querySelectorAll(".dm-runtime-step");
   if (runningKey && existing?.dataset.runningKey === runningKey && stepItems.length === model.steps.length) {
@@ -776,7 +785,7 @@ function renderRuntimeGate(state = {}, actions = {}) {
     });
     return true;
   }
-  const detailsOpen = existing?.querySelector(".dm-runtime-details")?.open === true;
+  const detailsOpen = existing?.querySelector(".dm-runtime-details")?.open ?? true;
   if (existing) existing.remove();
 
   const backdrop = document.createElement("div");
@@ -803,18 +812,36 @@ function renderRuntimeGate(state = {}, actions = {}) {
   const title = document.createElement("h2");
   title.id = "runtimeGateTitle";
   title.className = "dm-dialog-title";
-  title.textContent = model.headline;
+  title.textContent = welcome ? "Welcome to Agent Zero" : model.headline;
   header.appendChild(title);
 
   const body = document.createElement("div");
   body.className = "dm-dialog-body";
-  if (model.showDetail) appendText(body, "dm-runtime-gate-detail", model.detail);
-  renderSuccess(model, body);
-  const runtimeChoice = renderRuntimeChoice(model, body, previousRuntimeEndpointId);
-  renderSetupChoice(model, body, previousSetupTag);
-  const remoteButton = renderRemoteOption(model, body);
-  remoteButton.addEventListener("click", () => openRemoteInstanceSetup(actions, state));
-  if (!model.success) {
+  let runtimeChoice = null;
+  if (welcome) {
+    const remote = renderSetupOption(body, {
+      titleText: "Agent Zero is already hosted?",
+      detailText: "Add its URL and use the launcher without local setup.",
+      action: "add_remote_instance", iconText: "add_link", labelText: "Add remote Instance"
+    });
+    remote.addEventListener("click", () => openRemoteInstanceSetup(actions, state));
+    const local = renderSetupOption(body, {
+      titleText: "Run Agent Zero on this computer",
+      detailText: "Set up a local runtime and create your first Instance.",
+      action: "choose_local", iconText: "computer", labelText: "Setup local Instance"
+    });
+    local.addEventListener("click", async () => {
+      local.disabled = true;
+      try { await actions?.beginLocalSetup?.(); }
+      finally { local.disabled = false; }
+    });
+  } else {
+    if (model.showDetail) appendText(body, "dm-runtime-gate-detail", model.detail);
+    renderSuccess(model, body);
+    runtimeChoice = renderRuntimeChoice(model, body, previousRuntimeEndpointId);
+    renderSetupChoice(model, body, previousSetupTag);
+  }
+  if (!welcome && !model.success) {
     renderProgress(model, body);
     renderRuntimeDetails(model, body);
     const details = body.querySelector(".dm-runtime-details");
@@ -823,11 +850,21 @@ function renderRuntimeGate(state = {}, actions = {}) {
 
   const footer = document.createElement("div");
   footer.className = "dm-dialog-footer";
+  footer.hidden = welcome;
 
   const secondary = document.createElement("div");
   secondary.className = "dm-runtime-gate-secondary";
   const primaryWrap = document.createElement("div");
   primaryWrap.className = "dm-runtime-gate-primary";
+
+  if (requestedSetupDocument === document && model.status !== "running") {
+    const close = makeButton("Close", "button");
+    close.addEventListener("click", () => {
+      requestedSetupDocument = null;
+      removeRuntimeGate();
+    });
+    secondary.appendChild(close);
+  }
 
   if (!["refresh", "wait", "install_image", "run_image", "continue"].includes(model.action.kind)) {
     const refresh = makeButton("Refresh", "button", false);
@@ -851,7 +888,7 @@ function renderRuntimeGate(state = {}, actions = {}) {
   footer.appendChild(primaryWrap);
   dialog.appendChild(header);
   dialog.appendChild(body);
-  dialog.appendChild(footer);
+  if (!welcome) dialog.appendChild(footer);
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
   focusFirstControl(backdrop);
@@ -866,6 +903,7 @@ export {
   installedTagOptions,
   hasInstalledAgentZeroImage,
   normalizedRuntimeGate,
+  openRuntimeSetup,
   renderRuntimeGate,
   shouldShowRuntimeGate,
   runtimeKind

@@ -23,6 +23,7 @@ Root-owned files and folders:
 
 - `AGENTS.md`: repo-wide DOX rail and Child DOX Index.
 - `README.md`: public product overview and user/developer quick start.
+- `TODO.md`: pending work, investigation findings, and acceptance checks.
 - `package.json` and `package-lock.json`: Electron app version, dependencies,
   npm scripts, and local-dev fallback metadata.
 - `forge.config.js`: legacy Electron Forge makers for local/manual executable
@@ -49,6 +50,11 @@ DOX contracts:
   contracts in `AGENTS.md`.
 
 Architecture contracts:
+
+- First-run onboarding starts with local/remote choices and persists local
+  intent and completion in Docker Manager state. Completed users never receive
+  automatic onboarding again; unavailable runtimes use explicit Runtime Setup
+  recovery. First-image download/extraction may use background progress.
 
 - `app/` is the static renderer/content layer.
 - `shell/` is the privileged Electron main/preload and Docker orchestration

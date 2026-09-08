@@ -45,10 +45,52 @@ async function readJson(filePath, fallbackValue) {
   }
 }
 
+let stateWrite = Promise.resolve();
+
 async function writeJson(filePath, value) {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const json = `${JSON.stringify(value, null, 2)}\n`;
-  await fs.writeFile(filePath, json, 'utf8');
+  const isState = filePath === stateFile();
+  const write = async () => {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    if (isState) {
+      const current = await readJson(filePath, {});
+      if (typeof value === 'function') value = value(current);
+      // Settings writes may have read state before onboarding advanced.
+      if (current.onboarding === 'complete' || (current.onboarding === 'local' && value.onboarding !== 'complete')) {
+        value = { ...value, onboarding: current.onboarding };
+      }
+    }
+    const target = isState ? `${filePath}.tmp` : filePath;
+    await fs.writeFile(target, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    if (isState) await fs.rename(target, filePath);
+  };
+  if (!isState) return write();
+  const pending = stateWrite.then(write);
+  stateWrite = pending.catch(() => {});
+  return pending;
+}
+
+async function readOnboarding({ containers = [], remoteInstances = [] } = {}) {
+  await stateWrite;
+  const state = await readJson(stateFile(), {});
+  if (state.onboarding === 'complete') return 'complete';
+  const hasInstances = containers.some((item) => item?.containerId || item?.containerName)
+    || remoteInstances.some((item) => normalizeRemoteInstanceForRead(item))
+    || (Array.isArray(state.remoteInstances) && state.remoteInstances.some((item) => normalizeRemoteInstanceForRead(item)))
+    || Object.keys(normalizeLocalInstanceNames(state.localInstanceNames)).length > 0
+    || Object.keys(normalizeHostAccessSettings(state.hostAccess).instances).length > 0;
+  if (hasInstances) return writeOnboarding('complete');
+  const history = await readRuntimeIdentityCache();
+  const hasHistory = Object.entries(history.entries).some(([key, value]) =>
+    /^(local|remote):\S+$/.test(key) && value?.runtimeSource
+  );
+  if (hasHistory) return writeOnboarding('complete');
+  return state.onboarding === 'local' || state.runtimeSetupResume?.pending === true ? 'local' : 'new';
+}
+
+async function writeOnboarding(onboarding) {
+  if (!['local', 'complete'].includes(onboarding)) throw new Error('Invalid onboarding state');
+  await writeJson(stateFile(), (state) => ({ ...state, onboarding, updatedAt: new Date().toISOString() }));
+  return (await readJson(stateFile(), {})).onboarding;
 }
 
 async function readRetentionPolicy() {
@@ -1005,7 +1047,7 @@ async function writeRemoteInstance(remoteInstance) {
     list.push(next);
   }
 
-  await writeJson(stateFile(), { ...state, remoteInstances: list, updatedAt: new Date().toISOString() });
+  await writeJson(stateFile(), { ...state, onboarding: 'complete', remoteInstances: list, updatedAt: new Date().toISOString() });
   return next;
 }
 
@@ -1032,6 +1074,8 @@ async function deleteRemoteInstance(id) {
 }
 
 module.exports = {
+  readOnboarding,
+  writeOnboarding,
   // Paths (shared by other modules)
   baseDir,
   cacheDir,

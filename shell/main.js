@@ -4289,6 +4289,7 @@ function sanitizeDockerManagerState(state) {
   }
 
   const outState = {
+    onboarding: ['new', 'local', 'complete'].includes(state?.onboarding) ? state.onboarding : null,
     versions,
     containers,
     retainedInstances,
@@ -5031,6 +5032,14 @@ ipcMain.handle('docker-manager:setInstanceDefaults', async (_event, body) => {
       models: isPlainObject(body.models) ? body.models : {}
     });
     return sanitizeDockerManagerState({ instanceDefaults: defaults }).instanceDefaults;
+  } catch (error) {
+    return dockerManager.toErrorResponse(error);
+  }
+});
+
+ipcMain.handle('docker-manager:beginLocalSetup', async () => {
+  try {
+    return await dockerManager.beginLocalSetup();
   } catch (error) {
     return dockerManager.toErrorResponse(error);
   }

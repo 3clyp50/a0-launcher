@@ -5,6 +5,7 @@ import {
   hasInstalledAgentZeroImage,
   installedTagOptions,
   normalizedRuntimeGate,
+  openRuntimeSetup,
   renderRuntimeGate,
   shouldShowRuntimeGate
 } from './runtime-gate.js';
@@ -233,10 +234,74 @@ function buttonByAction(document, action) {
   return buttons(document).find((button) => button.dataset.runtimeAction === action) || null;
 }
 
+test('fresh onboarding offers only local and remote choices before any setup', async () => {
+  for (const platform of ['linux', 'darwin', 'win32']) {
+    for (const dockerAvailable of [false, true]) {
+      const document = installDom();
+      const state = { stateLoaded: true, onboarding: 'new', dockerAvailable,
+        runtime: { platform, state: dockerAvailable ? 'ready' : 'not_provisioned', action: 'install', canProvision: true } };
+      let installs = 0;
+      const actions = {
+        provisionRuntime: () => { installs += 1; },
+        beginLocalSetup: async () => { state.onboarding = 'local'; renderRuntimeGate(state, actions); }
+      };
+      renderRuntimeGate(state, actions);
+      assert.equal(document.querySelector('.dm-dialog-title').textContent, 'Welcome to Agent Zero');
+      assert.ok(buttonByAction(document, 'add_remote_instance'));
+      assert.ok(buttonByAction(document, 'choose_local'));
+      assert.equal(document.querySelector('.dm-runtime-details'), null);
+      assert.equal(document.querySelector('.dm-dialog-footer'), null);
+      assert.equal(installs, 0);
+      buttonByAction(document, 'choose_local').dispatchEvent(new MiniEvent('click'));
+      await Promise.resolve();
+      assert.equal(installs, 0);
+      assert.equal(buttonByAction(document, 'add_remote_instance'), null);
+      if (dockerAvailable) assert.ok(buttonByText(document, 'Download Agent Zero'));
+      else assert.equal(document.querySelector('.dm-runtime-details').open, true);
+      renderRuntimeGate(state, actions);
+      assert.equal(buttonByAction(document, 'add_remote_instance'), null);
+    }
+  }
+});
+
+test('completed and unknown onboarding never opens automatically, including stale progress', () => {
+  for (const onboarding of ['complete', null, undefined]) {
+    for (const status of [undefined, 'running', 'completed', 'failed']) {
+      const document = installDom();
+      const state = { stateLoaded: true, onboarding, dockerAvailable: false,
+        runtime: { platform: 'linux', state: 'engine_stopped' },
+        progress: status ? { type: 'runtime_setup', opId: `stale-${status}`, status, phase: 'ready' } : null };
+      assert.equal(renderRuntimeGate(state), false);
+      assert.equal(document.getElementById('runtimeSetupDialog'), null);
+      assert.equal(document.querySelector('.dm-page').inert, false);
+    }
+  }
+});
+
+test('returning users can explicitly open and close runtime recovery without welcome or image prompts', () => {
+  const document = installDom();
+  const state = { stateLoaded: true, onboarding: 'complete', dockerAvailable: false,
+    runtime: { platform: 'linux', state: 'engine_stopped', action: 'start', canProvision: true } };
+  window.__dmLastState = state;
+  openRuntimeSetup(state);
+  assert.equal(buttonByAction(document, 'choose_local'), null);
+  assert.equal(buttonByAction(document, 'add_remote_instance'), null);
+  assert.equal(document.querySelector('.dm-runtime-details').open, true);
+  state.dockerAvailable = true;
+  state.runtime.state = 'ready';
+  renderRuntimeGate(state);
+  assert.equal(buttonByText(document, 'Download Agent Zero'), null);
+  buttonByText(document, 'Continue').dispatchEvent(new MiniEvent('click'));
+  state.dockerAvailable = false;
+  state.runtime.state = 'engine_stopped';
+  assert.equal(renderRuntimeGate(state), false);
+});
+
 test('no Docker on Linux shows blocking setup action', () => {
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: false,
     runtime: {
       platform: 'linux',
@@ -254,7 +319,7 @@ test('no Docker on Linux shows blocking setup action', () => {
   let setupCount = 0;
   assert.equal(renderRuntimeGate(state, { provisionRuntime: () => { setupCount += 1; } }), true);
   assert.ok(document.getElementById('runtimeSetupDialog'));
-  assert.ok(buttonByAction(document, 'add_remote_instance'));
+  assert.equal(buttonByAction(document, 'add_remote_instance'), null);
   assert.equal(document.querySelector('.dm-page').inert, true);
   buttonByText(document, 'Continue').dispatchEvent(new MiniEvent('click'));
   assert.equal(setupCount, 1);
@@ -263,7 +328,8 @@ test('no Docker on Linux shows blocking setup action', () => {
 test('runtime progress keeps the modal and expanded checklist in place', () => {
   const document = installDom();
   const state = {
-    stateLoaded: true, dockerAvailable: false,
+    stateLoaded: true,
+    onboarding: 'local', dockerAvailable: false,
     runtime: { platform: 'darwin', mode: 'colima', state: 'not_provisioned' },
     progress: { type: 'runtime_setup', opId: 'op-stable-setup', status: 'running',
       detail: 'Starting the runtime', phase: 'start_runtime' }
@@ -293,6 +359,7 @@ test('remote Instance dialog suppresses a runtime-gate refresh', () => {
 
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: false,
     runtime: { platform: 'win32', mode: 'docker_desktop', state: 'engine_stopped' }
   };
@@ -305,6 +372,7 @@ test('saved remote instances bypass local runtime setup', () => {
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: false,
     runtime: {
       platform: 'linux',
@@ -328,6 +396,7 @@ test('Docker Desktop installed but stopped starts Docker Desktop instead of open
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: false,
     runtime: {
       platform: 'darwin',
@@ -360,6 +429,7 @@ test('runtime setup progress keeps setup disabled and shows an indeterminate bar
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: false,
     runtime: { platform: 'linux', state: 'not_provisioned', action: 'install', canProvision: true },
     progress: {
@@ -398,6 +468,7 @@ test('runtime setup progress estimates remaining minutes from setup phases', () 
     const document = installDom();
     const state = {
       stateLoaded: true,
+    onboarding: 'local',
       dockerAvailable: false,
       runtime: { platform: 'linux', state: 'not_provisioned', action: 'install', canProvision: true },
       progress: {
@@ -425,6 +496,7 @@ test('completed runtime setup prompts for image download only when no image is i
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: true,
     runtime: { platform: 'linux', state: 'ready' },
     versions: [
@@ -456,7 +528,7 @@ test('completed runtime setup prompts for image download only when no image is i
   assert.equal(document.querySelector('.dm-runtime-install-text')?.textContent, 'Download Agent Zero to create your first Instance.');
   assert.equal(document.querySelector('#runtimeSetupTag')?.value, 'latest');
   assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
-  assert.ok(buttonByAction(document, 'add_remote_instance'));
+  assert.equal(buttonByAction(document, 'add_remote_instance'), null);
   assert.equal(buttonByText(document, 'Refresh'), null);
   assert.equal(document.querySelector('.dm-runtime-steps'), null);
 
@@ -471,6 +543,7 @@ test('completed runtime setup runs an already-installed image when no local inst
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: true,
     runtime: { platform: 'win32', state: 'ready' },
     versions: [
@@ -508,10 +581,11 @@ test('completed runtime setup runs an already-installed image when no local inst
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
 });
 
-test('completed runtime setup only continues when an instance already exists', () => {
+test('completed runtime setup does not reopen onboarding when an instance already exists', () => {
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: true,
     runtime: { platform: 'win32', state: 'ready' },
     versions: [
@@ -543,7 +617,7 @@ test('completed runtime setup only continues when an instance already exists', (
   });
 
   assert.equal(document.querySelector('#runtimeSetupTag'), null);
-  buttonByText(document, 'Continue').dispatchEvent(new MiniEvent('click'));
+  assert.equal(buttonByText(document, 'Continue'), null);
   assert.equal(ran, false);
   assert.equal(installed, false);
   assert.equal(document.getElementById('runtimeSetupDialog'), null);
@@ -553,6 +627,7 @@ test('runtime selector is hidden unless multiple verified daemons exist', () => 
   let document = installDom();
   const base = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: true,
     versions: [{ id: 'v1.20' }],
     progress: {
@@ -589,6 +664,7 @@ test('runtime selector appears for multiple daemons and submits before image ins
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: true,
     runtime: {
       platform: 'darwin',
@@ -644,6 +720,7 @@ test('stopped Docker Desktop is a startable runtime choice', async () => {
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: true,
     runtime: {
       platform: 'linux',
@@ -736,13 +813,14 @@ test('stopped Docker Desktop is a startable runtime choice', async () => {
   window.__dmLastState = failedWithoutDesktop;
   renderRuntimeGate(failedWithoutDesktop, {});
   assert.equal(document.querySelector('#runtimeEndpointChoice'), null);
-  assert.ok(buttonByText(document, 'Run Agent Zero'));
+  assert.equal(document.getElementById('runtimeSetupDialog'), null);
 });
 
 test('first launch asks once when multiple runtimes are already reachable', () => {
   let document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: true,
     runtime: {
       platform: 'darwin',
@@ -765,6 +843,7 @@ test('first launch asks once when multiple runtimes are already reachable', () =
   document = installDom();
   const preferred = {
     ...state,
+    onboarding: 'complete',
     environment: {
       ...state.environment,
       runtimeCandidates: state.environment.runtimeCandidates.map((candidate, index) => ({
@@ -781,6 +860,7 @@ test('runtime aliases and unidentified endpoints do not trigger onboarding', () 
   const document = installDom();
   const state = {
     stateLoaded: true,
+    onboarding: 'complete',
     dockerAvailable: true,
     runtime: { platform: 'win32', state: 'ready' },
     environment: {
@@ -801,6 +881,7 @@ test('manual and relogin states stay blocked with recovery actions', () => {
   let document = installDom();
   const manual = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: false,
     runtime: {
       platform: 'linux',
@@ -818,6 +899,7 @@ test('manual and relogin states stay blocked with recovery actions', () => {
   document = installDom();
   const relogin = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: false,
     runtime: {
       platform: 'linux',
@@ -837,6 +919,7 @@ test('ready state closes the modal and runtime gate cannot be dismissed with Esc
   const document = installDom();
   const blocked = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: false,
     runtime: { platform: 'linux', state: 'not_provisioned', action: 'install', canProvision: true }
   };
@@ -854,6 +937,7 @@ test('ready state closes the modal and runtime gate cannot be dismissed with Esc
 
   const ready = {
     stateLoaded: true,
+    onboarding: 'complete',
     dockerAvailable: true,
     runtime: { platform: 'linux', state: 'ready' }
   };
@@ -866,6 +950,7 @@ test('reachable Docker suppresses stale non-ready runtime assessments', () => {
   const document = installDom();
   const staleRuntime = {
     stateLoaded: true,
+    onboarding: 'local',
     dockerAvailable: true,
     runtime: {
       platform: 'win32',

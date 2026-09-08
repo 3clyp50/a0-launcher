@@ -90,6 +90,9 @@ This scope owns:
   Docker Desktop is installed but its socket is not reachable, report a
   `docker_desktop` `engine_stopped` state so the product can ask the user to
   start it instead of offering a fresh download/setup path.
+- A missing macOS Colima runtime uses the same neutral initial setup description
+  as Windows: `Finish local Agent Zero runtime Setup.` Active progress continues
+  to describe its specific phase; Linux keeps its Docker Engine description.
 - Linux automatic provisioning uses the host package manager and starts native
   Docker Engine; it must not manage container CPU, memory, or disk sizing.
   Before native setup, recognize an installed stopped Docker Desktop through

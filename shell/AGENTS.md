@@ -384,6 +384,10 @@ This scope owns:
   Manager intent. Do not expose raw Docker log commands or shell execution.
 - Error responses should use `dockerManager.toErrorResponse()` so renderer code
   sees a stable `{ code, message }` shape.
+- The no-argument `beginLocalSetup` IPC saves local onboarding intent without
+  installing a runtime. Sanitized state exposes only `new`, `local`, `complete`,
+  or null for unknown onboarding; completion belongs to Docker Manager state,
+  independently of the legacy Host access onboarding field.
 - The launcher should not create a system tray/menu-bar status icon. Keep the
   normal app window plus platform Dock/taskbar entry as the only shell presence.
 

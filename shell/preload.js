@@ -228,6 +228,7 @@ contextBridge.exposeInMainWorld('dockerManagerAPI', {
     });
   },
   provisionRuntime: () => ipcRenderer.invoke('docker-manager:provisionRuntime'),
+  beginLocalSetup: () => ipcRenderer.invoke('docker-manager:beginLocalSetup'),
   selectRuntimeEndpoint: (id) => ipcRenderer.invoke('docker-manager:selectRuntimeEndpoint', {
     id: typeof id === 'string' ? id : ''
   }),

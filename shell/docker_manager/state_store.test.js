@@ -67,6 +67,55 @@ function settings(portPreferences, hostRoot) {
   };
 }
 
+test('onboarding persists local intent and completion across reloads and stale concurrent writes', async () => {
+  await stateStore.writeJson(stateStore.stateFile(), {});
+  assert.equal(await stateStore.readOnboarding(), 'new');
+  assert.equal(await stateStore.writeOnboarding('local'), 'local');
+  const stale = await stateStore.readJson(stateStore.stateFile(), {});
+  assert.equal(await stateStore.readOnboarding(), 'local');
+  assert.equal(await stateStore.readOnboarding({ containers: [{ containerId: 'first-instance' }] }), 'complete');
+  await Promise.all([
+    stateStore.writeJson(stateStore.stateFile(), { ...stale, portPreferences: { ui: 7777, ssh: 55022 } }),
+    stateStore.writeOnboarding('local')
+  ]);
+  delete require.cache[stateStorePath];
+  const reloaded = require('./state_store');
+  assert.equal(await reloaded.readOnboarding({ containers: [], remoteInstances: [] }), 'complete');
+  assert.equal((await reloaded.readJson(reloaded.stateFile(), {})).onboarding, 'complete');
+});
+
+test('onboarding recognizes remote and legacy Instance evidence without a running runtime', async () => {
+  const reset = (state) => fs.writeFileSync(stateStore.stateFile(), JSON.stringify(state));
+  for (const state of [
+    { remoteInstances: [{ id: 'remote-1', name: 'VPS', url: 'https://a0.example.com/' }] },
+    { localInstanceNames: { 'abcdef123456': 'My Agent Zero' } },
+    { hostAccess: { instances: { 'local:abcdef123456': { configured: true } } } }
+  ]) {
+    reset(state);
+    assert.equal(await stateStore.readOnboarding(), 'complete');
+    assert.equal((await stateStore.readJson(stateStore.stateFile(), {})).onboarding, 'complete');
+  }
+  reset({ hostAccess: { onboardingComplete: true }, runtimeEndpointPreference: { id: 'docker' } });
+  assert.equal(await stateStore.readOnboarding(), 'new');
+  reset({ runtimeSetupResume: { pending: true } });
+  assert.equal(await stateStore.readOnboarding(), 'local');
+  reset({});
+  await stateStore.writeRuntimeIdentityCache({ entries: { 'local:previous-instance': { runtimeSource: { branch: 'ready' } } } });
+  assert.equal(await stateStore.readOnboarding(), 'complete');
+  await stateStore.writeRuntimeIdentityCache({ entries: {} });
+  reset({});
+  const remote = await stateStore.writeRemoteInstance({ name: 'VPS', url: 'https://a0.example.com/' });
+  await stateStore.deleteRemoteInstance(remote.id);
+  assert.equal(await stateStore.readOnboarding(), 'complete');
+  reset({});
+});
+
+test('unreadable onboarding state is an error, never a new-install signal', async () => {
+  fs.writeFileSync(stateStore.stateFile(), '{broken');
+  await assert.rejects(stateStore.readOnboarding());
+  fs.writeFileSync(stateStore.stateFile(), '{}');
+});
+
 test('Settings write preserves the previous port pair when duplicate ports are rejected', async () => {
   const first = await stateStore.writeSettings(settings({ ui: 7777, ssh: 55022 }, '/tmp/first'));
   assert.deepEqual(first.saved, {

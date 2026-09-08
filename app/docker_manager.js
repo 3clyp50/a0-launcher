@@ -6,7 +6,7 @@ import {
 } from "./components/docker-manager/instance-defaults.js";
 import { renderOperationDialog } from "./components/docker-manager/operation-modal/operation-modal.js";
 import { progressMetaText } from "./components/docker-manager/progress-eta.js";
-import { renderRuntimeGate } from "./components/docker-manager/runtime-gate/runtime-gate.js";
+import { openRuntimeSetup, renderRuntimeGate } from "./components/docker-manager/runtime-gate/runtime-gate.js";
 import { openHostAccessDialog } from "./components/docker-manager/host-access-dialog.js";
 
 function isErrorResponse(obj) {
@@ -218,6 +218,7 @@ function snapshot() {
   return {
     loading: !!store.loading,
     stateLoaded: !!store.stateLoaded,
+    onboarding: store.onboarding,
     banner: store.banner || { type: "", message: "" },
     meta: store.meta || { appVersion: "", contentVersion: "" },
     dockerAvailable: !!store.dockerAvailable,
@@ -473,6 +474,13 @@ function renderBackgroundProgressToast(progress = null) {
   }
 }
 
+function applyOnboarding(state) {
+  if (store.onboarding === "complete" || (store.onboarding === "local" && state?.onboarding === "new")) return;
+  if (["new", "local", "complete"].includes(state?.onboarding)) {
+    store.onboarding = state.onboarding;
+  }
+}
+
 function emitState() {
   const next = snapshot();
   window.__dmLastState = next;
@@ -588,6 +596,8 @@ async function refresh(options = {}) {
       stateRequest
     ]);
 
+    applyOnboarding(inventory);
+    applyOnboarding(state);
     if (isErrorResponse(inventory)) {
       store.error = inventory.message;
       store.dockerAvailable = false;
@@ -843,6 +853,22 @@ async function openDockerDownload(url = "") {
     }
   }
   window.open(targetUrl, "_blank");
+}
+
+async function beginLocalSetup() {
+  try {
+    const result = await window.dockerManagerAPI?.beginLocalSetup?.();
+    if (!result || isErrorResponse(result)) {
+      setBanner("error", result?.message || "Unable to save setup choice.");
+      return false;
+    }
+    applyOnboarding(result);
+    emitState();
+    return true;
+  } catch (error) {
+    setBanner("error", error?.message || "Unable to save setup choice.");
+    return false;
+  }
 }
 
 async function provisionRuntime() {
@@ -1992,6 +2018,8 @@ window.dockerManagerActions = {
   pruneVolumes,
   openDockerDownload,
   provisionRuntime,
+  beginLocalSetup,
+  openRuntimeSetup: () => openRuntimeSetup(snapshot(), window.dockerManagerActions),
   selectRuntimeEndpoint,
   installOrSync,
   runAfterPull,
@@ -2091,6 +2119,7 @@ function initSubscriptions() {
   if (typeof api.onStateChange === "function") {
     api.onStateChange((state) => {
       if (!isErrorResponse(state)) {
+        applyOnboarding(state);
         store.stateLoaded = true;
         store.uiUrl = state?.uiUrl || "";
         store.versions = Array.isArray(state?.versions) ? state.versions : [];

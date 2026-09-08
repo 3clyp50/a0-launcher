@@ -352,7 +352,7 @@ test('install availability check stays compact before image pull starts', () => 
   assert.equal(buttonByText(document, 'Download in background'), null);
 });
 
-test('first image pull keeps progress visible without separate launch choices', () => {
+test('first image pull offers background progress without separate launch choices', () => {
   const document = installDom();
   const state = {
     containers: [],
@@ -375,11 +375,31 @@ test('first image pull keeps progress visible without separate launch choices', 
   assert.ok(document.querySelector('.dm-setup-showcase'));
   assert.equal(document.querySelector('.dm-operation-dialog').classList.contains('has-first-instance-setup'), false);
   assert.ok(document.querySelector('.dm-operation-dialog').classList.contains('has-setup-showcase'));
-  assert.equal(buttonByText(document, 'Download in background'), null);
+  assert.ok(buttonByText(document, 'Download in background'));
   assert.ok(buttonByText(document, 'Cancel download'));
   assert.equal(buttonByText(document, 'Skip'), null);
   assert.equal(document.getElementById('firstSetupRunInstance'), null);
   assert.equal(document.getElementById('firstSetupStorageMode'), null);
+});
+
+test('first download can stay in the background through extraction and still surface failure', () => {
+  const document = installDom();
+  let canceled = false;
+  let backgrounded = '';
+  const actions = { cancelOperation: () => { canceled = true; }, backgroundOperation: (id) => { backgrounded = id; } };
+  const state = { containers: [], progress: { opId: 'first-background', type: 'install',
+    status: 'running', phase: 'Downloading', downloadProgress: 40, progress: 40, canCancel: true } };
+  renderOperationDialog(state, actions);
+  buttonByText(document, 'Download in background').dispatchEvent(new MiniEvent('click'));
+  assert.equal(backgrounded, 'first-background');
+  assert.equal(canceled, false);
+  state.progress = { ...state.progress, phase: 'Extracting', downloadProgress: 100, extractProgress: 60, progress: 60 };
+  assert.equal(normalizedOperationDialog(state).primary?.kind, 'background');
+  assert.equal(renderOperationDialog(state, actions), false);
+  assert.equal(document.querySelector('.dm-page').inert, false);
+  state.progress = { ...state.progress, status: 'failed', error: 'Extraction failed' };
+  assert.equal(renderOperationDialog(state, actions), true);
+  assert.equal(document.querySelector('.dm-operation-phase').textContent, 'Extraction failed');
 });
 
 test('completed first image pull does not open a separate launch wizard', () => {

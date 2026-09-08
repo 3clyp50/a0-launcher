@@ -1371,6 +1371,7 @@ async function buildUnavailableState(runtime) {
   const empty = emptyDerivedState(runtime);
   return {
     ...empty,
+    onboarding: await stateStore.readOnboarding({ remoteInstances }),
     retentionPolicy,
     portPreferences,
     storagePreferences,
@@ -2651,6 +2652,7 @@ async function buildDerivedState(options = {}) {
 
   return {
     versions: releaseEntries,
+    onboarding: await stateStore.readOnboarding({ containers, remoteInstances }),
     containers,
     retainedInstances,
     remoteInstances: remoteInstancesWithHealth,
@@ -4361,6 +4363,12 @@ async function rememberStartedRuntime(endpoint = null, options = {}) {
   }
 }
 
+async function beginLocalSetup() {
+  const onboarding = await stateStore.writeOnboarding('local');
+  publishCachedState({ onboarding });
+  return { onboarding };
+}
+
 async function provisionRuntime(options = {}) {
   requireNoRunningOperation();
   const opId = beginOperation('runtime_setup', null);
@@ -4497,6 +4505,7 @@ async function resumeRuntimeSetupIfPending() {
 
 async function addRemoteInstance(remoteInstance) {
   const saved = await stateStore.writeRemoteInstance(remoteInstance);
+  publishCachedState({ onboarding: 'complete' });
   patchCachedRemoteInstance(saved.id, saved, { append: true });
   return saved;
 }
@@ -6275,6 +6284,7 @@ async function getDockerInventory() {
 
   return {
     dockerAvailable,
+    onboarding: await stateStore.readOnboarding({ containers, remoteInstances }),
     environment: env || null,
     runtime,
     runtimeDiagnostics,
@@ -6427,6 +6437,7 @@ module.exports = {
   setSettings,
   setInstanceHostAccess,
   selectRuntimeEndpoint,
+  beginLocalSetup,
   provisionRuntime,
   resumeRuntimeSetupIfPending,
   addRemoteInstance,

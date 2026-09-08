@@ -1370,6 +1370,11 @@ async function openLogsPanel(c) {
 
 function bindActions() {
   bindCardMenuDismissal();
+  const runtimeBtn = byId("runtimeSetupBtn");
+  if (runtimeBtn && !runtimeBtn.dataset.bound) {
+    runtimeBtn.dataset.bound = "1";
+    runtimeBtn.addEventListener("click", () => window.dockerManagerActions?.openRuntimeSetup?.());
+  }
   const createBtn = byId("createLocalInstanceBtn");
   if (createBtn && !createBtn.dataset.bound) {
     createBtn.dataset.bound = "1";
@@ -1807,6 +1812,11 @@ function render(state) {
   const list = byId("localList");
   const subtitle = byId("sessionsSubtitle");
   if (!list) return;
+  const runtimeBtn = byId("runtimeSetupBtn");
+  if (runtimeBtn) {
+    runtimeBtn.hidden = !state?.stateLoaded || state?.dockerAvailable || state?.runtime?.state === "ready";
+    runtimeBtn.disabled = isBlockingOperationRunning(state);
+  }
   const renderKey = localCardsRenderKey(state);
   if (renderKey === lastLocalRenderKey) return;
   lastLocalRenderKey = renderKey;

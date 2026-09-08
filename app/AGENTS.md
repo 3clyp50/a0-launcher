@@ -59,13 +59,15 @@ This scope owns:
   Manager action. Invocation text, foreground context, screenshots, target
   tokens, command-palette queries, model output, credentials, and child state
   stay in the shell/gateway.
-- Runtime setup state is part of the canonical renderer snapshot. If the
-  runtime is not ready after initial state loads and no saved remote Instances
-  exist, the renderer must show the startup runtime modal with a first-step
-  affordance to add a remote Instance. Saved remote Instances must keep the
-  launcher usable without local Docker setup. A state refresh must not recreate
-  the runtime modal above an open remote-Instance dialog. Docker mechanics stay
-  in the shell.
+- Runtime setup and persisted `onboarding` (`new`, `local`, `complete`) belong
+  to the canonical renderer snapshot. Unknown state must not trigger onboarding.
+  New users first choose remote or local; the named `beginLocalSetup` intent
+  saves local choice before opening its expanded runtime checklist. Later local
+  steps must not repeat the remote offer. Completed onboarding must never reopen
+  automatically, including on unavailable Docker or stale state/progress events.
+  Keep explicit Runtime Setup recovery in Instances. State refreshes must not
+  recreate the runtime modal above Create/Add Instance dialogs or after the
+  local flow hands off to creation/download. Docker mechanics stay in the shell.
 - When first launch finds multiple distinct reachable local Docker daemons and
   no saved preference, show the existing compact runtime selector once before
   continuing. Multiple endpoint aliases for one daemon must remain one choice.
@@ -87,9 +89,9 @@ This scope owns:
   progress and setup showcase content instead of adding a second launch form.
 - Long-running non-runtime Docker operations should use the same centered modal
   affordance rather than a top-of-page status strip. Keep the header quiet once
-  the modal flow exists. Post-onboarding image downloads may be moved into a
-  background progress toast by explicit user action; first-run image downloads
-  must keep visible progress.
+  the modal flow exists. All image downloads and extraction, including the
+  first pull, may move into the existing background progress toast by explicit
+  user action. Hiding progress must preserve failure recovery and run-after-pull.
 - Image-download modals and background toasts use the same phase percentage and
   phase timing metadata for their progress and ETA.
 - Once a long-running operation returns an operation ID, let progress and state

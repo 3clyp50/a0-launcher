@@ -535,7 +535,7 @@ function upsertRemoteInstance(remote = null) {
   const existing = current.find((item) => item?.id === id) || {};
   store.remoteInstances = [
     ...current.filter((item) => item?.id !== id),
-    { ...existing, ...remote }
+    { ...existing, ...remote, allowUntrustedCertificate: remote.allowUntrustedCertificate === true }
   ];
 }
 

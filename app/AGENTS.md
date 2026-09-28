@@ -35,6 +35,8 @@ This scope owns:
   returned state delta to the canonical snapshot instead of forcing a Docker,
   GitHub, and registry refresh. Keep full refreshes for explicit refresh intent
   and operations that actually change Docker inventory.
+  Full saved remote Instance records replace the cached certificate-trust
+  boolean; an omitted flag means disabled, not an unchanged previous choice.
 - User navigation to data-heavy tabs and post-operation reconciliation should
   request a non-forced refresh: rebuild live local Docker state while honoring
   normal release and registry caches. Initial loading uses the same fast path,

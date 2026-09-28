@@ -2,7 +2,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const { after, test } = require('node:test');
+const { trustedHostsFromRemoteInstances } = require('../remote_certificate_trust');
 
 const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'a0-launcher-certificate-trust-'));
 const electronPath = require.resolve('electron');
@@ -78,4 +80,41 @@ test('an edit cannot move an Instance onto the URL of another one', async () => 
   const again = await stateStore.writeRemoteInstance({ url: 'https://first.example.com/', name: 'First again' });
   assert.equal(again.id, first.id);
   assert.equal((await saved(first.id)).name, 'First again');
+});
+
+test('disabling trust clears shell and renderer caches without clearing credential metadata', async () => {
+  const remote = await stateStore.writeRemoteInstance({
+    url: 'https://cached.example.com/', allowUntrustedCertificate: true
+  });
+  const credentialMetadata = { saved: true, username: 'review-user' };
+  const current = { ...remote, launcherCredentials: credentialMetadata };
+  const published = [];
+  const context = vm.createContext({
+    stateStore,
+    _cachedState: { remoteInstances: [current] },
+    _refreshRequestSequence: 0,
+    instanceHealthCache: new Map(),
+    enrichRemoteInstancesWithHealth: value => value,
+    events: { emit: (_name, state) => published.push(state) },
+    store: { remoteInstances: [current] }
+  });
+  const manager = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, '../../app/docker_manager.js'), 'utf8');
+  vm.runInContext(
+    manager.slice(manager.indexOf('function publishCachedState('), manager.indexOf('function backgroundOperationsSnapshot('))
+    + manager.slice(manager.indexOf('async function updateRemoteInstance('), manager.indexOf('async function setRemoteInstanceCredentials('))
+    + renderer.slice(renderer.indexOf('function upsertRemoteInstance('), renderer.indexOf('function patchLocalInstance(')),
+    context
+  );
+  for (const enabled of [false, true, false]) {
+    const updated = await context.updateRemoteInstance(remote.id, { allowUntrustedCertificate: enabled });
+    context.upsertRemoteInstance(updated);
+    context.patchCachedRemoteInstance(remote.id, { launcherCredentials: credentialMetadata });
+    for (const record of [context._cachedState.remoteInstances[0], context.store.remoteInstances[0]]) {
+      assert.equal(record.allowUntrustedCertificate, enabled);
+      assert.deepEqual(record.launcherCredentials, credentialMetadata);
+    }
+    assert.equal(trustedHostsFromRemoteInstances(published.at(-1).remoteInstances).has('cached.example.com'), enabled);
+  }
+  assert.equal(Object.hasOwn(await saved(remote.id), 'allowUntrustedCertificate'), false);
 });

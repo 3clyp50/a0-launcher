@@ -186,9 +186,11 @@ This scope owns:
   optional saved `color` and `icon` fields use the same bounded choices as local
   Instance appearance overrides. The optional saved `allowUntrustedCertificate`
   flag is stored only when it is exactly `true`, survives rename and appearance
-  edits, and is removed with the remote Instance record. Optional saved remote
-  Instance credentials are keyed by remote Instance id and removed when that
-  remote Instance is deleted.
+  edits, and is removed with the remote Instance record. Full saved remote
+  record updates must replace the cached trust boolean even when the persisted
+  record omits it; credential-only patches preserve the current trust choice.
+  Optional saved remote Instance credentials are keyed by remote Instance id
+  and removed when that remote Instance is deleted.
   Every published state, including the one built while the Docker runtime is
   unavailable, carries the saved remote Instance credential metadata (saved
   flag, username, time; never the password).

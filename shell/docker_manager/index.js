@@ -1983,6 +1983,10 @@ function patchCachedLocalInstance(containerId, patch = {}) {
 
 function patchCachedRemoteInstance(instanceId, patch = {}, options = {}) {
   if (!Array.isArray(_cachedState?.remoteInstances)) return;
+  // Full saved records omit disabled trust; credential-only patches preserve it.
+  if (Object.hasOwn(patch, 'url')) {
+    patch = { ...patch, allowUntrustedCertificate: patch.allowUntrustedCertificate === true };
+  }
   let found = false;
   const remoteInstances = _cachedState.remoteInstances.map((remote) => {
     if (remote?.id !== instanceId) return remote;

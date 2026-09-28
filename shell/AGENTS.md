@@ -150,7 +150,12 @@ This scope owns:
   tab, and an already-open tab may repeat that recovery when a restart sends
   it back to `/login`; remote credential POSTs must stay on `https:` URLs
   unless the target is local loopback. Do not put credentials in URLs or expose
-  decrypted passwords to the renderer. After a successful same-origin manual
+  decrypted passwords to the renderer. Changing a saved remote URL closes its
+  attached or detached Instance surfaces through the existing tab-close path,
+  stopping their gateway leases before Configure can save new credentials.
+  Remote Web UI, CLI, and gateway credential reads recheck the saved origin;
+  destroyed views and closed tabs cannot resume login or gateway startup.
+  After a successful same-origin manual
   `/login` redirect, an eligible Instance tab with no saved credentials may
   show one branded modal child window with `Save credentials` / `Not now`.
   Observe the form only in the shell, never pass credential values into the

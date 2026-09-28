@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const { test } = require('node:test');
 
 const {
@@ -580,4 +581,122 @@ test('tab shortcuts follow visible order, wrap, and respect platform modifiers',
   assert.equal(instanceTabShortcutTarget(key('Tab', { control: true }), new Map(), '', 'linux'), null);
   const many = new Map(Array.from({ length: 10 }, (_, i) => [`tab-${i}`, { id: `tab-${i}` }]));
   assert.equal(instanceTabShortcutTarget(key('9', { control: true }), many, '', 'linux'), 'tab-7');
+});
+
+test('remote URL edits close attached and detached surfaces and their gateway leases after saving', async () => {
+  let remote = { id: 'remote-1', url: 'https://old.example.com/' };
+  const closed = [];
+  const stopped = [];
+  const tabs = new Map(['attached', 'detached', 'other'].map(id => [id, {
+    id, kind: 'remote', instanceId: id === 'other' ? 'remote-2' : remote.id,
+    detachedWindow: id === 'detached' ? { isDestroyed: () => false, close: () => closed.push('window') } : null,
+    view: { webContents: { isDestroyed: () => false, close: () => closed.push(id) } }
+  }]));
+  const handlers = new Map();
+  const context = vm.createContext({
+    ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
+    dockerManager: {
+      getRemoteInstance: async () => remote,
+      updateRemoteInstance: async (_id, patch) => {
+        if (patch.url === 'invalid') throw new Error('Invalid URL');
+        remote = { ...remote, ...patch };
+        return remote;
+      },
+      toErrorResponse: error => ({ error: error.message })
+    },
+    isPlainObject: value => value !== null && typeof value === 'object',
+    sanitizeDockerManagerState: value => value,
+    instanceTabs: tabs,
+    activeInstanceTabId: 'attached',
+    mainWindow: null,
+    hostGatewaySupervisor: { stop: id => stopped.push(id) },
+    hostGatewayLeaseKey: tab => tab.id,
+    firstEmbeddedInstanceTabId: () => 'other',
+    applyActiveInstanceTabBounds: () => {},
+    sendInstanceTabsEvent: () => {},
+    getInstanceTabsSnapshot: () => ({})
+  });
+  const source = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  vm.runInContext(
+    source.slice(source.indexOf('function destroyInstanceTab('), source.indexOf('function cleanupInstanceTabs('))
+    + source.slice(source.indexOf('function closeInstanceTab('), source.indexOf('function reloadInstanceTab('))
+    + source.slice(source.indexOf("ipcMain.handle('docker-manager:updateRemoteInstance'"),
+      source.indexOf("ipcMain.handle('docker-manager:certificateTrustRestartRequired'")), context
+  );
+  const update = patch => handlers.get('docker-manager:updateRemoteInstance')({}, { id: remote.id, ...patch });
+  await update({ name: 'Renamed', allowUntrustedCertificate: true });
+  assert.equal((await update({ url: 'invalid' })).error, 'Invalid URL');
+  assert.equal(tabs.size, 3);
+  const saved = await update({ url: 'https://new.example.com/' });
+  assert.equal(saved.url, 'https://new.example.com/');
+  assert.deepEqual([...tabs.keys()], ['other']);
+  assert.deepEqual(stopped, ['attached', 'detached']);
+  assert.deepEqual(closed, ['attached', 'window', 'detached']);
+});
+
+test('remote login rechecks the saved origin and view after awaiting credentials', async () => {
+  let url = 'https://old.example.com/';
+  let destroyed = false;
+  const credentials = { username: 'user', password: 'test-password' };
+  const requests = [];
+  const manager = {
+    getRemoteInstanceCredentials: async () => credentials,
+    getRemoteInstance: async () => ({ url })
+  };
+  const context = vm.createContext({
+    dockerManager: manager, webUiLoginRequestForTarget, isAllowedInstanceTabNavigationUrl, cliCredentialsAllowedForTarget,
+    credentialsErrorShouldBlockCli: () => true,
+    createTabTargetError: (code, message) => Object.assign(new Error(message), { code })
+  });
+  const source = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  vm.runInContext(source.slice(source.indexOf('async function remoteInstanceCredentialsForCli('),
+    source.indexOf('function openA0CliTerminalWindows(')), context);
+  const target = { kind: 'remote', instanceId: 'remote-1', url };
+  const wc = {
+    isDestroyed: () => destroyed,
+    session: { fetch: async (url, options) => { requests.push({ url, options }); return { status: 302 }; } }
+  };
+  assert.equal((await context.loginInstanceWebUiSession(target, wc)).succeeded, true);
+  let releaseCredentials;
+  manager.getRemoteInstanceCredentials = () => new Promise(resolve => { releaseCredentials = resolve; });
+  const pending = context.loginInstanceWebUiSession(target, wc);
+  url = 'https://new.example.com/';
+  releaseCredentials(credentials);
+  assert.equal((await pending).attempted, false);
+  manager.getRemoteInstanceCredentials = async () => credentials;
+  await assert.rejects(context.instanceCredentialsForCliTarget(target), { code: 'INSTANCE_CHANGED' });
+  destroyed = true;
+  assert.equal((await context.loginInstanceWebUiSession({ ...target, url }, wc)).attempted, false);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, 'https://old.example.com/login');
+});
+
+test('a gateway cannot start after its tab closes while credentials are loading', async () => {
+  const tab = { id: 'tab', kind: 'remote', instanceId: 'remote-1' };
+  const tabs = new Map([[tab.id, tab]]);
+  let starts = 0;
+  const context = vm.createContext({
+    instanceTabs: tabs,
+    hostAccessIdentity: () => ({ kind: 'remote', id: 'remote-1' }),
+    dockerManager: { getHostAccessSettings: async () => ({}) },
+    resolveInstanceHostAccess: () => ({ configured: true }),
+    pendingComputerUseSetup: new Set(),
+    resolveTabHostWorkspace: async () => ({ path: '/test-workspace' }),
+    ensureA0CliInstalled: async () => {},
+    findA0CliBinary: () => '/test-cli',
+    gatewayHostForTab: () => 'https://old.example.com/',
+    coreSupportsLauncherGateway: async () => true,
+    instanceCredentialsForCliTarget: async () => { tabs.delete(tab.id); return {}; },
+    gatewayIdForTab: () => 'gateway',
+    hostGatewayLeaseKey: () => tab.id,
+    a0CliLaunchEnv: () => ({}),
+    os: { hostname: () => 'test-host' },
+    hostGatewaySupervisor: { start: () => { starts += 1; } },
+    setTabHostAccess: () => {}
+  });
+  const source = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  vm.runInContext(source.slice(source.indexOf('async function startHostGatewayForTab('),
+    source.indexOf('async function restartHostGatewayForTab(')), context);
+  assert.equal(await context.startHostGatewayForTab(tab), null);
+  assert.equal(starts, 0);
 });

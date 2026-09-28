@@ -1977,6 +1977,7 @@ async function startHostGatewayForTab(tab, { force = false } = {}) {
     }), config);
     return null;
   }
+  if (!instanceTabs.has(tab.id)) return null;
   const launch = {
     cli,
     host,
@@ -3588,18 +3589,15 @@ async function remoteInstanceCredentialsForCli(instanceId) {
 
 async function instanceCredentialsForCliTarget(target) {
   if (!cliCredentialsAllowedForTarget(target)) return null;
-  if (target?.kind === 'remote') return await remoteInstanceCredentialsForCli(target.instanceId);
-  return await localInstanceCredentialsForCli(target?.containerId);
-}
-
-async function remoteInstanceCredentialsForWebUi(instanceId) {
-  const id = String(instanceId || '').trim();
-  if (!id) return null;
-  try {
-    return await dockerManager.getRemoteInstanceCredentials(id);
-  } catch {
-    return null;
+  if (target?.kind === 'remote') {
+    const credentials = await remoteInstanceCredentialsForCli(target.instanceId);
+    const remote = await dockerManager.getRemoteInstance(target.instanceId);
+    if (!isAllowedInstanceTabNavigationUrl({ kind: 'remote', url: remote.url }, target.url)) {
+      throw createTabTargetError('INSTANCE_CHANGED', 'This Instance URL changed. Open the Instance again.');
+    }
+    return credentials;
   }
+  return await localInstanceCredentialsForCli(target?.containerId);
 }
 
 async function loginInstanceWebUiSession(target, webContents) {
@@ -3609,14 +3607,11 @@ async function loginInstanceWebUiSession(target, webContents) {
 
   let credentials = null;
   try {
-    if (target?.kind === 'local') {
-      credentials = await localInstanceCredentialsForCli(target.containerId);
-    } else if (target?.kind === 'remote') {
-      credentials = await remoteInstanceCredentialsForWebUi(target.instanceId);
-    }
+    credentials = await instanceCredentialsForCliTarget(target);
   } catch {
     return { attempted: false };
   }
+  if (webContents.isDestroyed?.()) return { attempted: false };
   const request = webUiLoginRequestForTarget(target, credentials);
   if (!request) return { attempted: false };
 
@@ -5166,7 +5161,13 @@ ipcMain.handle('docker-manager:updateRemoteInstance', async (_event, body) => {
     if (typeof body.allowUntrustedCertificate === 'boolean') {
       patch.allowUntrustedCertificate = body.allowUntrustedCertificate;
     }
+    const previous = await dockerManager.getRemoteInstance(id);
     const saved = await dockerManager.updateRemoteInstance(id, patch);
+    if (saved.url !== previous.url) {
+      for (const tab of instanceTabs.values()) {
+        if (tab.kind === 'remote' && tab.instanceId === saved.id) closeInstanceTab(tab.id);
+      }
+    }
     const sanitized = sanitizeDockerManagerState({ remoteInstances: [saved] }).remoteInstances?.[0];
     return sanitized || dockerManager.toErrorResponse({ code: 'INVALID_REMOTE_INSTANCE', message: 'Invalid remote instance' });
   } catch (error) {

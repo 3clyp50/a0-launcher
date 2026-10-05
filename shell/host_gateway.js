@@ -437,12 +437,14 @@ class HostGatewaySupervisor {
     }
     if (event.type === 'error') {
       const code = String(event.code || 'GATEWAY_ERROR');
+      const stage = String(event.stage || '').trim();
       record.status = {
         ...record.status,
         state: gatewayErrorState(code),
         connected: false,
         code,
-        message: String(event.message || 'Host gateway failed.'),
+        message: String(event.message || '').trim()
+          || `Host gateway failed: ${code}${stage ? ` (${stage})` : ''}.`,
         retryable: event.fatal === true,
         suppressed: record.suppressed
       };

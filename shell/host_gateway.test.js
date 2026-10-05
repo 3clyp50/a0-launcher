@@ -371,6 +371,26 @@ test('contract failures remain actionable after the child exits', () => {
   assert.equal(statuses.at(-1).retryable, true);
 });
 
+test('empty gateway errors retain their code and stage after child exit', () => {
+  for (const [event, expected] of [
+    [{ code: 'WEBSOCKET_FAILED', stage: 'websocket', message: '' }, 'Host gateway failed: WEBSOCKET_FAILED (websocket).'],
+    [{ code: 'GATEWAY_FAILED', message: '  ' }, 'Host gateway failed: GATEWAY_FAILED.'],
+    [{}, 'Host gateway failed: GATEWAY_ERROR.'],
+    [{ code: 'WEBSOCKET_FAILED', stage: 'websocket', message: 'Handshake timed out.' }, 'Handshake timed out.']
+  ]) {
+    const child = fakeChild();
+    const supervisor = new HostGatewaySupervisor({ spawn: () => child });
+    supervisor.start('tab-1', launch());
+    child.stdout.write(`${JSON.stringify({ type: 'error', fatal: true, ...event })}\n`);
+    child.exitCode = 2;
+    child.emit('exit', 2, null);
+    const status = supervisor.statusFor('tab-1');
+    assert.equal(status.message, expected);
+    assert.equal(status.connected, false);
+    assert.equal(status.retryable, true);
+  }
+});
+
 test('Disconnect clears live metadata and suppresses the current lease until it is explicitly released', () => {
   const children = [fakeChild(), fakeChild()];
   let spawns = 0;

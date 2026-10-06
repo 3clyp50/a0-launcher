@@ -231,6 +231,14 @@ function actionForEntry(entry, state) {
 function actionsForEntry(entry, state) {
   if (entry.availability === "installing") return [];
 
+  if (state?.dockerAvailable === false && state?.runtime?.state !== "ready") {
+    return [{
+      label: "Runtime Setup",
+      className: "button",
+      handler: () => window.dockerManagerActions?.openRuntimeSetup?.()
+    }];
+  }
+
   if (entry.availability === "installed" || entry.availability === "update_available" || entry.differsFromPublished) {
     return [{
       label: "Run",
@@ -279,6 +287,8 @@ function installCardsRenderKey(state = {}, filter = currentInstallFilter) {
   return JSON.stringify({
     loading: !!state?.loading,
     stateLoaded: !!state?.stateLoaded,
+    dockerAvailable: state?.dockerAvailable,
+    runtimeState: state?.runtime?.state,
     filter: normalizeInstallFilter(filter),
     images: Array.isArray(state?.images) ? state.images : [],
     versions: Array.isArray(state?.versions) ? state.versions : []

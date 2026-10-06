@@ -23,6 +23,7 @@ This scope owns:
 - Docker access must go through `getDocker()` from `shell/docker_adapter`.
 - Backend image repo defaults to `agent0ai/agent-zero` and may be overridden by `A0_BACKEND_IMAGE_REPO`.
 - Backend GitHub repo defaults to `agent0ai/agent-zero` and may be overridden by `A0_BACKEND_GITHUB_REPO`.
+- Build the release catalog with the same GitHub and registry paths whether Docker is reachable or not; unavailable Docker supplies empty local image/container inventories. A first offline launch without a release cache still publishes local preferences and Remote Instances, with `offline: true` and no invented numbered releases.
 - Installable tags must be safe tags and limited to semver-like release tags (`vX.Y` or `vX.Y.Z`), channel tags (`latest`, `ready`, `testing`), or canonical local tags (`local`, `development`, `main`).
 - Activation can target installed local builds, but still must reject unsafe tag strings.
 - Once an image inventory is scoped to its repository, activation must identify the local image by tag, not Docker's presentation-specific image reference.

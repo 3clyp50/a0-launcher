@@ -1194,36 +1194,6 @@ async function enrichContainersWithWorkspaceStorage(docker, containers) {
   return out;
 }
 
-function emptyDerivedState(runtime = null) {
-  return {
-    versions: [],
-    retainedInstances: [],
-    remoteInstances: [],
-    retentionPolicy: { keepCount: 1 },
-    portPreferences: { ui: 8880, ssh: 55022 },
-    storagePreferences: { ...stateStore.DEFAULT_STORAGE_PREFERENCES },
-    instanceDefaults: {
-      models: {
-        Main: { provider: 'openrouter', model: '', apiKey: '' },
-        Utility: { provider: 'openrouter', model: '', apiKey: '' },
-        Embedding: { provider: 'huggingface', model: '', apiKey: '' }
-      }
-    },
-    a0Tag: { ...stateStore.DEFAULT_A0_TAG_SETTINGS },
-    hostAccess: null,
-    uiUrl: null,
-    lastSyncedAt: null,
-    offline: false,
-    storage: {
-      dockerRootDir: null,
-      freeBytes: null,
-      usedBytes: null,
-      estimateAfterUpdateBytes: null
-    },
-    runtime
-  };
-}
-
 function normalizeRuntimeAssessment(assessment, env = null) {
   let state = typeof assessment?.state === 'string' ? assessment.state : 'unsupported';
   const detail = typeof assessment?.detail === 'string' ? assessment.detail : 'Automatic Runtime Setup is not available.';
@@ -1356,45 +1326,6 @@ async function collectRuntimeDiagnostics(docker, env = null) {
   } catch (error) {
     return runtimeDiagnosticsFromError(error, env);
   }
-}
-
-async function buildUnavailableState(runtime) {
-  await ensureRuntimeIdentityCacheLoaded();
-  const [
-    retentionPolicy,
-    portPreferences,
-    storagePreferences,
-    instanceDefaults,
-    a0Tag,
-    hostAccess,
-    remoteInstances,
-    remoteInstanceCredentials
-  ] = await Promise.all([
-    stateStore.readRetentionPolicy().catch(() => ({ keepCount: 1 })),
-    stateStore.readPortPreferences().catch(() => ({ ui: 8880, ssh: 55022 })),
-    stateStore.readStoragePreferences().catch(() => ({ ...stateStore.DEFAULT_STORAGE_PREFERENCES })),
-    stateStore.readInstanceDefaults().catch(() => null),
-    stateStore.readA0TagSettings().catch(() => ({ ...stateStore.DEFAULT_A0_TAG_SETTINGS })),
-    stateStore.readHostAccessSettings().catch(() => null),
-    stateStore.readRemoteInstances().catch(() => []),
-    stateStore.readRemoteInstanceCredentialsMetadata().catch(() => ({}))
-  ]);
-  const empty = emptyDerivedState(runtime);
-  return {
-    ...empty,
-    onboarding: await stateStore.readOnboarding({ remoteInstances }),
-    retentionPolicy,
-    portPreferences,
-    storagePreferences,
-    instanceDefaults: instanceDefaults || empty.instanceDefaults,
-    a0Tag,
-    hostAccess,
-    // Without Docker the Launcher still serves Remote Instances, so their saved
-    // credential metadata must be here too, as in the Docker-backed state.
-    remoteInstances: enrichRemoteInstancesWithHealth(
-      applyRemoteInstanceCredentials(remoteInstances, remoteInstanceCredentials)
-    )
-  };
 }
 
 function bestEffortUiUrlFromInspect(inspect) {
@@ -2276,10 +2207,9 @@ async function buildDerivedState(options = {}) {
     runtimeDiagnostics = await collectRuntimeDiagnostics(docker, env);
     if (runtimeDiagnostics?.reachable) {
       runtime = runtimeReadyAssessment(env);
-    } else {
-      return await buildUnavailableState(runtime);
     }
   }
+  const dockerAvailable = !!(env?.dockerAvailable || runtimeDiagnostics?.reachable);
 
   const [retentionPolicy, portPreferences, storagePreferences, instanceDefaults, a0Tag, hostAccess, remoteInstances, remoteInstanceCredentials, localInstanceNames, localInstanceColors, localInstanceIcons, localInstanceCredentials, installabilityCache, releasesResult, localImages, rawContainers, freeBytes, remoteTags] =
     await Promise.all([
@@ -2296,9 +2226,12 @@ async function buildDerivedState(options = {}) {
       stateStore.readLocalInstanceIcons(),
       stateStore.readLocalInstanceCredentialsMetadata(),
       stateStore.readInstallabilityCache(),
-      releasesClient.listOfficialReleases({ githubRepo, forceRefresh }),
-      docker.listLocalImages(imageRepo),
-      docker.listContainers(imageRepo),
+      releasesClient.listOfficialReleases({ githubRepo, forceRefresh }).catch((error) => {
+        logDockerManagerError('inventory.listOfficialReleases', error);
+        return { releases: [], offline: true, lastSyncedAt: null };
+      }),
+      dockerAvailable ? docker.listLocalImages(imageRepo) : [],
+      dockerAvailable ? docker.listContainers(imageRepo) : [],
       bestEffortFreeBytesForUserData(),
       docker.listRemoteTags(imageRepo).catch(() => null)
     ]);

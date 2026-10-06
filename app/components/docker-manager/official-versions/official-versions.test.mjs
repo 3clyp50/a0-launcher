@@ -105,6 +105,17 @@ test('running operations still suppress version card actions', () => {
   assert.equal(action, null);
 });
 
+test('version cards offer Runtime Setup until Docker becomes reachable', () => {
+  const unavailable = { dockerAvailable: false, runtime: { state: 'not_provisioned' } };
+  for (const availability of ['available', 'installed']) {
+    assert.equal(actionForEntry({ tag: 'latest', availability }, unavailable).label, 'Runtime Setup');
+    assert.equal(actionForEntry({ tag: 'latest', availability }, { ...unavailable, dockerAvailable: true }).label,
+      availability === 'installed' ? 'Run' : 'Install');
+  }
+  assert.notEqual(installCardsRenderKey(unavailable), installCardsRenderKey({ ...unavailable, dockerAvailable: true }));
+  assert.equal(actionForEntry({ tag: 'latest', availability: 'available' }, { ...unavailable, runtime: { state: 'ready' } }).label, 'Install');
+});
+
 test('installed and differing version cards can expose remove control', () => {
   assert.equal(canRemoveEntry({ availability: 'installed' }), true);
   assert.equal(canRemoveEntry({ availability: 'update_available' }), true);

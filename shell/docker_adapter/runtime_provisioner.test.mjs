@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import net from 'node:net';
-import { mkdir as mkdirp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir as mkdirp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -288,7 +288,130 @@ test('WindowsWslRuntime provision requests UAC for WSL feature setup', async () 
     const elevated = calls.find((call) => call.cmd === 'powershell.exe' && /Start-Process/.test(String(call.args.at(-1))));
     assert.ok(elevated, 'expected an elevated PowerShell launcher');
     assert.match(String(elevated.args.at(-1)), /-Verb RunAs/);
-    assert.match(String(elevated.args.at(-1)), /-WindowStyle Hidden/);
+    assert.match(String(elevated.args.at(-1)), /-WindowStyle Normal/);
+    assert.match(String(elevated.args.at(-1)), /RemoteSigned/);
+    assert.doesNotMatch(String(elevated.args.at(-1)), /Bypass|-EncodedCommand|-Wait/);
+    assert.match(String(elevated.args.at(-1)), /WaitForExit/);
+    assert.ok(progress.includes('Enabling WSL features'));
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('Windows WSL feature failure includes elevated output and cleans up temporary files', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  const fakeRun = fakeWindowsCommandRunner();
+  let scriptPath;
+  const progress = [];
+  try {
+    const runtime = new WindowsWslRuntime({
+      managedDir,
+      isWindowsServer: false,
+      runCommand: async (cmd, args, options) => {
+        const launcher = String(args.at(-1));
+        if (cmd !== 'powershell.exe' || !launcher.includes('-Verb RunAs')) return fakeRun(cmd, args, options);
+        assert.deepEqual(progress, ['Requesting Windows approval']);
+        scriptPath = launcher.match(/'-File', '"(.+)"'\)/)[1].replace(/''/g, "'");
+        const script = await readFile(scriptPath, 'utf8');
+        assert.match(script, /Tee-Object -FilePath \$setupLog -Append/);
+        const logPath = script.match(/\$setupLog = '(.+)'/)[1].replace(/''/g, "'");
+        await writeFile(logPath, '\uFEFFWindows reported: WSL_E_INSTALL_PROCESS_FAILED.\r\n', 'utf16le');
+        options.onLine('A0_WSL_SETUP_STARTED');
+        return { code: 1, stdout: '', stderr: '' };
+      }
+    });
+    await assert.rejects(runtime.provision({ onProgress: (message) => progress.push(message) }), (error) => {
+      assert.equal(error.code, 'RUNTIME_PROVISION_FAILED');
+      assert.match(error.message, /WSL_E_INSTALL_PROCESS_FAILED/);
+      assert.equal(error.details.exitCode, 1);
+      return true;
+    });
+    assert.deepEqual(progress, ['Requesting Windows approval', 'Enabling WSL features']);
+    await assert.rejects(access(scriptPath), { code: 'ENOENT' });
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+test('Windows WSL timeout and declined approval remain actionable', async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
+  try {
+    for (const code of ['TIMEOUT', 'UAC_DECLINED']) {
+      const fakeRun = fakeWindowsCommandRunner();
+      const progress = [];
+      let setupDir;
+      const runtime = new WindowsWslRuntime({
+        managedDir,
+        isWindowsServer: false,
+        runCommand: async (cmd, args, options) => {
+          if (cmd === 'powershell.exe' && String(args.at(-1)).includes('-Verb RunAs')) {
+            setupDir = path.dirname(String(args.at(-1)).match(/'-File', '"(.+)"'\)/)[1].replace(/''/g, "'"));
+            if (code === 'TIMEOUT') options.onLine('A0_WSL_SETUP_STARTED');
+            throw Object.assign(new Error(code === 'TIMEOUT' ? 'powershell.exe timed out' : 'The operation was canceled by the user.'), { code });
+          }
+          return fakeRun(cmd, args, options);
+        }
+      });
+      await assert.rejects(runtime.provision({ onProgress: (message) => progress.push(message) }), (error) => {
+        assert.match(error.message, code === 'TIMEOUT' ? /timed out.*Windows setup window/s : /canceled by the user/);
+        return true;
+      });
+      assert.equal(progress.includes('Enabling WSL features'), code === 'TIMEOUT');
+      if (code === 'TIMEOUT') await access(setupDir);
+      else await assert.rejects(access(setupDir), { code: 'ENOENT' });
+      await rm(setupDir, { recursive: true, force: true });
+    }
+  } finally {
+    await rm(managedDir, { recursive: true, force: true });
+  }
+});
+
+const powershellBinary = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
+const powershellAvailable = await run(powershellBinary, ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.ToString()'], { timeoutMs: 5000 })
+  .then((result) => result.code === 0, () => false);
+
+test('generated WSL setup scripts propagate native PowerShell exit codes and output', { skip: !powershellAvailable }, async () => {
+  const managedDir = await mkdtemp(path.join(os.tmpdir(), "a0-runtime user's space-"));
+  try {
+    for (const exitCode of [0, 7]) {
+      const fakeRun = fakeWindowsCommandRunner();
+      const progress = [];
+      const runtime = new WindowsWslRuntime({
+        managedDir,
+        isWindowsServer: false,
+        runCommand: async (cmd, args, options) => {
+          const launcher = String(args.at(-1));
+          if (cmd !== 'powershell.exe' || !launcher.includes('-Verb RunAs')) return fakeRun(cmd, args, options);
+          const scriptPath = launcher.match(/'-File', '"(.+)"'\)/)[1].replace(/''/g, "'");
+          const bootstrapPath = path.join(managedDir, 'bootstrap.ps1');
+          await writeFile(bootstrapPath, '\uFEFF' + [
+            `function global:wsl.exe { Write-Error 'WSL_TEST_STDERR_${exitCode}'; 'WSL_TEST_OUTPUT_${exitCode}'; $global:LASTEXITCODE = ${exitCode} }`,
+            `& '${scriptPath.replace(/'/g, "''")}'`,
+            'exit $LASTEXITCODE'
+          ].join('\n'), 'utf8');
+          const parent = [
+            'function Start-Process {',
+            '  param($FilePath, $ArgumentList, $Verb, $WindowStyle, [switch]$PassThru)',
+            `  Microsoft.PowerShell.Management\\Start-Process -FilePath '${powershellBinary}' -ArgumentList @('-NoProfile', '-File', '"${bootstrapPath.replace(/'/g, "''")}"') -PassThru`,
+            '}',
+            launcher
+          ].join('\n');
+          return run(powershellBinary, ['-NoProfile', '-NonInteractive', '-Command', parent], {
+            timeoutMs: 10000,
+            onLine: options.onLine
+          });
+        }
+      });
+      const operation = runtime.provision({ onProgress: (message) => progress.push(message) });
+      if (exitCode === 0) assert.equal((await operation).state, 'needs_followup');
+      else await assert.rejects(operation, (error) => {
+        assert.equal(error.details.exitCode, exitCode);
+        assert.match(error.message, /WSL_TEST_OUTPUT_7/);
+        assert.match(error.message, /WSL_TEST_STDERR_7/);
+        return true;
+      });
+      assert.deepEqual(progress, ['Requesting Windows approval', 'Enabling WSL features']);
+    }
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -1167,7 +1290,7 @@ function fakeWindowsCommandRunner({
 } = {}) {
   const present = new Set(binaries);
   let ubuntuRootRegistered = false;
-  return async (cmd, args) => {
+  return async (cmd, args, options = {}) => {
     calls.push({ cmd, args: Array.isArray(args) ? [...args] : args });
     if (cmd === 'where.exe') {
       const binary = args?.[0] || '';
@@ -1180,6 +1303,7 @@ function fakeWindowsCommandRunner({
     if (cmd === 'powershell.exe') {
       const script = String(args?.[args.length - 1] || '');
       if (/Start-Process/.test(script) && /-Verb RunAs/.test(script)) {
+        options.onLine?.('A0_WSL_SETUP_STARTED');
         return { code: elevatedExitCode, stdout: '', stderr: '' };
       }
       if (/Win32_OperatingSystem\)\.ProductType/.test(script)) {

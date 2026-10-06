@@ -460,7 +460,7 @@ test('runtime setup progress keeps setup disabled and shows an indeterminate bar
   assert.ok(steps.some((step) => step.classList.contains('is-running')));
 });
 
-test('runtime setup progress estimates remaining minutes from setup phases', () => {
+test('runtime setup does not estimate remaining time from checklist steps', () => {
   const originalNow = Date.now;
   Date.now = () => Date.parse('2026-06-16T12:04:00.000Z');
 
@@ -468,7 +468,7 @@ test('runtime setup progress estimates remaining minutes from setup phases', () 
     const document = installDom();
     const state = {
       stateLoaded: true,
-    onboarding: 'local',
+      onboarding: 'local',
       dockerAvailable: false,
       runtime: { platform: 'linux', state: 'not_provisioned', action: 'install', canProvision: true },
       progress: {
@@ -483,10 +483,10 @@ test('runtime setup progress estimates remaining minutes from setup phases', () 
     };
 
     const model = normalizedRuntimeGate(state);
-    assert.equal(model.progressMeta, '~6 min remaining');
+    assert.equal(model.progressMeta, '');
 
     renderRuntimeGate(state, {});
-    assert.equal(document.querySelector('.dm-progress-meta')?.textContent, '~6 min remaining');
+    assert.equal(document.querySelector('.dm-progress-meta')?.textContent, '');
   } finally {
     Date.now = originalNow;
   }

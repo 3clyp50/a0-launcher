@@ -14,22 +14,6 @@ function timestampMs(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function estimatedProgressFromSteps(steps = []) {
-  if (!Array.isArray(steps) || steps.length < 2) return null;
-  let doneCount = 0;
-  let activeIndex = -1;
-
-  steps.forEach((step, index) => {
-    const status = asText(step?.status);
-    if (status === "done") doneCount += 1;
-    if (activeIndex === -1 && ["running", "current"].includes(status)) activeIndex = index;
-  });
-
-  if (doneCount >= steps.length) return 100;
-  if (activeIndex === -1) return null;
-  return ((doneCount + 0.5) / steps.length) * 100;
-}
-
 function estimateEtaText({
   startedAt = "",
   status = "",
@@ -72,7 +56,7 @@ function progressMetaText({
 } = {}) {
   const numericProgress = percentValue(progress);
   const percentText = !indeterminate && numericProgress !== null ? `${Math.round(numericProgress)}%` : "";
-  const etaText = estimateEtaText({ startedAt, status, progress: numericProgress, progressStartValue, fallbackProgress, nowMs });
+  const etaText = indeterminate ? "" : estimateEtaText({ startedAt, status, progress: numericProgress, progressStartValue, fallbackProgress, nowMs });
   return [percentText, etaText].filter(Boolean).join(" · ");
 }
 
@@ -82,7 +66,6 @@ function progressPresentedAsToast(progress = null) {
 
 export {
   estimateEtaText,
-  estimatedProgressFromSteps,
   percentValue,
   progressMetaText,
   progressPresentedAsToast

@@ -4435,9 +4435,10 @@ async function provisionRuntime(options = {}) {
       updateOperationProgress(runtimeSetupProgressPatch(assessment, 'Runtime ready', 100, 'completed'));
       finishOperation('completed', null);
     } catch (error) {
+      logDockerManagerError('provisionRuntime', error, { opId });
       const message = mapDockerInterfaceErrorToUiMessage(error) || error?.message || 'Runtime Setup failed';
       updateOperationProgress(runtimeSetupProgressPatch(runtimeAssessment, message, null, 'failed', { previous: _currentOperation }));
-      finishOperation('failed', message);
+      finishOperation('failed', message, error?.code);
     } finally {
       _abortControllers.delete(opId);
       resetDocker();

@@ -2940,8 +2940,14 @@ body {
   align-items: flex-start;
 }
 
+.dm-runtime-gate .dm-dialog-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .dm-runtime-gate-detail {
   color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   line-height: 1.45;
   font-size: 0.92rem;
   margin-bottom: 0.5rem;

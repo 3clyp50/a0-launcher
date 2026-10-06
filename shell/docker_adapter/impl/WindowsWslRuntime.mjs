@@ -10,6 +10,9 @@
 
 import { RuntimeProvisioner, makeError, run, sleep, tail } from '../RuntimeProvisioner.mjs';
 import { ensureWindowsWslDockerProxy } from './WindowsWslDockerProxy.mjs';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 const WSL_GUIDE_URL = 'https://learn.microsoft.com/windows/wsl/install-on-server';
 const WSL_INSTALL_URL = 'https://learn.microsoft.com/windows/wsl/install';
@@ -348,18 +351,18 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
 
   async #installWslFeatures(options = {}) {
     options.onProgress?.('Requesting Windows approval');
-    options.onProgress?.('Enabling WSL features');
     const script = [
-      '$ErrorActionPreference = "Stop"',
-      'wsl.exe --install --no-distribution',
-      'if ($LASTEXITCODE -ne 0) { wsl.exe --install --no-distribution --web-download }',
+      '$ErrorActionPreference = "Continue"',
+      'wsl.exe --install --no-distribution 2>&1 | Tee-Object -FilePath $setupLog -Append -ErrorAction Stop',
+      'if ($LASTEXITCODE -ne 0) { wsl.exe --install --no-distribution --web-download 2>&1 | Tee-Object -FilePath $setupLog -Append -ErrorAction Stop }',
       'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }',
-      'wsl.exe --set-default-version 2',
+      'wsl.exe --set-default-version 2 2>&1 | Tee-Object -FilePath $setupLog -Append -ErrorAction Stop',
       'exit $LASTEXITCODE'
     ].join('\n');
     await this.#runElevatedPowerShell(script, {
       timeoutMs: options.timeoutMs || 20 * 60 * 1000,
-      signal: options.signal
+      signal: options.signal,
+      onProgress: options.onProgress
     });
     return {
       state: 'needs_followup',
@@ -558,23 +561,54 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
   }
 
   async #runElevatedPowerShell(script, options = {}) {
-    const encodedCommand = Buffer.from(String(script || ''), 'utf16le').toString('base64');
-    const launcher = [
-      '$ErrorActionPreference = "Stop"',
-      `$argsList = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '${encodedCommand}')`,
-      '$p = Start-Process -FilePath "powershell.exe" -ArgumentList $argsList -Verb RunAs -WindowStyle Hidden -Wait -PassThru',
-      'if ($null -ne $p.ExitCode) { exit $p.ExitCode }'
-    ].join('; ');
-    const result = await this.#powershell(launcher, {
-      timeoutMs: options.timeoutMs || 20 * 60 * 1000,
-      signal: options.signal
-    });
-    if (result.code !== 0) {
-      throw makeError('RUNTIME_PROVISION_FAILED', 'Windows WSL Setup did not complete.', {
-        exitCode: result.code,
-        stdout: cleanCommandText(result.stdout),
-        stderr: cleanCommandText(result.stderr)
+    const setupDir = await fs.mkdtemp(path.join(os.tmpdir(), 'a0-wsl-setup-'));
+    const scriptPath = path.join(setupDir, 'setup.ps1');
+    const logPath = path.join(setupDir, 'setup.log');
+    let timedOut = false;
+    try {
+      await fs.writeFile(scriptPath, '\uFEFF' + [
+        `$setupLog = '${logPath.replace(/'/g, "''")}'`,
+        'try {',
+        script,
+        '} catch {',
+        '  $_ | Out-String | Tee-Object -FilePath $setupLog -Append',
+        '  exit 1',
+        '}'
+      ].join('\n'), 'utf8');
+      const launcher = [
+        '$ErrorActionPreference = "Stop"',
+        `$argsList = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File', '"${scriptPath.replace(/'/g, "''")}"')`,
+        '$p = Start-Process -FilePath "powershell.exe" -ArgumentList $argsList -Verb RunAs -WindowStyle Normal -PassThru',
+        '$null = $p.Handle',
+        'Write-Output "A0_WSL_SETUP_STARTED"',
+        '$p.WaitForExit()',
+        'exit $p.ExitCode'
+      ].join('; ');
+      const result = await this.#powershell(launcher, {
+        timeoutMs: options.timeoutMs || 20 * 60 * 1000,
+        signal: options.signal,
+        onLine: (line) => {
+          if (line === 'A0_WSL_SETUP_STARTED') options.onProgress?.('Enabling WSL features');
+        }
       });
+      if (result.code !== 0) {
+        throw makeError('RUNTIME_PROVISION_FAILED', 'Windows WSL Setup did not complete.', {
+          exitCode: result.code,
+          stdout: cleanCommandText(result.stdout),
+          stderr: cleanCommandText(result.stderr)
+        });
+      }
+    } catch (error) {
+      timedOut = error?.code === 'TIMEOUT';
+      const buffer = await fs.readFile(logPath).catch(() => Buffer.alloc(0));
+      const output = buffer.toString(buffer[0] === 0xff && buffer[1] === 0xfe ? 'utf16le' : 'utf8').replace(/^\uFEFF/, '').trim();
+      const detail = tail(output || error?.details?.stderr || error?.message, 1200).trim();
+      const message = timedOut
+        ? 'Windows WSL Setup timed out. Check the Windows setup window before retrying.'
+        : 'Windows WSL Setup did not complete.';
+      throw makeError('RUNTIME_PROVISION_FAILED', detail ? `${message}\n${detail}` : message, error?.details);
+    } finally {
+      if (!timedOut) await fs.rm(setupDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 
@@ -606,7 +640,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     return await this._runCommand(
       'powershell.exe',
       ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
-      { timeoutMs: options.timeoutMs || 15000, signal: options.signal }
+      { timeoutMs: options.timeoutMs || 15000, signal: options.signal, onLine: options.onLine }
     );
   }
 }

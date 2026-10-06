@@ -3,6 +3,13 @@ const { test } = require('node:test');
 
 const { toErrorResponse } = require('./errors');
 
+test('runtime setup preserves the provisioner failure instead of replacing it with generic copy', () => {
+  for (const code of ['RUNTIME_PROVISION_FAILED', 'RUNTIME_START_FAILED']) {
+    const error = Object.assign(new Error('Windows WSL Setup did not complete.\nWSL_E_INSTALL_PROCESS_FAILED'), { code });
+    assert.deepEqual(toErrorResponse(error), { code, message: error.message });
+  }
+});
+
 test('Docker pull rate limit maps to actionable install guidance', () => {
   const error = new Error('Docker Hub pull rate limit exceeded');
   error.code = 'DOCKER_PULL_RATE_LIMIT';

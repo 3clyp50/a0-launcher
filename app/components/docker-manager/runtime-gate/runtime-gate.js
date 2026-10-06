@@ -1,4 +1,4 @@
-import { estimatedProgressFromSteps, percentValue, progressMetaText } from "../progress-eta.js";
+import { percentValue, progressMetaText } from "../progress-eta.js";
 import { asText, focusableWithin, makeButton, setPageBlocked } from "../component-utils.js";
 import { openAddRemoteInstanceDialog } from "../remote-instance-dialog.js";
 import { openCreateLocalInstanceDialog } from "../run-instance-dialog.js";
@@ -379,8 +379,7 @@ function normalizedRuntimeGate(state = {}) {
       progress: numericProgress,
       indeterminate: success ? false : indeterminate,
       startedAt: progress?.startedAt,
-      status,
-      fallbackProgress: estimatedProgressFromSteps(renderedSteps)
+      status
     }),
     steps: renderedSteps,
     success,

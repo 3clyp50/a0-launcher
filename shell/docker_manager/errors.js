@@ -20,9 +20,9 @@ function mapDockerInterfaceErrorToUiMessage(error) {
     case 'RUNTIME_NOT_PROVISIONED':
       return 'The Agent Zero runtime is not set up yet.';
     case 'RUNTIME_PROVISION_FAILED':
-      return 'The runtime could not be set up. Please try again.';
+      return msg || 'The runtime could not be set up. Please try again.';
     case 'RUNTIME_START_FAILED':
-      return 'The runtime could not be started. Please try again.';
+      return msg || 'The runtime could not be started. Please try again.';
     case 'RUNTIME_NEEDS_RELOGIN':
       return 'Docker is installed. Log out and back in once, then return here.';
     case 'RUNTIME_MANUAL_INSTALL':

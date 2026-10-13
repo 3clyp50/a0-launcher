@@ -164,8 +164,10 @@ export class DockerInterface {
     ));
     let selected = this.#selectRuntimeCandidate(probed);
 
-    if (!selected?.available && options.enableWindowsWslProxy !== false) {
-      const prepared = await this.#probeKnownWindowsWslCandidates(probed, Dockerode, timeoutMs, options, context);
+    if (options.enableWindowsWslProxy !== false) {
+      const prepared = await this.#probeKnownWindowsWslCandidates(probed, Dockerode, timeoutMs, {
+        ...options, runningWindowsWslOnly: selected?.available === true
+      }, context);
       if (prepared) {
         probed = prepared;
         selected = this.#selectRuntimeCandidate(probed);
@@ -231,7 +233,7 @@ export class DockerInterface {
       await this.#prepareDockerHost(dockerHost, context.platform, options).catch(() => {});
     }
 
-    const docker = new Dockerode(this.#dockerodeOptionsFromHost(dockerHost, candidateTimeoutMs));
+    const docker = new Dockerode(this.dockerodeOptionsFromHost(dockerHost, candidateTimeoutMs));
 
     try {
       await this.#withTimeout(Promise.resolve(docker.ping()), candidateTimeoutMs);
@@ -1025,11 +1027,11 @@ export class DockerInterface {
     if (platform !== 'win32') return;
     if (!this.#isWindowsWslProxyHost(hostInfo, platform)) return;
     if (typeof options.prepareDockerHost === 'function') {
-      await options.prepareDockerHost(hostInfo);
+      await options.prepareDockerHost(hostInfo, { runningOnly: options.runningWindowsWslOnly === true });
       return;
     }
     const { ensureWindowsWslDockerProxy } = await import('./impl/WindowsWslDockerProxy.mjs');
-    await ensureWindowsWslDockerProxy();
+    await ensureWindowsWslDockerProxy({ runningOnly: options.runningWindowsWslOnly === true });
   }
 
   static #preferDiagnostic(current, candidate) {
@@ -1062,12 +1064,12 @@ export class DockerInterface {
    * @param {number} timeoutMs
    * @returns {Object}
    */
-  static #dockerodeOptionsFromHost(hostInfo, timeoutMs) {
+  static dockerodeOptionsFromHost(hostInfo, timeoutMs) {
     const base = { timeout: timeoutMs };
     if (!hostInfo || hostInfo.kind === 'default') return base;
 
     if (hostInfo.kind === 'unix' || hostInfo.kind === 'npipe') {
-      return { ...base, socketPath: hostInfo.socketPath };
+      return { ...base, host: null, port: null, protocol: 'http', pathPrefix: '/', socketPath: hostInfo.socketPath };
     }
 
     if (hostInfo.kind === 'tcp' || hostInfo.kind === 'http' || hostInfo.kind === 'https') {

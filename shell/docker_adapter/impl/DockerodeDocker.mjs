@@ -371,27 +371,6 @@ async function streamToBuffer(stream, maxBytes) {
   return Buffer.concat(chunks, total);
 }
 
-function dockerodeOptionsFromEnv(env) {
-  const hostInfo = env?.dockerHost;
-  const base = { timeout: 0 };
-  if (!hostInfo || hostInfo.kind === 'default') return base;
-
-  if (hostInfo.kind === 'unix' || hostInfo.kind === 'npipe') {
-    return { ...base, socketPath: hostInfo.socketPath };
-  }
-
-  if (hostInfo.kind === 'tcp' || hostInfo.kind === 'http' || hostInfo.kind === 'https') {
-    return {
-      ...base,
-      host: hostInfo.host,
-      port: hostInfo.port,
-      protocol: hostInfo.protocol
-    };
-  }
-
-  return base;
-}
-
 async function inspectContainerImageMetadata(dockerode, containerId) {
   const id = (containerId || '').trim();
   if (!id) return null;
@@ -423,7 +402,7 @@ export class DockerodeDocker extends DockerInterface {
     super({ imageRepo: options?.imageRepo });
     this.env = options?.env || null;
 
-    this.docker = new Dockerode(dockerodeOptionsFromEnv(this.env));
+    this.docker = new Dockerode(DockerInterface.dockerodeOptionsFromHost(this.env?.dockerHost, 0));
     this.registry = new DockerHubRegistry({ userAgent: 'A0-Launcher' });
 
     /** @type {Map<string, any>} */

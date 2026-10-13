@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import { run } from '../RuntimeProvisioner.mjs';
+import { selectWindowsWslDistro } from './WindowsWslDistros.mjs';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 23750;
@@ -105,7 +107,9 @@ export async function ensureWindowsWslDockerProxy(options = {}) {
     port,
     distro: options.distro,
     socketPath: options.socketPath || DEFAULT_SOCKET,
-    spawnCommand: options.spawnCommand
+    spawnCommand: options.spawnCommand,
+    runningOnly: options.runningOnly === true,
+    runCommand: options.runCommand || run
   })
     .finally(() => {
       proxyPromise = null;
@@ -113,8 +117,17 @@ export async function ensureWindowsWslDockerProxy(options = {}) {
   return proxyPromise;
 }
 
-async function startProxy({ host, port, distro, socketPath, spawnCommand }) {
-  const selectedDistro = (distro || process.env.A0_WSL_DOCKER_DISTRO || '').trim();
+async function startProxy({ host, port, distro, socketPath, spawnCommand, runCommand, runningOnly }) {
+  const requestedDistro = (distro || process.env.A0_WSL_DOCKER_DISTRO || '').trim();
+  const list = await runCommand('wsl.exe', ['-l', '-v'], { timeoutMs: 15000 }).catch(() => ({ code: 1 }));
+  const selectedDistro = list.code === 0 ? selectWindowsWslDistro(list.stdout, requestedDistro, runningOnly)?.name : '';
+  if (!selectedDistro) return { started: false, reason: 'no_wsl_engine' };
+  const ready = await runCommand('wsl.exe', [
+    '-d', selectedDistro, '-u', 'root', '--exec', 'sh', '-lc',
+    'command -v dockerd >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1 && test -S "$1"',
+    'a0-launcher-wsl-probe', socketPath
+  ], { timeoutMs: 15000 }).catch(() => ({ code: 1 }));
+  if (ready.code !== 0) return { started: false, reason: 'no_wsl_engine' };
   const keepAlive = ensureWindowsWslKeepAlive({ distro: selectedDistro, spawnCommand });
   const server = net.createServer({ allowHalfOpen: true }, (client) => {
     client.setKeepAlive(true);
@@ -184,6 +197,9 @@ export function ensureWindowsWslKeepAlive(options = {}) {
   }
 
   const selectedDistro = (options.distro || process.env.A0_WSL_DOCKER_DISTRO || '').trim();
+  if (!selectedDistro || /^docker-desktop(?:-data)?$/i.test(selectedDistro)) {
+    return { started: false, reason: 'invalid_distro' };
+  }
   if (keepAliveProcess && !keepAliveProcess.killed && keepAliveDistro === selectedDistro) {
     return { started: true, reused: true, distro: selectedDistro || null };
   }

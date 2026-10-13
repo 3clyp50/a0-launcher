@@ -23,10 +23,13 @@ This scope owns:
 - `impl/ColimaRuntime.mjs`: macOS Colima/Lima assessment, self-contained component download, checksum verification, and dedicated runtime profile start mechanics.
 - `impl/LinuxEngineRuntime.mjs`: Linux native Docker Engine assessment, daemon start, and package-manager bootstrap mechanics.
 - `impl/WindowsWslDockerProxy.mjs`: Windows loopback bridge from `127.0.0.1:23750` to the WSL Docker Engine Unix socket.
+- `impl/WindowsWslDistros.mjs`: shared ordinary WSL2 distro selection for assessment and automatic bridge discovery.
 - `impl/WindowsWslRuntime.mjs`: Windows Docker Desktop, Windows client WSL Docker Engine, and Windows Server WSL2/nested-virtualization assessment.
 - `LOG_PROCESSOR.md`: explanatory implementation notes for log processing.
 
 ## Local Contracts
+
+- Detection and Dockerode operations share `DockerInterface.dockerodeOptionsFromHost`. Explicit Unix/named-pipe endpoints must clear inherited TCP host, port, protocol, and path-prefix defaults so `DOCKER_HOST` cannot redirect a candidate probe or a selected runtime's operations.
 
 - `DockerInterface.mjs` is ESM by design. Keep the CommonJS bridge contained in `getDocker.js`.
 - Environment detection should be best-effort and return structured diagnostics rather than throwing for ordinary "Docker unavailable" cases.
@@ -39,6 +42,7 @@ This scope owns:
 - Runtime provisioners should report user-facing progress through `onProgress` for platform setup phases such as authorization, component download, Docker Engine install/start, follow-up/relogin, and Docker Desktop waiting. Keep the messages stable enough for Docker Manager to normalize into modal steps.
 - Colima reports explicit phases for Docker client preparation, nested startup logs, and final socket verification. Log lines containing `done` or `ready` must not complete setup before the runtime socket is reachable.
 - Runtime start and provision results should report the Docker endpoint they made reachable so the product layer can remember an explicit user choice.
+- Successful Windows Ubuntu distro installation followed by Engine setup returns that endpoint too; only restart/first-run follow-up results may omit it.
 - Platform provisioners should expose Docker Desktop-only assessment and targeted start behavior so the product can offer an installed stopped Docker Desktop beside a different reachable daemon without disturbing that fallback.
 - Renderer-visible runtime assessment labels and details should use `Setup`, not `Set up`, `Set Up`, or `Setting up`; internal field names may remain `setup`.
 - macOS automatic provisioning uses a dedicated Colima profile named `a0`. It must not require Docker Desktop, Homebrew, or a privileged Docker socket symlink. Because Colima checks for a Docker client during startup, the provisioner may install Docker's official static macOS CLI into the launcher-owned runtime bin directory when the host does not provide one.
@@ -50,15 +54,20 @@ This scope owns:
 - Windows assessment must not direct Windows Server users to Docker Desktop. Docker Desktop is for client Windows; Windows Server needs an existing Docker endpoint or a WSL2-backed Linux Docker Engine with nested virtualization.
 - Windows WSL Engine support must keep unauthenticated Docker API exposure on Windows loopback only. Do not bind Docker TCP on WSL public or non-loopback interfaces.
 - Windows WSL Engine detection may prepare the launcher-owned loopback bridge for the built-in `127.0.0.1:23750` endpoint before probing it, so an installed Ubuntu Docker Engine can be reused at startup without another setup modal.
+- Automatic WSL bridge discovery must select a registered ordinary WSL2 distro explicitly, using the same selection policy as runtime assessment. Require its own `dockerd`, Python, and Docker socket before starting helpers or binding the bridge. Never fall back to WSL's default distro implicitly or start Docker's private distros; an invalid explicit distro override stays unavailable.
+- When another endpoint is reachable, discovery may prepare the WSL bridge only for an already-running eligible distro, so independent running Desktop and WSL daemons remain visible without cold-starting dormant WSL distros. With no reachable endpoint, cold-start reuse remains allowed.
 - Windows WSL Engine support must also keep the selected WSL distro alive while the launcher-owned loopback bridge is active; otherwise WSL can idle-stop and Docker marks healthy Linux containers as exited.
 - Windows WSL keepalive helpers must carry a launcher-specific marker and clean up their child sleep process on shutdown so app restarts do not leave orphaned WSL helper loops.
 - Windows WSL loopback detection may need a longer first probe than other Docker endpoints because starting the bridge can cold-start WSL. Keep that extra wait scoped to `127.0.0.1:23750`.
 - Windows client WSL onboarding details should stay Agent Zero-first for normal users. Reserve explicit Docker Desktop naming for Docker Desktop reuse or repair states, and keep low-level Docker Engine wording out of the primary setup path.
 - Windows clients with Docker Desktop installed but stopped must report a `docker_desktop` `engine_stopped` state with start guidance, not a Docker Desktop download or reinstall link. Discover both Program Files and per-user `%LOCALAPPDATA%/Programs/DockerDesktop` installations. Start Desktop with PowerShell's `Start-Process -FilePath` and report launch errors before waiting for its pipe. Never select Docker's private `docker-desktop` or `docker-desktop-data` WSL distributions for Engine setup or startup.
+- Desktop startup completes only after its Docker API responds through the exact Desktop endpoint; a named pipe accepting connections is insufficient while the backend is still booting. Poll through the shared Docker adapter without Docker contexts or WSL fallback.
 - Windows client WSL feature installation may use a user-approved UAC prompt via `wsl.exe --install --no-distribution`; it must report restart/follow-up states instead of claiming Docker is ready immediately.
 - WSL feature setup runs a temporary UTF-8-with-BOM PowerShell file with `RemoteSigned` in a visible elevated window. Mark Windows approval complete only after that process starts, wait for that process rather than its service descendants, and preserve a bounded tail of its UTF-8/UTF-16 output on failure. Native command exit codes own retry/failure decisions; redirected stderr must not terminate the script before its fallback. Remove temporary setup files after completion; keep them on timeout while the visible elevated process may still be using them.
 - After the WSL feature reboot, Windows client assessment must be able to continue from ordinary user context. Do not rely only on admin-only optional feature queries; infer feature readiness from `wsl.exe` status/list output when it reports WSL2 is available but no distro is installed.
-- On Windows 10, `wsl.exe --install -d Ubuntu --no-launch` may install the Ubuntu Appx package without registering a WSL distro. The Windows client setup path should use the Ubuntu launcher root-registration path when available so users are not forced through an interactive Unix user setup.
+- Windows client distro setup imports Canonical's official Ubuntu 24.04 LTS WSL rootfs with native `wsl.exe --import ... --version 2`. Require its published SHA-256 before import, select the native host architecture, and reuse the shared verified downloader. This path must not depend on Microsoft Store/Appx staging or an interactive Unix-user setup.
+- Apply ordinary package upgrades to a newly imported distro before Engine setup, allowing a 40-minute default command timeout for that combined work. Reuse of an existing user distro installs Engine dependencies without upgrading that user's base OS and keeps its 20-minute default timeout.
+- Imported Ubuntu VHDX storage lives under `%LOCALAPPDATA%/agent-zero/wsl/Ubuntu`, outside Launcher `userData`, so Launcher uninstall cannot delete Linux runtime or container data. Do not overwrite an existing import folder. Downloaded archives remain Launcher-owned runtime cache; registered distro reuse still precedes creation.
 - Windows client WSL Docker Engine setup may install Docker Engine packages inside an existing Ubuntu WSL2 distro using Docker's official apt repository. Include the Python bridge dependency and keep Docker API access on the launcher-owned Windows loopback bridge.
 - The Windows loopback bridge may run its WSL helper as `root` so users do not need to manage Linux `docker` group membership during onboarding.
 - Concrete implementations live under `impl/` and are loaded on demand.
@@ -113,6 +122,8 @@ For runtime provisioner changes, run:
 ```bash
 node --test shell/docker_adapter/runtime_provisioner.test.mjs
 ```
+
+The Colima startup socket test uses a Unix socket and is skipped on Windows; Windows-specific tests, including native PowerShell script execution, must run there.
 
 ## Child DOX Index
 

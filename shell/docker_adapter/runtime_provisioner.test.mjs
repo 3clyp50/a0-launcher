@@ -1,20 +1,24 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
 import net from 'node:net';
 import { access, mkdir as mkdirp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import Dockerode from 'dockerode';
 
 import { DockerInterface } from './DockerInterface.mjs';
 import { RuntimeProvisioner, run } from './RuntimeProvisioner.mjs';
 import { ColimaRuntime, selectLatestDockerCliAsset } from './impl/ColimaRuntime.mjs';
 import { LinuxEngineRuntime } from './impl/LinuxEngineRuntime.mjs';
-import { ensureWindowsWslKeepAlive, stopWindowsWslKeepAlive } from './impl/WindowsWslDockerProxy.mjs';
+import { ensureWindowsWslDockerProxy, ensureWindowsWslKeepAlive, stopWindowsWslKeepAlive } from './impl/WindowsWslDockerProxy.mjs';
+import { selectWindowsWslDistro } from './impl/WindowsWslDistros.mjs';
 import { WindowsWslRuntime } from './impl/WindowsWslRuntime.mjs';
+import { DockerodeDocker } from './impl/DockerodeDocker.mjs';
 import progressHelpers from '../docker_manager/progress.js';
 
-test('Colima startup logs keep one active step until the socket is reachable', async () => {
+test('Colima startup logs keep one active step until the socket is reachable', { skip: process.platform === 'win32' }, async () => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-colima-progress-'));
   const socketPath = path.join(managedDir, 'docker.sock');
   const server = net.createServer((socket) => socket.end());
@@ -248,6 +252,48 @@ test('WindowsWslRuntime excludes Docker private distros while preserving Ubuntu 
   }
 });
 
+test('WSL selection never falls back to Docker private distros or WSL1', () => {
+  const privateDistros = 'NAME STATE VERSION\n* docker-desktop Running 2\ndocker-desktop-data Stopped 2\n';
+  const list = privateDistros + 'Ubuntu Stopped 2\nDebian Running 2\nLegacy Running 1\n';
+  assert.equal(selectWindowsWslDistro(privateDistros), null);
+  assert.equal(selectWindowsWslDistro('Default Version: 2\nLegacy Stopped 1\n'), null);
+  assert.equal(selectWindowsWslDistro(list).name, 'Ubuntu');
+  assert.equal(selectWindowsWslDistro(list.split('').join('\0')).name, 'Ubuntu');
+  assert.equal(selectWindowsWslDistro(list, 'Debian').name, 'Debian');
+  assert.equal(selectWindowsWslDistro(list, '', true).name, 'Debian');
+  assert.equal(selectWindowsWslDistro(list, 'Ubuntu', true), null);
+  for (const preferred of ['docker-desktop', 'docker-desktop-data', 'Legacy', 'Missing']) {
+    assert.equal(selectWindowsWslDistro(list, preferred), null);
+  }
+});
+
+test('WSL bridge requires an ordinary installed Engine before creating helpers', { skip: process.platform !== 'win32' }, async () => {
+  const privateDistros = 'NAME STATE VERSION\n* docker-desktop Running 2\ndocker-desktop-data Stopped 2\n';
+  for (const { list, distro, expectedProbe } of [
+    { list: privateDistros },
+    { list: privateDistros + 'Legacy Stopped 1\n' },
+    { list: privateDistros + 'Ubuntu Stopped 2\n', distro: 'docker-desktop' },
+    { list: privateDistros + 'Ubuntu Stopped 2\n', expectedProbe: 'Ubuntu' }
+  ]) {
+    const calls = [];
+    const result = await ensureWindowsWslDockerProxy({
+      distro,
+      runCommand: async (cmd, args) => {
+        calls.push({ cmd, args });
+        return args[0] === '-l' ? { code: 0, stdout: list } : { code: 1 };
+      },
+      spawnCommand: () => assert.fail('No helper should start without a WSL Engine')
+    });
+    assert.deepEqual(result, { started: false, reason: 'no_wsl_engine' });
+    assert.equal(calls.length, expectedProbe ? 2 : 1);
+    if (expectedProbe) {
+      assert.deepEqual(calls[1].args.slice(0, 6), ['-d', expectedProbe, '-u', 'root', '--exec', 'sh']);
+      assert.match(calls[1].args[7], /command -v dockerd/);
+    }
+  }
+  assert.deepEqual(ensureWindowsWslKeepAlive({ distro: 'docker-desktop' }), { started: false, reason: 'invalid_distro' });
+});
+
 test('WindowsWslRuntime reports Desktop launch failures without waiting for its pipe', async () => {
   for (const desktopPath of ["C:\\Users\\O'Brien\\Docker Desktop.exe", '']) {
     const progress = [];
@@ -417,11 +463,16 @@ test('generated WSL setup scripts propagate native PowerShell exit codes and out
   }
 });
 
-test('WindowsWslRuntime provision installs Ubuntu when WSL2 has no distro', async () => {
+test('WindowsWslRuntime imports verified Ubuntu when WSL2 has no distro', async (t) => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
   const calls = [];
   const proxyCalls = [];
   try {
+    const archive = Buffer.from('Ubuntu rootfs fixture');
+    const checksum = createHash('sha256').update(archive).digest('hex');
+    t.mock.method(globalThis, 'fetch', async (url) => String(url).endsWith('SHA256SUMS')
+      ? new Response(['amd64', 'arm64'].map((arch) => `${checksum} *ubuntu-noble-wsl-${arch}-wsl.rootfs.tar.gz`).join('\n'))
+      : new Response(archive, { headers: { 'content-length': archive.length } }));
     const runtime = new WindowsWslRuntime({
       managedDir,
       isWindowsServer: false,
@@ -431,7 +482,6 @@ test('WindowsWslRuntime provision installs Ubuntu when WSL2 has no distro', asyn
       runCommand: fakeWindowsCommandRunner({
         binaries: ['wsl.exe'],
         calls,
-        wslRootReady: true,
         features: {
           'Microsoft-Windows-Subsystem-Linux': 'Enabled',
           VirtualMachinePlatform: 'Enabled'
@@ -439,6 +489,7 @@ test('WindowsWslRuntime provision installs Ubuntu when WSL2 has no distro', asyn
         wslList: '  NAME      STATE           VERSION\n'
       })
     });
+    runtime.wslInstallDir = path.join(managedDir, "User's Ubuntu folder");
 
     const assessment = await runtime.assess();
     assert.equal(assessment.state, 'not_provisioned');
@@ -447,10 +498,17 @@ test('WindowsWslRuntime provision installs Ubuntu when WSL2 has no distro', asyn
 
     const result = await runtime.provision();
 
-    assert.equal(result, undefined);
-    const install = calls.find((call) => call.cmd === 'wsl.exe' && call.args?.[0] === '--install');
-    assert.deepEqual(install?.args, ['--install', '-d', 'Ubuntu', '--no-launch']);
+    assert.deepEqual(result, { endpoint: runtime.endpoint() });
+    const install = calls.find((call) => call.cmd === 'wsl.exe' && call.args?.[0] === '--import');
+    assert.deepEqual(install?.args.slice(0, 3), ['--import', 'Ubuntu', runtime.wslInstallDir]);
+    assert.equal(path.dirname(install.args[3]), managedDir);
+    assert.match(path.basename(install.args[3]), /^ubuntu-noble-wsl-(amd64|arm64)-wsl\.rootfs\.tar\.gz$/);
+    assert.deepEqual(install.args.slice(-2), ['--version', '2']);
+    assert.deepEqual(await readFile(install.args[3]), archive);
+    assert.ok(calls.every((call) => call.cmd !== 'wsl.exe' || call.args[0] !== '--install'));
     assert.ok(calls.some((call) => call.cmd === 'wsl.exe' && /docker-ce docker-ce-cli containerd\.io/.test(String(call.args?.at(-1)))));
+    assert.ok(calls.some((call) => /apt-get upgrade -y/.test(String(call.args?.at(-1)))));
+    assert.equal(calls.find((call) => /docker-ce docker-ce-cli containerd\.io/.test(String(call.args?.at(-1)))).options.timeoutMs, 40 * 60 * 1000);
     assert.deepEqual(proxyCalls, [{ distro: 'Ubuntu' }]);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
@@ -484,35 +542,38 @@ test('WindowsWslRuntime resumes to distro setup after WSL feature reboot', async
   }
 });
 
-test('WindowsWslRuntime registers installed Ubuntu package as root when WSL install leaves no distro', async () => {
+test('Ubuntu import preserves existing folders and rejects missing or mismatched checksums', async (t) => {
   const managedDir = await mkdtemp(path.join(os.tmpdir(), 'a0-runtime-'));
   const calls = [];
-  const proxyCalls = [];
   try {
     const runtime = new WindowsWslRuntime({
       managedDir,
       isWindowsServer: false,
-      ensureProxy: async (options) => {
-        proxyCalls.push(options);
-      },
       runCommand: fakeWindowsCommandRunner({
-        binaries: ['wsl.exe', 'ubuntu.exe'],
+        binaries: ['wsl.exe'],
         calls,
         features: {
           'Microsoft-Windows-Subsystem-Linux': 'Enabled',
           VirtualMachinePlatform: 'Enabled'
         },
-        wslList: 'Windows Subsystem for Linux has no installed distributions.',
-        wslRootReady: false,
-        ubuntuInstallRootRegisters: true
+        wslList: 'Windows Subsystem for Linux has no installed distributions.'
       })
     });
-
-    await runtime.provision();
-
-    assert.ok(calls.some((call) => call.cmd === 'ubuntu.exe' && call.args?.[0] === 'install' && call.args?.[1] === '--root'));
-    assert.ok(calls.some((call) => call.cmd === 'wsl.exe' && /docker-ce docker-ce-cli containerd\.io/.test(String(call.args?.at(-1)))));
-    assert.deepEqual(proxyCalls, [{ distro: 'Ubuntu' }]);
+    runtime.wslInstallDir = path.join(managedDir, 'Ubuntu');
+    await mkdirp(runtime.wslInstallDir);
+    const preserved = path.join(runtime.wslInstallDir, 'keep.txt');
+    await writeFile(preserved, 'user data');
+    t.mock.method(globalThis, 'fetch', () => assert.fail('Existing runtime files must prevent download'));
+    await assert.rejects(runtime.provision(), { code: 'RUNTIME_PROVISION_FAILED' });
+    assert.equal(await readFile(preserved, 'utf8'), 'user data');
+    runtime.wslInstallDir = path.join(managedDir, 'fresh');
+    for (const [checksum, code] of [['', 'DOWNLOAD_FAILED'], ['0'.repeat(64), 'CHECKSUM_MISMATCH']]) {
+      t.mock.method(globalThis, 'fetch', async (url) => String(url).endsWith('SHA256SUMS')
+        ? new Response(['amd64', 'arm64'].map((arch) => `${checksum} *ubuntu-noble-wsl-${arch}-wsl.rootfs.tar.gz`).join('\n'))
+        : new Response('unverified archive'));
+      await assert.rejects(runtime.provision(), { code });
+    }
+    assert.ok(calls.every((call) => call.cmd !== 'wsl.exe' || call.args[0] !== '--import'));
   } finally {
     await rm(managedDir, { recursive: true, force: true });
   }
@@ -538,8 +599,7 @@ test('WindowsWslRuntime provision installs Docker Engine inside an existing WSL 
           VirtualMachinePlatform: 'Enabled'
         },
         wslList: '  NAME      STATE           VERSION\n* Ubuntu    Running         2\n',
-        wslDockerInstalled: false,
-        wslRootReady: true
+        wslDockerInstalled: false
       })
     });
 
@@ -555,6 +615,8 @@ test('WindowsWslRuntime provision installs Docker Engine inside an existing WSL 
     assert.ok(dockerInstall, 'expected Docker Engine install script');
     assert.match(String(dockerInstall.args.at(-1)), /download\.docker\.com\/linux\/ubuntu/);
     assert.match(String(dockerInstall.args.at(-1)), /apt-get install -y ca-certificates curl python3/);
+    assert.doesNotMatch(String(dockerInstall.args.at(-1)), /apt-get upgrade/);
+    assert.equal(dockerInstall.options.timeoutMs, 20 * 60 * 1000);
     assert.deepEqual(proxyCalls, [{ distro: 'Ubuntu' }]);
   } finally {
     await rm(managedDir, { recursive: true, force: true });
@@ -710,7 +772,7 @@ test('DockerInterface prepares the built-in Windows WSL endpoint before probing'
   assert.equal(env.runtimeCandidates[0].available, true);
 });
 
-test('DockerInterface does not prepare the built-in Windows WSL endpoint when another runtime is reachable', async () => {
+test('DockerInterface checks only running WSL distros when another runtime is reachable', async () => {
   const preparedHosts = [];
   const env = await DockerInterface.detectEnvironment({
     platform: 'win32',
@@ -720,14 +782,88 @@ test('DockerInterface does not prepare the built-in Windows WSL endpoint when an
       { provider: 'docker_desktop', label: 'Docker Desktop', dockerHost: 'npipe:////./pipe/docker_engine', source: 'known_socket' },
       { provider: 'wsl_engine', label: 'Agent Zero local runtime', dockerHost: 'tcp://127.0.0.1:23750', source: 'known_socket' }
     ],
-    prepareDockerHost: async (hostInfo) => {
+    prepareDockerHost: async (hostInfo, options) => {
+      assert.equal(options.runningOnly, true);
       preparedHosts.push(hostInfo.raw);
     },
     dockerodeClass: fakeDockerodeClass(['//./pipe/docker_engine'])
   });
 
-  assert.deepEqual(preparedHosts, []);
+  assert.deepEqual(preparedHosts, ['tcp://127.0.0.1:23750']);
   assert.equal(env.dockerAvailable, true);
+  assert.equal(env.dockerFlavor, 'docker_desktop');
+});
+
+test('explicit socket probes and operations ignore inherited TCP transport defaults', async () => {
+  const keys = ['DOCKER_HOST', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH', 'DOCKER_PATH_PREFIX'];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    process.env.DOCKER_HOST = 'tcp://127.0.0.1:2376';
+    process.env.DOCKER_TLS_VERIFY = '1';
+    process.env.DOCKER_PATH_PREFIX = '/unrelated';
+    delete process.env.DOCKER_CERT_PATH;
+    for (const [kind, socketPath] of [['npipe', '//./pipe/docker_engine'], ['unix', '/var/run/docker.sock']]) {
+      const adapter = new DockerodeDocker({ env: { dockerHost: { kind, socketPath } } });
+      assert.equal(adapter.docker.modem.host, null);
+      assert.equal(adapter.docker.modem.socketPath, socketPath);
+      assert.equal(adapter.docker.modem.protocol, 'http');
+      assert.equal(adapter.docker.modem.pathPrefix, '/');
+    }
+    class ProbeDockerode extends Dockerode {
+      async ping() { assert.equal(this.modem.host, null); assert.equal(this.modem.protocol, 'http'); }
+      async version() { return { Version: '29.0' }; }
+      async info() { assert.equal(this.modem.socketPath, '//./pipe/docker_engine'); return { ID: 'desktop-daemon' }; }
+    }
+    const result = await DockerInterface.detectEnvironment({
+      platform: 'win32', env: {}, discoverDockerContexts: false, enableWindowsWslProxy: false,
+      candidateHosts: ['npipe:////./pipe/docker_engine'], dockerodeClass: ProbeDockerode
+    });
+    assert.equal(result.dockerAvailable, true);
+    assert.equal(result.runtimeCandidates[0].daemonId, 'desktop-daemon');
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+test('Desktop start waits for its Docker API before returning an endpoint', async (t) => {
+  let probes = 0;
+  t.mock.method(DockerInterface, 'detectEnvironment', async (options) => {
+    assert.equal(options.dockerHost, 'npipe:////./pipe/docker_engine');
+    assert.deepEqual(options.candidateHosts, []);
+    assert.equal(options.discoverDockerContexts, false);
+    assert.equal(options.enableWindowsWslProxy, false);
+    return { dockerAvailable: ++probes > 1 };
+  });
+  const runtime = new WindowsWslRuntime({
+    managedDir: os.tmpdir(), isWindowsServer: false,
+    runCommand: fakeWindowsCommandRunner({ dockerDesktopPath: 'C:\\Docker Desktop.exe' })
+  });
+  const result = await runtime.start({ mode: 'docker_desktop' });
+  assert.equal(probes, 2);
+  assert.equal(result.endpoint.dockerHost, 'npipe:////./pipe/docker_engine');
+});
+
+test('DockerInterface discovers a running independent WSL Engine beside Desktop', async () => {
+  let prepared = false;
+  class FakeDockerode extends fakeDockerodeClass(['//./pipe/docker_engine', '127.0.0.1:23750']) {
+    async ping() {
+      if (this.options.host && !prepared) throw Object.assign(new Error('No bridge yet'), { code: 'ECONNREFUSED' });
+      return super.ping();
+    }
+  }
+  const env = await DockerInterface.detectEnvironment({
+    platform: 'win32', timeoutMs: 250, discoverDockerContexts: false,
+    candidateHosts: [
+      { provider: 'docker_desktop', dockerHost: 'npipe:////./pipe/docker_engine', source: 'known_socket' },
+      { provider: 'wsl_engine', dockerHost: 'tcp://127.0.0.1:23750', source: 'known_socket' }
+    ],
+    prepareDockerHost: async (_host, options) => { assert.equal(options.runningOnly, true); prepared = true; },
+    dockerodeClass: FakeDockerode
+  });
+  assert.equal(new Set(env.runtimeCandidates.filter(c => c.available).map(c => c.daemonId)).size, 2);
   assert.equal(env.dockerFlavor, 'docker_desktop');
 });
 
@@ -1280,18 +1416,15 @@ function fakeWindowsCommandRunner({
   productType = 3,
   wslList = '',
   dockerDesktopPath = '',
-  wslInstallDistroCode = 0,
+  wslImportDistroCode = 0,
   wslDockerInstallCode = 0,
   wslDockerInstalled = false,
   wslDockerReady = false,
-  wslPythonInstalled = true,
-  wslRootReady = false,
-  ubuntuInstallRootRegisters = false
+  wslPythonInstalled = true
 } = {}) {
   const present = new Set(binaries);
-  let ubuntuRootRegistered = false;
   return async (cmd, args, options = {}) => {
-    calls.push({ cmd, args: Array.isArray(args) ? [...args] : args });
+    calls.push({ cmd, args: Array.isArray(args) ? [...args] : args, options });
     if (cmd === 'where.exe') {
       const binary = args?.[0] || '';
       return {
@@ -1321,19 +1454,12 @@ function fakeWindowsCommandRunner({
     if (cmd === 'wsl.exe' && args?.[0] === '-l') {
       return { code: 0, stdout: wslList, stderr: '' };
     }
-    if (cmd === 'wsl.exe' && args?.[0] === '--install') {
-      return { code: wslInstallDistroCode, stdout: '', stderr: '' };
-    }
-    if (/^ubuntu(2404|2204|2004)?\.exe$/i.test(cmd) && args?.[0] === 'install' && args?.[1] === '--root') {
-      if (ubuntuInstallRootRegisters) ubuntuRootRegistered = true;
-      return { code: ubuntuInstallRootRegisters ? 0 : 1, stdout: '', stderr: ubuntuInstallRootRegisters ? '' : 'install failed' };
+    if (cmd === 'wsl.exe' && args?.[0] === '--import') {
+      return { code: wslImportDistroCode, stdout: '', stderr: '' };
     }
     if (cmd === 'wsl.exe' && args?.includes('--exec')) {
       const script = String(args?.[args.length - 1] || '');
       if (args?.includes('-u') && args?.includes('root')) {
-        if (script.trim() === 'true') {
-          return { code: wslRootReady || ubuntuRootRegistered ? 0 : 1, stdout: '', stderr: '' };
-        }
         if (/docker-ce docker-ce-cli containerd\.io/.test(script)) {
           return { code: wslDockerInstallCode, stdout: '', stderr: '' };
         }

@@ -36,6 +36,23 @@ If Docker Desktop is running but the launcher still cannot connect, check that y
 
 ## Native Docker Engine
 
+### Windows without Docker Desktop
+
+Local Setup can reuse an ordinary WSL2 distro or prepare Ubuntu with its own Docker Engine. New distro setup downloads Canonical's Ubuntu 24.04 LTS WSL image, verifies its SHA-256 checksum, and imports it through WSL. It does not need Microsoft Store package staging or an interactive Linux-user setup. Existing Docker Desktop installations still use the normal Start Docker Desktop path.
+
+Imported Ubuntu data lives under `%LOCALAPPDATA%\agent-zero\wsl\Ubuntu`, outside Launcher settings and cache. Launcher uninstall preserves that Linux runtime and its container data. An existing import folder is never overwritten; if Setup reports that folder already exists, preserve it before resolving the incomplete setup.
+
+Useful Windows checks:
+
+```powershell
+wsl --list --verbose
+wsl -d Ubuntu -u root --exec docker info
+```
+
+Docker's private `docker-desktop` and `docker-desktop-data` distros are excluded from independent Engine discovery. The Launcher's WSL Docker bridge listens only at `127.0.0.1:23750` while Launcher is running.
+
+### Linux
+
 On Debian or Ubuntu, the launcher and installer can use the host package manager to install Docker Engine. If Docker was just installed and the launcher says your user cannot access it yet, log out and back in once so group membership is applied.
 
 Useful Linux checks:

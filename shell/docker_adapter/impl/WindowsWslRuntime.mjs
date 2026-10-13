@@ -8,8 +8,9 @@
  * need administrator rights.
  */
 
-import { RuntimeProvisioner, makeError, run, sleep, tail } from '../RuntimeProvisioner.mjs';
+import { RuntimeProvisioner, downloadVerified, fetchText, makeError, run, sha256FromSumText, sleep, tail } from '../RuntimeProvisioner.mjs';
 import { ensureWindowsWslDockerProxy } from './WindowsWslDockerProxy.mjs';
+import { selectWindowsWslDistro } from './WindowsWslDistros.mjs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -27,6 +28,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     this._runCommand = typeof options.runCommand === 'function' ? options.runCommand : run;
     this._ensureProxy = typeof options.ensureProxy === 'function' ? options.ensureProxy : ensureWindowsWslDockerProxy;
     this._isWindowsServerOverride = typeof options.isWindowsServer === 'boolean' ? options.isWindowsServer : null;
+    this.wslInstallDir = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'agent-zero', 'wsl', DEFAULT_WSL_DISTRO);
   }
 
   async assess() {
@@ -154,8 +156,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     }
 
     const distroList = await this.#wslList();
-    const distros = this.#parseWslDistros(distroList);
-    const distro = this.#selectWslDistro(distros);
+    const distro = selectWindowsWslDistro(distroList);
     if (!distro) {
       const wslUsable = this.#wslListShowsUsableFeatures(distroList);
       const wslFeature = await this.#optionalFeatureState('Microsoft-Windows-Subsystem-Linux');
@@ -270,29 +271,6 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     return cleanCommandText(`${result.stdout || ''}\n${result.stderr || ''}`);
   }
 
-  #parseWslDistros(text) {
-    const distros = [];
-    for (const rawLine of text.split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line || /^NAME\s+STATE\s+VERSION$/i.test(line)) continue;
-      if (/^(default\s+(distribution|version)|distribuzione\s+predefinita|versione\s+predefinita)\s*:/i.test(line)) continue;
-      const defaultDistro = line.startsWith('*');
-      const clean = line.replace(/^\*\s*/, '').trim();
-      const parts = clean.split(/\s+/);
-      if (parts.length < 3) continue;
-      const version = Number(parts.pop());
-      const state = parts.pop();
-      const name = parts.join(' ');
-      if (!name || !Number.isFinite(version)) continue;
-      distros.push({ name, state, version, default: defaultDistro });
-    }
-    return distros;
-  }
-
-  async #wslDistros() {
-    return this.#parseWslDistros(await this.#wslList());
-  }
-
   #wslListShowsUsableFeatures(text) {
     const value = String(text || '');
     if (/WSL_E_WSL_OPTIONAL_COMPONENT_REQUIRED/i.test(value)) return false;
@@ -301,17 +279,6 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
     if (/non ha distribuzioni installate/i.test(value)) return true;
     if (/^\s*\*?\s*NAME\s+STATE\s+VERSION\b/im.test(value)) return true;
     return false;
-  }
-
-  #selectWslDistro(distros) {
-    const wsl2 = (distros || []).filter((d) => d.version === 2 && !/^docker-desktop(?:-data)?$/i.test(d.name));
-    return (
-      wsl2.find((d) => d.default) ||
-      wsl2.find((d) => /^Ubuntu$/i.test(d.name)) ||
-      wsl2.find((d) => /^Ubuntu/i.test(d.name)) ||
-      wsl2[0] ||
-      null
-    );
   }
 
   async #wslCommandOk(distro, script) {
@@ -372,18 +339,19 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
 
   async #installWslDistribution(options = {}) {
     options.onProgress?.(`Installing ${DEFAULT_WSL_DISTRO}`);
-    let result = await this._runCommand(
-      'wsl.exe',
-      ['--install', '-d', DEFAULT_WSL_DISTRO, '--no-launch'],
-      { timeoutMs: options.timeoutMs || 20 * 60 * 1000, signal: options.signal }
-    );
-    if (result.code !== 0) {
-      result = await this._runCommand(
-        'wsl.exe',
-        ['--install', '-d', DEFAULT_WSL_DISTRO, '--no-launch', '--web-download'],
-        { timeoutMs: options.timeoutMs || 20 * 60 * 1000, signal: options.signal }
-      );
+    const existing = await fs.stat(this.wslInstallDir).catch((error) => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
+    if (existing) {
+      throw makeError('RUNTIME_PROVISION_FAILED', 'The Ubuntu runtime folder already exists. Preserve or move that folder before retrying.', { path: this.wslInstallDir });
     }
+    const rootfs = await this.prepareUbuntuRootfs(options);
+    options.onProgress?.(`Preparing ${DEFAULT_WSL_DISTRO}`);
+    await fs.mkdir(path.dirname(this.wslInstallDir), { recursive: true });
+    const result = await this._runCommand('wsl.exe', [
+      '--import', DEFAULT_WSL_DISTRO, this.wslInstallDir, rootfs, '--version', '2'
+    ], { timeoutMs: options.timeoutMs || 20 * 60 * 1000, signal: options.signal });
     if (result.code !== 0) {
       throw makeError('RUNTIME_PROVISION_FAILED', `Could not install ${DEFAULT_WSL_DISTRO} for WSL.`, {
         exitCode: result.code,
@@ -391,43 +359,28 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
         stderr: cleanCommandText(result.stderr)
       });
     }
-    let distroReady = await this.#wslRootCommandOk(DEFAULT_WSL_DISTRO, 'true');
-    if (!distroReady && await this.#registerUbuntuPackageAsRoot(options)) {
-      distroReady = await this.#wslRootCommandOk(DEFAULT_WSL_DISTRO, 'true');
-    }
-    if (!distroReady) {
-      return {
-        state: 'needs_followup',
-        detail: 'Agent Zero Setup was started. If Windows asks for a restart or opens a first-run window, complete that and return here.'
-      };
-    }
-    await this.#installAndStartWslDocker(DEFAULT_WSL_DISTRO, options);
-    return;
+    await this.#installAndStartWslDocker(DEFAULT_WSL_DISTRO, { ...options, freshDistribution: true });
+    return { endpoint: this.endpoint() };
   }
 
-  async #registerUbuntuPackageAsRoot(options = {}) {
-    const launcher = await this.#ubuntuLauncherBinary();
-    if (!launcher) return false;
-    options.onProgress?.(`Preparing ${DEFAULT_WSL_DISTRO}`);
-    const result = await this._runCommand(
-      launcher,
-      ['install', '--root'],
-      { timeoutMs: Math.min(options.timeoutMs || 5 * 60 * 1000, 5 * 60 * 1000), signal: options.signal }
-    ).catch((error) => ({
-      code: -1,
-      stdout: '',
-      stderr: error?.message || String(error)
-    }));
-    if (result.code === 0) return true;
-    const output = cleanCommandText(`${result.stdout || ''}\n${result.stderr || ''}`);
-    return /already installed|gi[aà]\s+installato/i.test(output);
-  }
-
-  async #ubuntuLauncherBinary() {
-    for (const binary of ['ubuntu.exe', 'ubuntu2404.exe', 'ubuntu2204.exe', 'ubuntu2004.exe']) {
-      if (await this.#binaryExists(binary)) return binary;
-    }
-    return '';
+  async prepareUbuntuRootfs(options = {}) {
+    const arch = process.arch === 'arm64' || /^arm64$/i.test(process.env.PROCESSOR_ARCHITEW6432 || process.env.PROCESSOR_ARCHITECTURE || '') ? 'arm64' : 'amd64';
+    const baseUrl = 'https://cloud-images.ubuntu.com/wsl/releases/24.04/current/';
+    const filename = `ubuntu-noble-wsl-${arch}-wsl.rootfs.tar.gz`;
+    const sums = await fetchText(`${baseUrl}SHA256SUMS`, { signal: options.signal });
+    const checksum = sha256FromSumText(sums, filename);
+    if (!checksum) throw makeError('DOWNLOAD_FAILED', 'Ubuntu image checksum is unavailable.');
+    const rootfs = path.join(this.managedDir, filename);
+    let lastProgress = -1;
+    await downloadVerified(`${baseUrl}${filename}`, rootfs, checksum, {
+      signal: options.signal,
+      onProgress: (_message, progress) => {
+        if (progress === lastProgress) return;
+        lastProgress = progress;
+        options.onProgress?.(`Installing ${DEFAULT_WSL_DISTRO}`, progress);
+      }
+    });
+    return rootfs;
   }
 
   async #installAndStartWslDocker(distro, options = {}) {
@@ -444,6 +397,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       'set -eu',
       'export DEBIAN_FRONTEND=noninteractive',
       'apt-get update',
+      ...(options.freshDistribution ? ['apt-get upgrade -y'] : []),
       'apt-get install -y ca-certificates curl python3',
       'for pkg in docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc; do apt-get remove -y "$pkg" >/dev/null 2>&1 || true; done',
       'install -m 0755 -d /etc/apt/keyrings',
@@ -465,7 +419,7 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       'apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin'
     ].join('\n');
     const result = await this.#wslRootSh(distro, script, {
-      timeoutMs: options.timeoutMs || 20 * 60 * 1000,
+      timeoutMs: options.timeoutMs || (options.freshDistribution ? 40 : 20) * 60 * 1000,
       signal: options.signal
     });
     if (result.code !== 0) {
@@ -526,35 +480,26 @@ export class WindowsWslRuntime extends RuntimeProvisioner {
       });
     }
     options.onProgress?.('Waiting for Docker Desktop');
-    const ready = await this.#waitForDockerDesktopPipe(options.signal);
+    const ready = await this.#waitForDockerDesktop(options.signal);
     if (!ready) {
       throw makeError('RUNTIME_START_FAILED', 'Docker Desktop started, but Docker did not become reachable.');
     }
     return { endpoint: { kind: 'npipe', dockerHost: 'npipe:////./pipe/docker_engine' } };
   }
 
-  async #waitForDockerDesktopPipe(signal, timeoutMs = 120000) {
-    const net = await import('node:net');
-    const pipePath = '\\\\.\\pipe\\docker_engine';
+  async #waitForDockerDesktop(signal, timeoutMs = 120000) {
+    const { DockerInterface } = await import('../DockerInterface.mjs');
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
       if (signal?.aborted) throw makeError('ABORTED', 'Runtime start aborted');
-      const ok = await new Promise((resolve) => {
-        const socket = net.connect(pipePath);
-        const finish = (value) => {
-          try {
-            socket.destroy();
-          } catch {
-            // ignore
-          }
-          resolve(value);
-        };
-        socket.setTimeout(1500);
-        socket.once('connect', () => finish(true));
-        socket.once('timeout', () => finish(false));
-        socket.once('error', () => finish(false));
+      const env = await DockerInterface.detectEnvironment({
+        dockerHost: 'npipe:////./pipe/docker_engine',
+        candidateHosts: [],
+        discoverDockerContexts: false,
+        enableWindowsWslProxy: false,
+        timeoutMs: 1500
       });
-      if (ok) return true;
+      if (env.dockerAvailable) return true;
       await sleep(1000);
     }
     return false;

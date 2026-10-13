@@ -10,7 +10,8 @@ This scope owns:
 
 - `package.json` and `package-lock.json`: packaging-only Electron and electron-builder dependencies.
 - `release-asset-filters.yaml`: public installer asset selection before upload.
-- `platforms/windows/installer.nsh`: Windows NSIS installer diagnostics, running-app shutdown hardening, and first-run launch behavior.
+- `platforms/windows/installer.nsh`: Windows NSIS installer diagnostics, running-app shutdown hardening, legacy-upgrade user-data preservation, and first-run launch behavior.
+- `platforms/windows/installer-user-data-fixture.nsi` and `scripts/windows-installer-user-data.test.js`: native NSIS regression fixture with an isolated data directory and registry key; never target the normal Launcher profile.
 - `scripts/desktop-builder.js`: platform/arch packaging orchestration and electron-builder config shaping.
 - `scripts/*-package.js` and `scripts/host-package.js`: local platform entry points for desktop packaging.
 - `scripts/release-version.js`: `v*` tag parsing and semver normalization.
@@ -28,7 +29,8 @@ npm install --prefix packaging
 - The root package owns product metadata. Packaging scripts read the root `package.json` `build` config and do not carry a second product identity.
 - Packaging scripts must not publish directly. GitHub Release upload is owned by `.github/workflows/build.yml`.
 - Keep electron-builder at 26.15.6 or newer within v26. Earlier releases can produce NSIS app archives whose executable filters the install-time extractor silently skips, leaving Windows installs without the launcher executable and Electron runtime DLLs.
-- The NSIS uninstaller removes the Launcher-owned `%APPDATA%\\a0-launcher` directory, including saved preferences, remote Instances, credentials, and cached content.
+- NSIS uses electron-builder's `deleteAppDataOnUninstall` option to remove the Launcher-owned `%APPDATA%\\a0-launcher` directory on ordinary uninstall, including saved preferences, remote Instances, credentials, and cached content. Upgrade/reinstall uninstalls must preserve that data; never delete it unconditionally from `customUnInstall`.
+- Released legacy uninstallers can still delete settings during an upgrade. After closing app processes and before invoking a registered prior uninstaller, rename user data to the same-volume `a0-launcher-installer-backup` sibling. Restore it before first launch, on installation failure, or on the next installer attempt after interruption. Remove only the old uninstaller's known log placeholder; never recursively remove conflicting profile data. If restoration conflicts, preserve both folders and stop with recovery guidance.
 - Use `A0_LAUNCHER_APP_VERSION` and `A0_LAUNCHER_RELEASE_TAG` for CI-provided release versions. Two-segment tags such as `v1.8` are the public release shape; build them as semver `1.8.0` where tooling requires it, but stage public assets with release version `1.8`.
 - Canonical public/updater asset names are:
 
@@ -66,6 +68,7 @@ node --check packaging/scripts/desktop-builder.js
 node --check packaging/scripts/release-metadata.js
 node --check packaging/scripts/release-metadata-merge.js
 node --check packaging/scripts/release-assets-stage.js
+node --test packaging/scripts/windows-installer-user-data.test.js
 node packaging/scripts/linux-package.js --dry-run --arch x64
 git diff --check
 ```

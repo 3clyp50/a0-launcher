@@ -13,7 +13,7 @@ This scope owns:
 - `running-ui.md`: notes for running and validating the launcher UI.
 - `faq-integration.md`: integration-oriented FAQ and user guidance.
 - `runtime-troubleshooting.md`: user-facing runtime detection and repair notes for Docker-compatible endpoints, Docker contexts, and setup fallback paths.
-- `release-todos.md`: release checklist and temporary product corrections that must survive across coding sessions.
+- `release-todos.md`: current artifact, Windows runtime matrix, installer/updater, Instance-surface, and CLI release checks, with dated verification results. Keep observed verification limits explicit, especially simulated host absence and ARM64 packaging versus native execution.
 
 ## Local Contracts
 
